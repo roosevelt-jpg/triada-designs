@@ -72,7 +72,7 @@ export function DashboardShell({ children, title, description, actions }) {
           <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4" aria-label="Dashboard">
             {DASHBOARD_NAV.map((section) => (
               <div key={section.label}>
-                <p className="px-2.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted">
+                <p className="rounded-sm bg-stone px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
                   {section.label}
                 </p>
                 <ul className="mt-1.5 space-y-0.5">
@@ -85,10 +85,10 @@ export function DashboardShell({ children, title, description, actions }) {
                           href={item.href}
                           onClick={() => setOpen(false)}
                           className={cn(
-                            "block rounded-md px-2.5 py-2 text-[13.5px] transition-colors duration-150",
+                            "block rounded-md bg-transparent px-2.5 py-2 text-[13.5px] font-normal transition-colors duration-150",
                             active
                               ? "bg-sand font-medium text-brown-dark"
-                              : "text-muted hover:bg-stone hover:text-ink"
+                              : "text-ink/80 hover:bg-ivory hover:text-ink"
                           )}
                         >
                           {item.label}
