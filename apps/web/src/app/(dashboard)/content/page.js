@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import { nowDate, syncSystemTime } from "@/lib/system-time";
 
 export default function ContentPage() {
   const [items, setItems] = useState([]);
@@ -54,12 +55,13 @@ export default function ContentPage() {
   async function schedule(item) {
     setBusyId(`schedule-${item.id}`);
     try {
-      const when = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+      await syncSystemTime().catch(() => {});
+      const when = new Date(nowDate().getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
       await apiFetch(`/v1/content/${item.id}/schedule`, {
         method: "POST",
         body: { scheduled_for: when },
       });
-      setNotice(`Scheduled for ${when}`);
+      setNotice(`Scheduled for ${when} (server/workspace-aligned now + 3 days)`);
       await load();
     } catch (err) {
       setError(err.message);

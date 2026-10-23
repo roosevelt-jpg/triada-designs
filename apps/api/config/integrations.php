@@ -63,12 +63,28 @@ return [
         'webhook_secret' => env('EMAIL_CHANNEL_WEBHOOK_SECRET'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | LLM providers
+    |--------------------------------------------------------------------------
+    |
+    | LLM_PROVIDER=gemini|local|openai_compatible (openai-compatible alias ok)
+    | Gemini uses GEMINI_API_KEY + GEMINI_MODEL. Without a key the stack stays
+    | on LocalHeuristicLlmAdapter with status awaiting_credentials — never
+    | report live Gemini success without credentials.
+    |
+    */
     'llm' => [
-        'provider' => env('LLM_PROVIDER', 'openai_compatible'),
+        'provider' => env('LLM_PROVIDER', 'gemini'),
         'api_key' => env('LLM_API_KEY'),
         'model' => env('LLM_MODEL', 'gpt-4o-mini'),
         'base_url' => env('LLM_BASE_URL', 'https://api.openai.com/v1'),
         'timeout' => (int) env('LLM_TIMEOUT', 30),
+        'gemini' => [
+            'api_key' => env('GEMINI_API_KEY'),
+            'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),
+            'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
+        ],
     ],
 
 

@@ -1,3 +1,5 @@
+import { formatInWorkspace } from "@/lib/system-time";
+
 /** @param {number|string|null|undefined} value */
 export function formatCurrency(value, currency = "USD") {
   if (value === null || value === undefined || value === "") return "—";
@@ -10,17 +12,30 @@ export function formatCurrency(value, currency = "USD") {
   }).format(amount);
 }
 
-/** @param {string|Date|null|undefined} value */
+/**
+ * Format timestamps with the live Date API and workspace timezone when synced.
+ * @param {string|Date|null|undefined} value
+ */
 export function formatDateTime(value) {
-  if (!value) return "—";
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-US", {
+  return formatInWorkspace(value, {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(date);
+  });
+}
+
+/**
+ * Longer workspace-local date (no clock).
+ * @param {string|Date|null|undefined} value
+ */
+export function formatDateLong(value) {
+  return formatInWorkspace(value, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 /** @param {string} stage */

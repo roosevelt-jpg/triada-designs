@@ -21,14 +21,53 @@ class AiOrchestrator
 
     public function llmStatus(): array
     {
+        $configured = $this->normalizeProvider((string) config('integrations.llm.provider', 'gemini'));
+        $geminiKey = filled(config('integrations.llm.gemini.api_key'))
+            || ($configured === 'gemini' && filled(config('integrations.llm.api_key')));
+        $openaiKey = filled(config('integrations.llm.api_key'));
+        $live = $this->llm->isLive();
+
+        $status = match (true) {
+            $live => 'live',
+            $configured === 'gemini' && ! $geminiKey => 'awaiting_credentials',
+            $configured === 'openai_compatible' && ! $openaiKey => 'awaiting_credentials',
+            default => 'local',
+        };
+
+        $honesty = match ($status) {
+            'live' => 'Live LLM calls enabled via '.$this->llm->providerKey().'.',
+            'awaiting_credentials' => $configured === 'gemini'
+                ? 'Add GEMINI_API_KEY to enable live agents. Using local heuristic until credentials are present — never fake Gemini success.'
+                : 'Add LLM_API_KEY and set INTEGRATION_MODE=live for openai_compatible. Using local heuristic until credentials are present.',
+            default => 'Using local heuristic adapter (LLM_PROVIDER=local or credentials not live).',
+        };
+
         return [
+            'configured_provider' => $configured,
             'provider' => $this->llm->providerKey(),
-            'model' => $this->llm->model(),
-            'live' => $this->llm->isLive(),
-            'honesty' => $this->llm->isLive()
-                ? 'Live LLM calls enabled.'
-                : 'Using local heuristic adapter until LLM_API_KEY and INTEGRATION_MODE=live.',
+            'model' => $configured === 'gemini'
+                ? (string) (config('integrations.llm.gemini.model') ?: $this->llm->model())
+                : $this->llm->model(),
+            'live' => $live,
+            'status' => $status,
+            'has_credentials' => $configured === 'gemini' ? $geminiKey : ($configured === 'local' ? false : $openaiKey),
+            'honesty' => $honesty,
+            'env_hint' => $configured === 'gemini'
+                ? 'Set GEMINI_API_KEY (and optional GEMINI_MODEL=gemini-2.0-flash) in apps/api/.env, then restart the API.'
+                : 'Set LLM_PROVIDER, LLM_API_KEY, LLM_MODEL, and INTEGRATION_MODE=live as needed.',
         ];
+    }
+
+    protected function normalizeProvider(string $provider): string
+    {
+        $normalized = strtolower(str_replace('-', '_', trim($provider)));
+
+        return match ($normalized) {
+            'openai', 'openai_compatible', 'http', 'http_llm' => 'openai_compatible',
+            'gemini', 'google', 'google_gemini' => 'gemini',
+            'local', 'heuristic', 'local_heuristic' => 'local',
+            default => $normalized !== '' ? $normalized : 'gemini',
+        };
     }
 
     /**

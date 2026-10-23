@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/formatters";
+import { getSystemTimeState, nowDate, syncSystemTime } from "@/lib/system-time";
 
 export default function CalendarPage() {
   const [items, setItems] = useState([]);
@@ -17,11 +18,16 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [notice, setNotice] = useState("");
+  const [nowLabel, setNowLabel] = useState("");
+  const [timezone, setTimezone] = useState("UTC");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
+      const clock = await syncSystemTime().catch(() => getSystemTimeState());
+      setTimezone(clock.timezone || "UTC");
+      setNowLabel(formatDateTime(nowDate()));
       const [data, pubs] = await Promise.all([
         apiFetch("/v1/calendar"),
         apiFetch("/v1/publications"),
@@ -62,7 +68,7 @@ export default function CalendarPage() {
   return (
     <DashboardShell
       title="Content calendar"
-      description="Scheduled items and publication logs. Public posts require human approval + version check."
+      description={`Scheduled items and publication logs (workspace now: ${nowLabel || "…"} · ${timezone}). Public posts require human approval + version check.`}
     >
       {loading ? <Skeleton className="h-28" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}

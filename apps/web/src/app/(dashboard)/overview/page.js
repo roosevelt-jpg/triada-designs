@@ -9,17 +9,21 @@ import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDateLong, formatDateTime } from "@/lib/formatters";
+import { nowDate, syncSystemTime } from "@/lib/system-time";
 
 export default function OverviewPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [today, setToday] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
+      await syncSystemTime().catch(() => {});
+      setToday(formatDateLong(nowDate()));
       const response = await apiFetch("/v1/dashboard");
       setData(response);
     } catch (err) {
@@ -33,16 +37,10 @@ export default function OverviewPage() {
     load();
   }, [load]);
 
-  const today = new Date().toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-
   return (
     <DashboardShell
       title="Overview"
-      description={`Workspace pulse · ${today}. Metrics come from persisted Triada records only.`}
+      description={`Workspace pulse${today ? ` · ${today}` : ""}. Metrics come from persisted Triada records only.`}
       actions={
         <div className="flex flex-wrap gap-2">
           <Link href="/inbox">

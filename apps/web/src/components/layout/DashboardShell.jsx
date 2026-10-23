@@ -9,6 +9,8 @@ import { apiFetch, getStoredToken, setStoredToken } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { WorkspaceClock } from "@/components/layout/WorkspaceClock";
+import { syncSystemTime } from "@/lib/system-time";
 
 /** @param {{ children: import("react").ReactNode, title: string, description?: string, actions?: import("react").ReactNode }} props */
 export function DashboardShell({ children, title, description, actions }) {
@@ -25,7 +27,10 @@ export function DashboardShell({ children, title, description, actions }) {
     }
 
     apiFetch("/v1/auth/me")
-      .then((data) => setUser(data))
+      .then((data) => {
+        setUser(data);
+        syncSystemTime().catch(() => {});
+      })
       .catch(() => {
         setStoredToken(null);
         router.replace("/login");
@@ -135,6 +140,7 @@ export function DashboardShell({ children, title, description, actions }) {
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
+              <WorkspaceClock />
               <button
                 type="button"
                 className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-line bg-white transition-colors duration-150 hover:bg-stone"
@@ -142,7 +148,7 @@ export function DashboardShell({ children, title, description, actions }) {
               >
                 <Bell size={16} />
               </button>
-              <div className="hidden text-right sm:block">
+              <div className="hidden text-right md:block">
                 <p className="text-sm font-medium leading-tight">
                   {user?.user?.name || "Loading…"}
                 </p>

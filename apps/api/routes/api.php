@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\MetaIntegrationController;
 use App\Http\Controllers\Api\V1\OpsDataController;
 use App\Http\Controllers\Api\V1\SettingsController;
 use App\Http\Controllers\Api\V1\ShopifyIntegrationController;
+use App\Http\Controllers\Api\V1\SystemTimeController;
 use App\Http\Controllers\Api\V1\WebchatPublicController;
 use App\Http\Controllers\Webhooks\ChannelWebhookController;
 use App\Http\Controllers\Webhooks\MetaWebhookController;
@@ -118,6 +119,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/settings', [SettingsController::class, 'show']);
         Route::patch('/settings', [SettingsController::class, 'update']);
+
+        Route::get('/system/time', [SystemTimeController::class, 'show']);
 
         Route::get('/agents/llm/status', [AgentOrchestrationController::class, 'llmStatus']);
         Route::get('/agents/activity', [AgentOrchestrationController::class, 'activity']);

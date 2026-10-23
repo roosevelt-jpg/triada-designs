@@ -134,13 +134,34 @@ Status stays **disconnected** / **awaiting_credentials** until live tokens + `IN
 
 Local inbound simulator: `POST /api/v1/integrations/channels/simulate-inbound`.
 
-## AI orchestration
+## AI orchestration (Gemini)
 
-**Adapter:** `LlmAdapterInterface` → `LocalHeuristicLlmAdapter` (default) or `HttpLlmAdapter` when `LLM_API_KEY` + live mode.
+**Adapter:** `LlmAdapterInterface` → `GeminiHttpAdapter` when `LLM_PROVIDER=gemini` and `GEMINI_API_KEY` is set; otherwise `LocalHeuristicLlmAdapter`. OpenAI-compatible remains available via `HttpLlmAdapter` when `LLM_PROVIDER=openai_compatible`, `LLM_API_KEY`, and `INTEGRATION_MODE=live`.
+
+**Status honesty:** Without a Gemini key, LLM status is `awaiting_credentials` — never reported as live Gemini success. Test runs use Gemini only when the key is present.
+
+**Env**
+
+```bash
+LLM_PROVIDER=gemini          # gemini | local | openai_compatible
+GEMINI_API_KEY=              # required for live agents
+GEMINI_MODEL=gemini-2.0-flash
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+# optional openai-compatible path:
+LLM_API_KEY=
+LLM_MODEL=gpt-4o-mini
+LLM_BASE_URL=https://api.openai.com/v1
+```
 
 **Orchestrator:** classify / draft / qualify / escalate; wired into Meta inbound + channel inbound + automation `draft_reply` / `ai_*` actions.
 
-**Admin:** `/agents` — enable/pause, prompts, test run, `ai_runs` activity.
+**Admin:** `/agents` — provider badge, env-doc for Gemini key, enable/pause, prompts, test run, `ai_runs` activity. Settings also documents the Gemini env path.
+
+## System time
+
+**Route:** `GET /api/v1/system/time` (Sanctum) → `{ utc, workspace_local, timezone, unix_ms, offset_minutes }`.
+
+Ops UI formatters and the header clock sync skew + workspace IANA timezone from this endpoint. Calendar/scheduling “now” uses the same server-aligned clock. Workspace timezone is editable under Settings.
 
 ## Content publishing
 

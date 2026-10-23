@@ -112,10 +112,14 @@ export default function AgentsPage() {
     }
   }
 
+  const providerLabel = llm?.configured_provider || llm?.provider || "—";
+  const statusTone =
+    llm?.status === "live" ? "success" : llm?.status === "awaiting_credentials" ? "warning" : "neutral";
+
   return (
     <DashboardShell
       title="AI agents"
-      description="Support, sales, marketing, content, lead qualification, and sales ops. Local heuristic LLM until LLM_API_KEY + live mode."
+      description="Support, sales, marketing, content, lead qualification, and sales ops. Add Gemini API key to enable live agents."
     >
       {loading ? (
         <div className="space-y-3">
@@ -126,12 +130,34 @@ export default function AgentsPage() {
       {error ? <ErrorState message={error} onRetry={load} /> : null}
 
       {llm ? (
-        <div className="mb-6 flex flex-wrap items-center gap-2 text-sm">
-          <Badge tone={llm.live ? "success" : "warning"}>{llm.live ? "live LLM" : "local heuristic"}</Badge>
-          <span className="text-muted">
-            {llm.provider} · {llm.model}
-          </span>
-          <span className="text-muted">{llm.honesty}</span>
+        <div className="mb-6 space-y-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Badge tone={statusTone}>{llm.status || (llm.live ? "live" : "local")}</Badge>
+            <Badge tone="brand">provider={providerLabel}</Badge>
+            <span className="text-muted">
+              active={llm.provider} · {llm.model}
+            </span>
+          </div>
+          <p className="max-w-3xl text-sm text-muted">{llm.honesty}</p>
+          {llm.status === "awaiting_credentials" || providerLabel === "gemini" ? (
+            <div className="surface-card max-w-3xl space-y-2 p-4 text-sm">
+              <p className="font-medium text-ink">Add Gemini API key to enable live agents</p>
+              <p className="text-muted">
+                Keys are stored in API environment variables (not pasted into the browser). In{" "}
+                <code className="text-ink">apps/api/.env</code>:
+              </p>
+              <pre className="overflow-x-auto rounded-md border border-line bg-stone/50 p-3 text-xs text-ink">
+{`LLM_PROVIDER=gemini
+GEMINI_API_KEY=your-key-here
+GEMINI_MODEL=gemini-2.0-flash`}
+              </pre>
+              <p className="text-muted">
+                Restart the API after saving. Test run uses Gemini when the key is present; otherwise the
+                local heuristic runs and status stays <code className="text-ink">awaiting_credentials</code>.
+              </p>
+              {llm.env_hint ? <p className="text-xs text-muted">{llm.env_hint}</p> : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -199,6 +225,11 @@ export default function AgentsPage() {
                   label="Test message"
                   value={testMessage}
                   onChange={(e) => setTestMessage(e.target.value)}
+                  hint={
+                    llm?.live
+                      ? "Test run will call Gemini with your configured model."
+                      : "No Gemini key — test run uses the local heuristic adapter."
+                  }
                 />
                 <Button size="sm" variant="secondary" disabled={busy === "test"} onClick={runTest}>
                   {busy === "test" ? "Running…" : "Test run (dry)"}

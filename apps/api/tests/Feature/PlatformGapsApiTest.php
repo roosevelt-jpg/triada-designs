@@ -75,9 +75,17 @@ class PlatformGapsApiTest extends TestCase
 
     public function test_ai_local_draft_and_activity(): void
     {
+        config([
+            'integrations.llm.provider' => 'gemini',
+            'integrations.llm.gemini.api_key' => null,
+            'integrations.llm.api_key' => null,
+        ]);
+
         $this->getJson('/api/v1/agents/llm/status')
             ->assertOk()
             ->assertJsonPath('live', false)
+            ->assertJsonPath('configured_provider', 'gemini')
+            ->assertJsonPath('status', 'awaiting_credentials')
             ->assertJsonPath('provider', 'local_heuristic');
 
         $this->postJson('/api/v1/agents/test-run', [
@@ -92,6 +100,22 @@ class PlatformGapsApiTest extends TestCase
         $this->getJson('/api/v1/agents/activity')
             ->assertOk()
             ->assertJsonStructure(['data', 'metrics' => ['total_runs']]);
+    }
+
+    public function test_system_time_returns_utc_and_workspace_timezone(): void
+    {
+        $this->workspace->forceFill(['timezone' => 'America/Los_Angeles'])->save();
+
+        $this->getJson('/api/v1/system/time')
+            ->assertOk()
+            ->assertJsonPath('timezone', 'America/Los_Angeles')
+            ->assertJsonStructure([
+                'utc',
+                'workspace_local',
+                'timezone',
+                'unix_ms',
+                'offset_minutes',
+            ]);
     }
 
     public function test_publish_requires_human_approval_and_version_gate(): void
