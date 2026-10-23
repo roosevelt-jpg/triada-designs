@@ -141,7 +141,7 @@ class AutomationWorkflowSeeder extends Seeder
             ],
             [
                 'name' => 'Lead qualified → Zoho sync',
-                'description' => 'When a lead is qualified, sync to Zoho (mock or live) and open an owner task.',
+                'description' => 'When a lead is qualified, sync to Zoho (seeded local or live) and open an owner task.',
                 'trigger_type' => 'lead_qualified',
                 'status' => 'draft',
                 'definition' => [

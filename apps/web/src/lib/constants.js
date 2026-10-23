@@ -5,9 +5,10 @@ export const PUBLIC_SITE_URL =
 /** Suggested production host for this admin/ops app. */
 export const OPS_HOST =
   process.env.NEXT_PUBLIC_OPS_HOST || "ops.triada-designs.com";
-export const DEMO_CREDENTIALS = {
+/** Local seed admin (documented in README; not shown as "demo" in the UI). */
+export const SEED_ADMIN = {
   email: "admin@triada-designs.com",
-  password: "triada-demo",
+  password: "triada-local",
 };
 
 export const DASHBOARD_NAV = [

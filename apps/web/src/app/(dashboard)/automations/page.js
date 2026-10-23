@@ -66,7 +66,7 @@ export default function AutomationsPage() {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No workflows yet"
-          description="Seeded demo workflows appear here after migrate + seed."
+          description="Seeded workflows appear here after migrate + seed."
         />
       ) : null}
       {!loading && !error && items.length > 0 ? (

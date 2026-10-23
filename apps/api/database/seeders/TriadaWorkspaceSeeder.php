@@ -18,7 +18,11 @@ use App\Models\WorkspaceMembership;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
-class DemoWorkspaceSeeder extends Seeder
+/**
+ * Production-style local seed for the Triada Designs workspace.
+ * Runs without live WordPress/Zoho/Shopify credentials.
+ */
+class TriadaWorkspaceSeeder extends Seeder
 {
     public function run(): void
     {
@@ -53,7 +57,7 @@ class DemoWorkspaceSeeder extends Seeder
             ['email' => 'admin@triada-designs.com'],
             [
                 'name' => 'Triada Admin',
-                'password' => Hash::make('triada-demo'),
+                'password' => Hash::make('triada-local'),
                 'email_verified_at' => now(),
             ]
         );
@@ -64,10 +68,10 @@ class DemoWorkspaceSeeder extends Seeder
         );
 
         foreach ([
-            ['provider' => 'wordpress', 'display_name' => 'WordPress CMS', 'status' => 'mock', 'capabilities' => ['posts.read', 'posts.draft', 'webhooks']],
-            ['provider' => 'zoho', 'display_name' => 'Zoho CRM', 'status' => 'mock', 'capabilities' => ['contacts.upsert', 'leads.upsert', 'webhooks']],
+            ['provider' => 'wordpress', 'display_name' => 'WordPress CMS', 'status' => 'seeded', 'capabilities' => ['posts.read', 'posts.draft', 'webhooks']],
+            ['provider' => 'zoho', 'display_name' => 'Zoho CRM', 'status' => 'seeded', 'capabilities' => ['contacts.upsert', 'leads.upsert', 'webhooks']],
             ['provider' => 'shopify', 'display_name' => 'Shopify', 'status' => 'disconnected', 'capabilities' => ['products.read', 'orders.read']],
-            ['provider' => 'webchat', 'display_name' => 'Website Live Chat', 'status' => 'connected', 'capabilities' => ['messages.send', 'messages.receive']],
+            ['provider' => 'webchat', 'display_name' => 'Website Live Chat', 'status' => 'seeded', 'capabilities' => ['messages.send', 'messages.receive']],
         ] as $row) {
             Integration::query()->updateOrCreate(
                 [
@@ -120,7 +124,7 @@ class DemoWorkspaceSeeder extends Seeder
         $conversation = Conversation::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'external_conversation_id' => 'demo-webchat-amelia',
+                'external_conversation_id' => 'seed-webchat-amelia',
             ],
             [
                 'contact_id' => $amelia->id,

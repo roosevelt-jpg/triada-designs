@@ -60,7 +60,7 @@ export default function IntegrationsPage() {
   return (
     <DashboardShell
       title="Integrations"
-      description="WordPress and Zoho CRM are first-class. Mock mode runs without credentials; switch INTEGRATION_MODE=live when ready."
+      description="WordPress and Zoho CRM are first-class. Local seed mode runs without credentials; switch INTEGRATION_MODE=live when ready. Disconnected providers stay disconnected."
     >
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -73,7 +73,7 @@ export default function IntegrationsPage() {
       {!loading && !error ? (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center gap-3">
-            <Badge tone="brand">Mode: {health?.mode || "mock"}</Badge>
+            <Badge tone="brand">Mode: {health?.mode || "local"}</Badge>
             <Button variant="secondary" onClick={load}>
               Re-check health
             </Button>
@@ -90,9 +90,12 @@ export default function IntegrationsPage() {
                 </div>
                 <Badge
                   tone={
-                    health?.wordpress?.status === "healthy" || health?.wordpress?.status === "mock"
+                    health?.wordpress?.status === "healthy"
                       ? "success"
-                      : "danger"
+                      : health?.wordpress?.status === "seeded" ||
+                          health?.wordpress?.status === "local"
+                        ? "neutral"
+                        : "danger"
                   }
                 >
                   {health?.wordpress?.status}
@@ -129,9 +132,11 @@ export default function IntegrationsPage() {
                 </div>
                 <Badge
                   tone={
-                    health?.zoho?.status === "healthy" || health?.zoho?.status === "mock"
+                    health?.zoho?.status === "healthy"
                       ? "success"
-                      : "danger"
+                      : health?.zoho?.status === "seeded" || health?.zoho?.status === "local"
+                        ? "neutral"
+                        : "danger"
                   }
                 >
                   {health?.zoho?.status}
@@ -165,11 +170,13 @@ export default function IntegrationsPage() {
                   </div>
                   <Badge
                     tone={
-                      item.status === "connected" || item.status === "mock"
+                      item.status === "connected"
                         ? "success"
-                        : item.status === "error"
-                          ? "danger"
-                          : "neutral"
+                        : item.status === "seeded" || item.status === "local"
+                          ? "neutral"
+                          : item.status === "error"
+                            ? "danger"
+                            : "neutral"
                     }
                   >
                     {item.status}

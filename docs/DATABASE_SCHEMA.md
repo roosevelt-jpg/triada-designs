@@ -1,6 +1,6 @@
 # Database schema (Milestone 1)
 
-MySQL-compatible migrations in `apps/api/database/migrations`. Local demo uses SQLite.
+MySQL-compatible migrations in `apps/api/database/migrations`. Local development often uses SQLite; Docker Compose provides MySQL.
 
 ## Identity
 

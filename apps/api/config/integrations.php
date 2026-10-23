@@ -6,12 +6,12 @@ return [
     | Integration mode
     |--------------------------------------------------------------------------
     |
-    | When "mock", WordPress and Zoho adapters return local fixture data and
-    | never call external APIs. Set INTEGRATION_MODE=live after credentials
-    | are configured in a private environment.
+    | "local" (default): WordPress and Zoho adapters return seeded fixture data
+    | and never call external APIs. "mock" is accepted as an alias for local.
+    | Set INTEGRATION_MODE=live after credentials are configured.
     |
     */
-    'mode' => env('INTEGRATION_MODE', 'mock'),
+    'mode' => env('INTEGRATION_MODE', 'local'),
 
     'wordpress' => [
         'base_url' => rtrim((string) env('WORDPRESS_BASE_URL', ''), '/'),

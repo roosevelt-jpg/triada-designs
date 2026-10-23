@@ -81,11 +81,13 @@ export default function OverviewPage() {
                   </div>
                   <Badge
                     tone={
-                      item.status === "connected" || item.status === "mock"
+                      item.status === "connected"
                         ? "success"
-                        : item.status === "error"
-                          ? "danger"
-                          : "neutral"
+                        : item.status === "seeded" || item.status === "local"
+                          ? "neutral"
+                          : item.status === "error"
+                            ? "danger"
+                            : "neutral"
                     }
                   >
                     {item.status}

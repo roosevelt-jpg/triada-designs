@@ -15,11 +15,11 @@ Visiting `/` redirects to **Admin sign in**.
 |---|---|
 | Frontend | Next.js App Router, React, JavaScript only, Tailwind |
 | Backend | Laravel 13 REST API, Sanctum auth |
-| Database | MySQL (Docker) or SQLite for local API demo |
+| Database | MySQL (Docker) or SQLite for local API development |
 | Queue/cache | Redis (Docker) / database driver locally |
-| Commerce | Shopify adapter scaffolding |
-| CMS | WordPress REST client (mock/live) |
-| CRM | Zoho CRM client (mock/live) |
+| Commerce | Shopify adapter scaffolding (disconnected until OAuth) |
+| CMS | WordPress REST client (local seed / live) |
+| CRM | Zoho CRM client (local seed / live) |
 
 ## Repository layout
 
@@ -31,7 +31,7 @@ docs/             Architecture and integration docs
 packages/         Shared contracts (OpenAPI placeholder)
 ```
 
-## Quick start (local demo)
+## Quick start (local seed)
 
 ### 1. API (Laravel)
 
@@ -44,10 +44,10 @@ php artisan migrate --seed
 php artisan serve --host=127.0.0.1 --port=8088
 ```
 
-Demo user:
+Local seed admin:
 
 - Email: `admin@triada-designs.com`
-- Password: `triada-demo`
+- Password: `triada-local`
 
 ### 2. Web (Next.js)
 
@@ -69,7 +69,7 @@ Open [http://127.0.0.1:43127](http://127.0.0.1:43127) — redirects to admin log
 3. Forward port **43127** (API is proxied through Next.js at `/api`, so you do not need 8088).
 4. On your laptop open [http://localhost:43127/login](http://localhost:43127/login).
 
-Demo login: `admin@triada-designs.com` / `triada-demo`.
+Local seed admin: `admin@triada-designs.com` / `triada-local`.
 
 ### Docker Compose (MySQL + Redis + services)
 
@@ -77,9 +77,9 @@ Demo login: `admin@triada-designs.com` / `triada-demo`.
 docker compose -f infrastructure/compose.yaml up --build
 ```
 
-## WordPress + Zoho (mock by default)
+## WordPress + Zoho (local seed by default)
 
-`INTEGRATION_MODE=mock` (default) returns fixture data so the platform runs without credentials.
+`INTEGRATION_MODE=local` (default; `mock` is an accepted alias) returns seeded fixture data so the platform runs without credentials. Status language in the UI: **local / seeded / live / disconnected / awaiting credentials** — never presented as healthy live Meta/Shopify when not connected.
 
 ### Connect WordPress (live)
 
@@ -117,17 +117,17 @@ Health endpoint (authenticated): `GET /api/v1/integrations/health`
 
 ## Milestone status
 
-This repository ships **Milestone 1 foundation** as a usable slice:
+This repository ships a **usable foundation slice** (not full E2E of the implementation spec):
 
-- Auth (Sanctum), workspace/roles seed
+- Auth (Sanctum), workspace/roles seed via `TriadaWorkspaceSeeder`
 - Dashboard overview with persisted metrics
 - Unified inbox + human takeover
 - Contacts, leads, products, services, content approval
-- WordPress + Zoho modules with mock/live modes
+- WordPress + Zoho modules with local seed / live modes
+- Automation runtime + JS builder
 - Brand design system (ivory/sand/brown, Cormorant + DM Sans)
-- Marketing homepage + operations shell
 
-Later milestones: live Meta/WhatsApp channels, Shopify sync, full Content Studio publishing, automation engine, AWS production hardening.
+Later milestones: live Meta/WhatsApp channels, Shopify sync, full Content Studio publishing, AI orchestration, AWS production hardening.
 
 ## Docs
 

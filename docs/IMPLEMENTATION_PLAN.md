@@ -7,7 +7,7 @@
 3. Sanctum login, workspace seed, dashboard metrics from DB
 4. Inbox with human takeover / resume AI
 5. Contacts, leads, products, services, content approval
-6. WordPress + Zoho clients with mock/live modes and webhooks
+6. WordPress + Zoho clients with local-seed/live modes and webhooks
 7. Docker Compose + documentation
 
 ## Next milestones

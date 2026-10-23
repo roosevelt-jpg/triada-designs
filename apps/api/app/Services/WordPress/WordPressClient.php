@@ -9,14 +9,16 @@ use RuntimeException;
 /**
  * WordPress REST API client (wp-json/wp/v2).
  *
- * Local/mock mode returns fixture content so the platform runs without
+ * Local mode returns seeded fixture content so the platform runs without
  * WordPress credentials. Live mode uses Application Passwords.
  */
 class WordPressClient
 {
     public function mode(): string
     {
-        return (string) config('integrations.mode', 'mock');
+        $mode = (string) config('integrations.mode', 'local');
+
+        return $mode === 'mock' ? 'local' : $mode;
     }
 
     public function isConfigured(): bool
@@ -29,16 +31,28 @@ class WordPressClient
     }
 
     /**
+     * True when adapters should use seeded local fixtures instead of live HTTP.
+     */
+    public function usesLocalFallback(): bool
+    {
+        return $this->mode() !== 'live' || ! $this->isConfigured();
+    }
+
+    /**
      * @return array{status:string,mode:string,configured:bool,message:string,sample_posts?:int}
      */
     public function healthCheck(): array
     {
-        if ($this->mode() === 'mock' || ! $this->isConfigured()) {
+        if ($this->usesLocalFallback()) {
+            $awaiting = ! $this->isConfigured();
+
             return [
-                'status' => 'mock',
-                'mode' => $this->mode(),
+                'status' => 'seeded',
+                'mode' => 'local',
                 'configured' => $this->isConfigured(),
-                'message' => 'WordPress running in mock/local fallback. Set WORDPRESS_* env vars and INTEGRATION_MODE=live to connect.',
+                'message' => $awaiting
+                    ? 'WordPress awaiting credentials. Using local seeded posts until WORDPRESS_* is set and INTEGRATION_MODE=live.'
+                    : 'WordPress running in local seed mode. Set INTEGRATION_MODE=live to call the REST API.',
                 'sample_posts' => count($this->listPosts(5)),
             ];
         }
@@ -81,8 +95,8 @@ class WordPressClient
      */
     public function listPosts(int $perPage = 10): array
     {
-        if ($this->mode() === 'mock' || ! $this->isConfigured()) {
-            return $this->mockPosts($perPage);
+        if ($this->usesLocalFallback()) {
+            return $this->seededPosts($perPage);
         }
 
         $response = $this->request()->get('/wp-json/wp/v2/posts', [
@@ -107,14 +121,14 @@ class WordPressClient
      */
     public function createDraft(array $payload): array
     {
-        if ($this->mode() === 'mock' || ! $this->isConfigured()) {
+        if ($this->usesLocalFallback()) {
             return [
-                'id' => 'mock-'.uniqid(),
+                'id' => 'seed-'.uniqid(),
                 'title' => (string) ($payload['title'] ?? 'Untitled draft'),
                 'status' => 'draft',
                 'link' => null,
                 'excerpt' => (string) ($payload['excerpt'] ?? ''),
-                'source' => 'mock',
+                'source' => 'seeded',
             ];
         }
 
@@ -140,7 +154,7 @@ class WordPressClient
         $expected = (string) config('integrations.wordpress.webhook_secret');
 
         if ($expected === '') {
-            return $this->mode() === 'mock';
+            return $this->usesLocalFallback();
         }
 
         return hash_equals($expected, (string) $providedSecret);
@@ -173,42 +187,42 @@ class WordPressClient
                 ? trim(strip_tags((string) ($post['excerpt']['rendered'] ?? '')))
                 : (string) ($post['excerpt'] ?? ''),
             'modified' => $post['modified'] ?? null,
-            'source' => $this->mode() === 'mock' ? 'mock' : 'wordpress',
+            'source' => $this->usesLocalFallback() ? 'seeded' : 'wordpress',
         ];
     }
 
     /**
      * @return list<array<string, mixed>>
      */
-    protected function mockPosts(int $perPage): array
+    protected function seededPosts(int $perPage): array
     {
         $posts = [
             [
-                'id' => 'mock-1',
+                'id' => 'seed-1',
                 'title' => 'Quiet rituals for everyday care',
                 'status' => 'publish',
                 'link' => 'https://triada-designs.com/journal/quiet-rituals',
                 'excerpt' => 'How Triada Designs thinks about materials, pacing, and personal care.',
                 'modified' => now()->subDays(3)->toIso8601String(),
-                'source' => 'mock',
+                'source' => 'seeded',
             ],
             [
-                'id' => 'mock-2',
+                'id' => 'seed-2',
                 'title' => 'Service inquiry FAQ',
                 'status' => 'publish',
                 'link' => 'https://triada-designs.com/faq',
                 'excerpt' => 'Approved answers for delivery, returns, and appointment requests.',
                 'modified' => now()->subDays(8)->toIso8601String(),
-                'source' => 'mock',
+                'source' => 'seeded',
             ],
             [
-                'id' => 'mock-3',
+                'id' => 'seed-3',
                 'title' => 'Collection notes: warm neutrals',
                 'status' => 'publish',
                 'link' => 'https://triada-designs.com/journal/warm-neutrals',
                 'excerpt' => 'Editorial notes used as approved brand knowledge for AI retrieval.',
                 'modified' => now()->subDays(14)->toIso8601String(),
-                'source' => 'mock',
+                'source' => 'seeded',
             ],
         ];
 

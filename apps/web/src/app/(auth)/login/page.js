@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { DEMO_CREDENTIALS, PUBLIC_SITE_URL } from "@/lib/constants";
+import { PUBLIC_SITE_URL } from "@/lib/constants";
 import { apiFetch, getStoredToken, setStoredToken } from "@/lib/api-client";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState(DEMO_CREDENTIALS.email);
-  const [password, setPassword] = useState(DEMO_CREDENTIALS.password);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -57,7 +57,7 @@ export default function LoginPage() {
               </p>
             </div>
             <p className="text-sm text-white/75">
-              Demo: {DEMO_CREDENTIALS.email} / {DEMO_CREDENTIALS.password}
+              Staff access only. Public site remains on triada-designs.com.
             </p>
           </div>
 

@@ -37,8 +37,13 @@ class IntegrationController extends Controller
         $this->touchHealth($workspaceId, 'wordpress', $wpHealth);
         $this->touchHealth($workspaceId, 'zoho', $zohoHealth);
 
+        $mode = (string) config('integrations.mode', 'local');
+        if ($mode === 'mock') {
+            $mode = 'local';
+        }
+
         return response()->json([
-            'mode' => config('integrations.mode'),
+            'mode' => $mode,
             'wordpress' => $wpHealth,
             'zoho' => $zohoHealth,
             'wordpress_posts' => $wordpress->listPosts(5),
@@ -81,7 +86,7 @@ class IntegrationController extends Controller
 
         $status = match ($health['status']) {
             'healthy' => 'connected',
-            'mock' => 'mock',
+            'seeded', 'local', 'mock' => 'seeded',
             default => 'error',
         };
 

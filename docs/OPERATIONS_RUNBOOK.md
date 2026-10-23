@@ -1,11 +1,13 @@
 # Operations runbook (foundation)
 
-## Demo reset
+## Local seed reset
 
 ```bash
 cd apps/api
 php artisan migrate:fresh --seed
 ```
+
+Local seed admin: `admin@triada-designs.com` / `triada-local`.
 
 ## Emergency pauses (later)
 

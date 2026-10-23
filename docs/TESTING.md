@@ -7,7 +7,7 @@ cd apps/api
 php artisan test
 ```
 
-Feature coverage in Milestone 1 focuses on health, auth login, and integration mock health.
+Feature coverage in the foundation slice focuses on health, seed-admin login, and integration local-seed health.
 
 ## Web
 
@@ -20,8 +20,8 @@ npm run build
 ## Manual smoke
 
 1. Open ops app root → redirects to admin login
-2. Sign in with demo credentials
+2. Sign in with local seed admin (`admin@triada-designs.com` / `triada-local`)
 3. Overview metrics load
 4. Open inbox conversation, takeover, reply
-5. Integrations page shows WordPress/Zoho mock health
+5. Integrations page shows WordPress/Zoho **seeded** health (not live)
 6. Approve content item

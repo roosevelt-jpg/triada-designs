@@ -54,7 +54,7 @@ class DashboardController extends Controller
                 ->where('workspace_id', $workspaceId)
                 ->get(['id', 'provider', 'display_name', 'status', 'last_health_check_at', 'last_error_code']),
             'notes' => [
-                'All metrics are derived from persisted demo or live records.',
+                'All metrics are derived from persisted workspace records (seeded or live).',
                 'Estimated AI cost is omitted until LLM usage events are recorded.',
             ],
         ]);

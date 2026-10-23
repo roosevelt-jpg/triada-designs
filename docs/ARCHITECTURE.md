@@ -29,7 +29,7 @@ triada-designs.com          ops.triada-designs.com
 1. Channel adapters normalize inbound events before CRM/AI processing.
 2. Workspace isolation is enforced on every query.
 3. Public social publishing requires human approval (backend-enforced).
-4. Integrations default to mock/local fallbacks until credentials are present.
+4. Integrations default to local/seeded fallbacks until credentials are present (`INTEGRATION_MODE=live`).
 5. Frontend never receives provider secrets.
 
 ## Milestone 1 surface

@@ -4,10 +4,13 @@
 
 | Mode | Behavior |
 |---|---|
-| `mock` (default) | Clients return fixture data; webhooks accept when secret unset |
+| `local` (default) | Clients return seeded fixture data; webhooks accept when secret unset |
+| `mock` | Alias for `local` (legacy env value) |
 | `live` | Real HTTP calls; requires credentials |
 
 Set `INTEGRATION_MODE` in `apps/api/.env`.
+
+User-facing status language: **local / seeded / live / disconnected / error**. Do not present disconnected providers (e.g. Shopify) as healthy.
 
 ## WordPress
 
@@ -67,8 +70,8 @@ ZOHO_WEBHOOK_SECRET=
 
 ## Shopify (scaffolded)
 
-Config keys exist; product records are local until a secure OAuth connection and scopes are completed in a later milestone. Do not claim live Shopify sync until authorized and tested.
+Config keys exist; product records are local until a secure OAuth connection and scopes are completed in a later milestone. Status remains **disconnected**. Do not claim live Shopify sync until authorized and tested.
 
 ## Honesty policy
 
-Mock responses are labeled `source: mock`. Live failures surface as `status: error` with a message—never silent fake success presented as production connectivity.
+Local fallback responses are labeled `source: seeded` and health `status: seeded`. Live failures surface as `status: error` with a message—never silent fake success presented as production connectivity.

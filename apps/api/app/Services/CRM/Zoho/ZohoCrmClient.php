@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
- * Zoho CRM API client with mock/local fallback.
+ * Zoho CRM API client with local/seeded fallback.
  *
  * Live mode expects OAuth client credentials + refresh token.
  * Secrets stay server-side; never expose them to the Next.js client.
@@ -22,7 +22,9 @@ class ZohoCrmClient implements CrmClientInterface
 
     public function mode(): string
     {
-        return (string) config('integrations.mode', 'mock');
+        $mode = (string) config('integrations.mode', 'local');
+
+        return $mode === 'mock' ? 'local' : $mode;
     }
 
     public function isConfigured(): bool
@@ -34,14 +36,23 @@ class ZohoCrmClient implements CrmClientInterface
             && (filled($cfg['refresh_token']) || filled($cfg['access_token']));
     }
 
+    public function usesLocalFallback(): bool
+    {
+        return $this->mode() !== 'live' || ! $this->isConfigured();
+    }
+
     public function healthCheck(): array
     {
-        if ($this->mode() === 'mock' || ! $this->isConfigured()) {
+        if ($this->usesLocalFallback()) {
+            $awaiting = ! $this->isConfigured();
+
             return [
-                'status' => 'mock',
-                'mode' => $this->mode(),
+                'status' => 'seeded',
+                'mode' => 'local',
                 'configured' => $this->isConfigured(),
-                'message' => 'Zoho CRM running in mock/local fallback. Set ZOHO_* env vars and INTEGRATION_MODE=live to connect.',
+                'message' => $awaiting
+                    ? 'Zoho CRM awaiting credentials. Using local seeded leads until ZOHO_* is set and INTEGRATION_MODE=live.'
+                    : 'Zoho CRM running in local seed mode. Set INTEGRATION_MODE=live to call the API.',
             ];
         }
 
@@ -83,11 +94,11 @@ class ZohoCrmClient implements CrmClientInterface
 
     public function upsertContact(array $contact): array
     {
-        if ($this->mode() === 'mock' || ! $this->isConfigured()) {
+        if ($this->usesLocalFallback()) {
             return [
-                'id' => $contact['external_crm_id'] ?? ('mock-contact-'.uniqid()),
+                'id' => $contact['external_crm_id'] ?? ('seed-contact-'.uniqid()),
                 'provider' => 'zoho',
-                'source' => 'mock',
+                'source' => 'seeded',
                 'email' => $contact['email'] ?? null,
                 'name' => $contact['name'] ?? null,
             ];
@@ -120,11 +131,11 @@ class ZohoCrmClient implements CrmClientInterface
 
     public function upsertLead(array $lead): array
     {
-        if ($this->mode() === 'mock' || ! $this->isConfigured()) {
+        if ($this->usesLocalFallback()) {
             return [
-                'id' => $lead['external_crm_id'] ?? ('mock-lead-'.uniqid()),
+                'id' => $lead['external_crm_id'] ?? ('seed-lead-'.uniqid()),
                 'provider' => 'zoho',
-                'source' => 'mock',
+                'source' => 'seeded',
                 'stage' => $lead['stage'] ?? 'new_lead',
                 'score' => $lead['score'] ?? 0,
             ];
@@ -158,21 +169,21 @@ class ZohoCrmClient implements CrmClientInterface
 
     public function listRecentLeads(int $limit = 10): array
     {
-        if ($this->mode() === 'mock' || ! $this->isConfigured()) {
+        if ($this->usesLocalFallback()) {
             return [
                 [
-                    'id' => 'mock-lead-1',
+                    'id' => 'seed-lead-1',
                     'name' => 'Amelia Chen',
                     'email' => 'amelia@example.com',
                     'stage' => 'qualified',
-                    'source' => 'mock',
+                    'source' => 'seeded',
                 ],
                 [
-                    'id' => 'mock-lead-2',
+                    'id' => 'seed-lead-2',
                     'name' => 'Noah Patel',
                     'email' => 'noah@example.com',
                     'stage' => 'contacted',
-                    'source' => 'mock',
+                    'source' => 'seeded',
                 ],
             ];
         }
@@ -205,7 +216,7 @@ class ZohoCrmClient implements CrmClientInterface
         $expected = (string) config('integrations.zoho.webhook_secret');
 
         if ($expected === '') {
-            return $this->mode() === 'mock';
+            return $this->usesLocalFallback();
         }
 
         return hash_equals($expected, (string) $providedSecret);

@@ -130,7 +130,7 @@ class AutomationApiTest extends TestCase
         $response = $this->withToken($this->token)
             ->postJson("/api/v1/automations/{$workflow->id}/run", [
                 'context' => [
-                    'content_item_id' => 'demo',
+                    'content_item_id' => 'seed',
                 ],
             ])
             ->assertOk()
