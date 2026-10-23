@@ -42,31 +42,43 @@ export default function HomePage() {
       <SiteHeader />
 
       <main>
-        <section className="relative overflow-hidden border-b border-line">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(199,174,138,0.28),transparent_42%),radial-gradient(circle_at_80%_10%,rgba(232,222,208,0.55),transparent_36%),linear-gradient(160deg,#faf8f4_0%,#f0eeea_55%,#e8ded0_100%)]" />
-          <div className="absolute inset-y-0 right-0 hidden w-[48%] overflow-hidden lg:block">
-            <div className="soft-pan h-full w-full bg-[linear-gradient(135deg,#9a7958_0%,#c7ae8a_38%,#e8ded0_72%,#faf8f4_100%)] opacity-90" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(250,248,244,0.18),transparent_45%)]" />
-          </div>
+        <section className="relative isolate min-h-[88vh] overflow-hidden border-b border-line">
+          <div
+            aria-hidden="true"
+            className="soft-pan absolute inset-0 bg-[linear-gradient(125deg,#70563f_0%,#9a7958_28%,#c7ae8a_52%,#e8ded0_78%,#faf8f4_100%)]"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-[radial-gradient(circle_at_18%_30%,rgba(250,248,244,0.55),transparent_42%),linear-gradient(180deg,rgba(41,38,34,0.18),rgba(41,38,34,0.42))]"
+          />
 
-          <div className="page-shell relative grid min-h-[78vh] items-center py-16 lg:grid-cols-[1.05fr_0.95fr] lg:py-24">
-            <div className="fade-rise max-w-xl">
-              <p className="font-display text-5xl leading-[1.05] text-ink md:text-6xl lg:text-[4rem]">
+          <div className="page-shell relative flex min-h-[88vh] items-end pb-16 pt-28 md:items-center md:pb-24 md:pt-24">
+            <div className="fade-rise max-w-xl text-white">
+              <p className="font-display text-5xl leading-[1.05] md:text-6xl lg:text-[4.25rem]">
                 Triada Designs
               </p>
-              <h1 className="mt-5 max-w-lg font-sans text-xl font-medium leading-snug text-ink md:text-2xl">
+              <h1 className="mt-5 max-w-lg font-sans text-xl font-medium leading-snug text-white/95 md:text-2xl">
                 Quiet rituals. Considered products. Personal care.
               </h1>
-              <p className="mt-4 max-w-md text-base text-muted">
-                A premium beauty and lifestyle experience—paired with an AI sales
-                and marketing operations platform that keeps humans in control.
+              <p className="mt-4 max-w-md text-base text-white/80">
+                Thoughtfully selected products and services through a personal,
+                design-led customer experience.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link href="/#collection">
-                  <Button size="lg">Explore the collection</Button>
+                  <Button
+                    size="lg"
+                    className="bg-white text-ink hover:bg-ivory"
+                  >
+                    Explore the collection
+                  </Button>
                 </Link>
                 <Link href="/login">
-                  <Button size="lg" variant="secondary">
+                  <Button
+                    size="lg"
+                    variant="secondary"
+                    className="border-white/50 bg-transparent text-white hover:bg-white/10"
+                  >
                     Open operations
                   </Button>
                 </Link>
