@@ -65,22 +65,17 @@ export default function HomePage() {
                 design-led customer experience.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link href="/#collection">
-                  <Button
-                    size="lg"
-                    className="bg-white text-ink hover:bg-ivory"
-                  >
-                    Explore the collection
-                  </Button>
+                <Link
+                  href="/#collection"
+                  className="inline-flex h-12 items-center justify-center rounded-md bg-white px-5 text-base font-medium text-ink transition-colors hover:bg-ivory"
+                >
+                  Explore the collection
                 </Link>
-                <Link href="/login">
-                  <Button
-                    size="lg"
-                    variant="secondary"
-                    className="border-white/50 bg-transparent text-white hover:bg-white/10"
-                  >
-                    Open operations
-                  </Button>
+                <Link
+                  href="/login"
+                  className="inline-flex h-12 items-center justify-center rounded-md border border-white/55 bg-transparent px-5 text-base font-medium text-white transition-colors hover:bg-white/10"
+                >
+                  Open operations
                 </Link>
               </div>
             </div>
