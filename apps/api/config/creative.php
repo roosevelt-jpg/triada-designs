@@ -56,6 +56,7 @@ return [
         'whatsapp_status' => ['label' => 'WhatsApp status', 'width' => 1080, 'height' => 1920, 'aspect' => '9:16'],
     ],
 
-    'storage_disk' => env('CREATIVE_DISK', 'local'),
+    // Use the public disk so /storage/{path} is served via the public/storage symlink.
+    'storage_disk' => env('CREATIVE_DISK', 'public'),
     'public_path_prefix' => 'creative',
 ];

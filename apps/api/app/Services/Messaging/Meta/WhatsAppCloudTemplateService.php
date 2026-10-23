@@ -195,6 +195,103 @@ class WhatsAppCloudTemplateService
     }
 
     /**
+     * Update a local WhatsApp template draft and re-submit to Cloud API (or local sim).
+     *
+     * @param  array<string, mixed>  $input
+     * @return array{ok:bool,mode:string,template:ChannelTemplate,external:?array,error:?string}
+     */
+    public function updateAndSubmit(
+        Workspace $workspace,
+        ChannelTemplate $template,
+        array $input,
+        ?string $actorId = null
+    ): array {
+        if ($template->platform !== 'whatsapp') {
+            return [
+                'ok' => false,
+                'mode' => 'local_sim',
+                'template' => $template,
+                'external' => null,
+                'error' => 'Template is not a WhatsApp Cloud template',
+            ];
+        }
+
+        $name = (string) ($input['name'] ?? $template->name);
+        $body = (string) ($input['body'] ?? $template->body);
+        $language = (string) ($input['language'] ?? $template->language ?? 'en');
+        $category = strtoupper((string) ($input['category'] ?? $template->category ?? 'MARKETING'));
+        $components = $input['components'] ?? [
+            ['type' => 'BODY', 'text' => $body],
+        ];
+
+        $template->forceFill([
+            'name' => $name,
+            'body' => $body,
+            'language' => $language,
+            'category' => strtolower($category),
+            'variables' => $input['variables'] ?? $template->variables,
+            'status' => 'pending_approval',
+            'metadata' => array_merge($template->metadata ?? [], [
+                'components' => $components,
+                'updated_by' => $actorId,
+                'updated_at' => now()->toIso8601String(),
+            ]),
+        ])->save();
+
+        $submit = $this->graph->submitWhatsAppMessageTemplate([
+            'name' => preg_replace('/[^a-z0-9_]/', '_', strtolower($name)) ?: 'jewellery_update',
+            'language' => $language,
+            'category' => $category,
+            'components' => $components,
+        ]);
+
+        if (! ($submit['ok'] ?? false)) {
+            $template->forceFill([
+                'status' => 'draft',
+                'last_publish_error' => $submit['error_message'] ?? 'submit_failed',
+            ])->save();
+
+            return [
+                'ok' => false,
+                'mode' => (string) ($submit['mode'] ?? 'local_sim'),
+                'template' => $template->fresh(),
+                'external' => $submit,
+                'error' => $submit['error_message'] ?? 'Template update submit failed',
+            ];
+        }
+
+        $template->forceFill([
+            'status' => ($submit['mode'] ?? '') === 'live' ? 'pending_approval' : 'approved',
+            'external_template_id' => $submit['external_template_id'] ?? $template->external_template_id,
+            'publish_mode' => $submit['mode'] ?? 'local_sim',
+            'approved_at' => ($submit['mode'] ?? '') === 'local_sim' ? now() : null,
+            'last_publish_error' => null,
+            'metadata' => array_merge($template->metadata ?? [], [
+                'submit_result' => $submit,
+            ]),
+        ])->save();
+
+        AuditLog::query()->create([
+            'workspace_id' => $workspace->id,
+            'actor_type' => $actorId ? 'user' : 'system',
+            'actor_id' => $actorId,
+            'action' => 'whatsapp.templates.update',
+            'target_type' => 'channel_template',
+            'target_id' => $template->id,
+            'metadata' => ['mode' => $submit['mode'] ?? 'local_sim'],
+            'created_at' => now(),
+        ]);
+
+        return [
+            'ok' => true,
+            'mode' => (string) ($submit['mode'] ?? 'local_sim'),
+            'template' => $template->fresh(),
+            'external' => $submit,
+            'error' => null,
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $options
      * @return array{ok:bool,mode:string,provider_message_id:?string,error:?string,raw:array}
      */

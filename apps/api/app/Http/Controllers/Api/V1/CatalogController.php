@@ -7,6 +7,9 @@ use App\Models\ContentItem;
 use App\Models\Product;
 use App\Models\ServiceOffering;
 use App\Models\User;
+use App\Models\Workspace;
+use App\Services\Automations\ContentWorkflowDispatcher;
+use App\Services\Creative\CreativeMediaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -39,8 +42,12 @@ class CatalogController extends Controller
         );
     }
 
-    public function approveContent(Request $request, string $contentId): JsonResponse
-    {
+    public function approveContent(
+        Request $request,
+        string $contentId,
+        CreativeMediaService $creative,
+        ContentWorkflowDispatcher $dispatcher
+    ): JsonResponse {
         $workspaceId = $this->workspaceId($request);
         $item = ContentItem::query()
             ->where('workspace_id', $workspaceId)
@@ -50,6 +57,14 @@ class CatalogController extends Controller
             return response()->json(['message' => 'Already published.'], 422);
         }
 
+        $workspace = Workspace::query()->findOrFail($workspaceId);
+
+        // Every approved post must have post-aligned creative (image + variants at minimum).
+        $pack = $creative->ensureCreativePack($workspace, $item, [
+            'with_video' => true,
+            'with_animation' => true,
+        ]);
+
         $version = ((int) $item->approval_version) + 1;
         $item->forceFill([
             'status' => 'approved',
@@ -58,7 +73,18 @@ class CatalogController extends Controller
             'approval_version' => $version,
         ])->save();
 
-        return response()->json($item);
+        $workflows = $dispatcher->dispatch($workspace, $item->fresh(), 'content_approved');
+
+        return response()->json([
+            'content' => $item->fresh(),
+            'creative' => [
+                'ok' => $pack['ok'] ?? false,
+                'mode' => $pack['mode'] ?? null,
+                'image_asset_id' => data_get($pack, 'image.asset.id'),
+                'variant_count' => isset($pack['variants']['variants']) ? count($pack['variants']['variants']) : null,
+            ],
+            'automations' => $workflows,
+        ]);
     }
 
     protected function workspaceId(Request $request): string

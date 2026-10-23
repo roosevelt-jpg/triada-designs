@@ -88,6 +88,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/content/{contentId}/generate-image', [CreativeMediaController::class, 'generateImage']);
         Route::post('/content/{contentId}/generate-variants', [CreativeMediaController::class, 'generateVariants']);
         Route::post('/content/{contentId}/generate-video', [CreativeMediaController::class, 'generateVideo']);
+        Route::post('/content/{contentId}/generate-animation', [CreativeMediaController::class, 'generateAnimation']);
+        Route::post('/content/{contentId}/ensure-creative', [CreativeMediaController::class, 'ensureCreative']);
 
         Route::get('/integrations', [IntegrationController::class, 'index']);
         Route::get('/integrations/health', [IntegrationController::class, 'health']);
@@ -108,6 +110,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/integrations/whatsapp/templates', [WhatsAppIntegrationController::class, 'templates']);
         Route::post('/integrations/whatsapp/templates/sync', [WhatsAppIntegrationController::class, 'syncTemplates']);
         Route::post('/integrations/whatsapp/templates', [WhatsAppIntegrationController::class, 'createTemplate']);
+        Route::put('/integrations/whatsapp/templates/{templateId}', [WhatsAppIntegrationController::class, 'updateTemplate']);
+        Route::patch('/integrations/whatsapp/templates/{templateId}', [WhatsAppIntegrationController::class, 'updateTemplate']);
         Route::post('/integrations/whatsapp/send-template', [WhatsAppIntegrationController::class, 'sendTemplate']);
 
         Route::get('/integrations/shopify/status', [ShopifyIntegrationController::class, 'status']);

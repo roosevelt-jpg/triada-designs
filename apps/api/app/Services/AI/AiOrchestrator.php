@@ -387,7 +387,15 @@ TXT);
                 ->first();
         }
 
-        if (! $item && in_array($tool, ['generate_image', 'generate_platform_variants', 'generate_short_video'], true)) {
+        $creativeToolsNeedingItem = [
+            'generate_image',
+            'generate_platform_variants',
+            'generate_short_video',
+            'generate_animation',
+            'ensure_creative_pack',
+        ];
+
+        if (! $item && in_array($tool, $creativeToolsNeedingItem, true)) {
             $item = ContentItem::query()->create([
                 'workspace_id' => $workspace->id,
                 'title' => (string) ($payload['title'] ?? 'AI creative draft'),
@@ -425,6 +433,8 @@ TXT);
                 $payload['platforms'] ?? null
             ),
             'generate_short_video' => $creative->generateVideo($workspace, $item, $payload),
+            'generate_animation' => $creative->generateAnimation($workspace, $item, $payload),
+            'ensure_creative_pack' => $creative->ensureCreativePack($workspace, $item, $payload),
             default => ['ok' => false, 'error' => 'Unknown tool'],
         };
 

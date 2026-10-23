@@ -25,6 +25,10 @@ export const PALETTE_ITEMS = [
   { id: "wa_optout", kind: "action", type: "action", actionType: "check_whatsapp_opt_out", label: "WA opt-out", icon: "⊘" },
   { id: "ai_reply", kind: "action", type: "action", actionType: "ai_reply", label: "AI reply", icon: "✦" },
   { id: "gen_image", kind: "action", type: "action", actionType: "generate_content_image", label: "Gen image", icon: "▣" },
+  { id: "gen_variants", kind: "action", type: "action", actionType: "generate_content_variants", label: "Gen variants", icon: "▦" },
+  { id: "gen_video", kind: "action", type: "action", actionType: "generate_content_video", label: "Gen video", icon: "▶" },
+  { id: "gen_anim", kind: "action", type: "action", actionType: "generate_content_animation", label: "Gen animation", icon: "⟳" },
+  { id: "ensure_creative", kind: "action", type: "action", actionType: "ensure_content_creative", label: "Ensure creative", icon: "▣" },
   { id: "handoff", kind: "node", type: "human_handoff", label: "Handoff", icon: "⤴" },
   { id: "notify", kind: "action", type: "action", actionType: "notify_team", label: "Notify team", icon: "⚑" },
   { id: "end", kind: "node", type: "end", label: "End", icon: "■" },
@@ -40,6 +44,7 @@ export const TRIGGER_TYPES = [
   "conversation_escalated",
   "follow_up_due",
   "content_approved",
+  "content_created",
   "shopify_order_updated",
   "shopify_order_created",
   "manual",
@@ -69,6 +74,8 @@ export const ACTION_TYPES = [
   "generate_content_image",
   "generate_content_variants",
   "generate_content_video",
+  "generate_content_animation",
+  "ensure_content_creative",
 ];
 
 export const CONDITION_OPERATORS = [

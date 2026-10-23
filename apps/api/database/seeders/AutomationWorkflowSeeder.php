@@ -381,7 +381,7 @@ class AutomationWorkflowSeeder extends Seeder
                 'name' => 'WhatsApp jewellery follow-up',
                 'description' => 'After a delay: opt-out check → window path (template if closed) → send approved Cloud template when eligible (local sim without credentials).',
                 'trigger_type' => 'follow_up_due',
-                'status' => 'draft',
+                'status' => 'active',
                 'definition' => [
                     'entry' => 'trigger_followup',
                     'nodes' => [
@@ -444,10 +444,43 @@ class AutomationWorkflowSeeder extends Seeder
                 ],
             ],
             [
+                'name' => 'Content creative on create (jewellery)',
+                'description' => 'When a content draft is created, ensure post-aligned image + platform variants exist — never auto-publishes.',
+                'trigger_type' => 'content_created',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_created',
+                    'nodes' => [
+                        'trigger_created' => [
+                            'type' => 'trigger',
+                            'label' => 'Content created',
+                            'config' => ['trigger_type' => 'content_created'],
+                            'next' => 'act_pack',
+                        ],
+                        'act_pack' => [
+                            'type' => 'action',
+                            'label' => 'Ensure creative pack',
+                            'config' => [
+                                'action_type' => 'ensure_content_creative',
+                                'with_video' => false,
+                                'with_animation' => false,
+                                'product' => 'Triada Designs jewellery',
+                            ],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => [
+                            'type' => 'end',
+                            'label' => 'Done',
+                            'config' => [],
+                        ],
+                    ],
+                ],
+            ],
+            [
                 'name' => 'Content creative draft (jewellery)',
-                'description' => 'When content is approved, generate jewellery-aware image + platform variants for distribution — never auto-publishes.',
+                'description' => 'When content is approved, ensure jewellery-aware image + variants + short video + animation — never auto-publishes.',
                 'trigger_type' => 'content_approved',
-                'status' => 'draft',
+                'status' => 'active',
                 'definition' => [
                     'entry' => 'trigger_approved',
                     'nodes' => [
@@ -455,22 +488,16 @@ class AutomationWorkflowSeeder extends Seeder
                             'type' => 'trigger',
                             'label' => 'Content approved',
                             'config' => ['trigger_type' => 'content_approved'],
-                            'next' => 'act_image',
+                            'next' => 'act_pack',
                         ],
-                        'act_image' => [
+                        'act_pack' => [
                             'type' => 'action',
-                            'label' => 'Generate image',
+                            'label' => 'Ensure full creative pack',
                             'config' => [
-                                'action_type' => 'generate_content_image',
+                                'action_type' => 'ensure_content_creative',
+                                'with_video' => true,
+                                'with_animation' => true,
                                 'product' => 'Triada Designs jewellery',
-                            ],
-                            'next' => 'act_variants',
-                        ],
-                        'act_variants' => [
-                            'type' => 'action',
-                            'label' => 'Generate variants',
-                            'config' => [
-                                'action_type' => 'generate_content_variants',
                             ],
                             'next' => 'act_notify',
                         ],
@@ -479,7 +506,7 @@ class AutomationWorkflowSeeder extends Seeder
                             'label' => 'Notify marketing',
                             'config' => [
                                 'action_type' => 'notify_team',
-                                'message' => 'Creative variants ready — schedule/publish still requires human action.',
+                                'message' => 'Creative pack ready — schedule/publish still requires human action.',
                             ],
                             'next' => 'end_ok',
                         ],

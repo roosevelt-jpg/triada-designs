@@ -63,6 +63,34 @@ class WhatsAppIntegrationController extends Controller
         return response()->json($result, ($result['ok'] ?? false) ? 201 : 422);
     }
 
+    public function updateTemplate(Request $request, string $templateId, WhatsAppCloudTemplateService $wa): JsonResponse
+    {
+        $workspace = $this->workspace($request);
+        $template = ChannelTemplate::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('platform', 'whatsapp')
+            ->where('id', $templateId)
+            ->firstOrFail();
+
+        $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:120'],
+            'body' => ['nullable', 'string', 'max:4000'],
+            'language' => ['nullable', 'string', 'max:16'],
+            'category' => ['nullable', 'string', 'max:40'],
+            'variables' => ['nullable', 'array'],
+            'components' => ['nullable', 'array'],
+        ]);
+
+        $result = $wa->updateAndSubmit(
+            $workspace,
+            $template,
+            $data,
+            (string) $request->user()->id
+        );
+
+        return response()->json($result, ($result['ok'] ?? false) ? 200 : 422);
+    }
+
     public function sendTemplate(Request $request, WhatsAppCloudTemplateService $wa, OutboundEligibility $eligibility): JsonResponse
     {
         $data = $request->validate([

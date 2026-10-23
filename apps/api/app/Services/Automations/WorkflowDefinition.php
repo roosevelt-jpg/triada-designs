@@ -37,6 +37,7 @@ class WorkflowDefinition
         'conversation_escalated',
         'follow_up_due',
         'content_approved',
+        'content_created',
         'shopify_order_updated',
         'shopify_order_created',
         'manual',
@@ -66,6 +67,8 @@ class WorkflowDefinition
         'generate_content_image',
         'generate_content_variants',
         'generate_content_video',
+        'generate_content_animation',
+        'ensure_content_creative',
     ];
 
     /**

@@ -5,12 +5,16 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   async rewrites() {
-    // Browser calls same-origin /api/*; Next proxies to Laravel on the VM.
+    // Browser calls same-origin /api/* and /storage/*; Next proxies to Laravel on the VM.
     // Needed so laptop browsers via Cursor port-forward only need the web port.
     return [
       {
         source: "/api/:path*",
         destination: `${apiOrigin}/api/:path*`,
+      },
+      {
+        source: "/storage/:path*",
+        destination: `${apiOrigin}/storage/:path*`,
       },
     ];
   },

@@ -18,6 +18,7 @@ use App\Models\Task;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceMembership;
+use App\Services\Creative\CreativeMediaService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -341,6 +342,19 @@ class TriadaWorkspaceSeeder extends Seeder
             ]
         );
 
+        // Every seeded post gets post-aligned creative (image + platform variants + video + animation).
+        $creative = app(CreativeMediaService::class);
+        ContentItem::query()
+            ->where('workspace_id', $workspace->id)
+            ->orderBy('created_at')
+            ->get()
+            ->each(function (ContentItem $item) use ($workspace, $creative) {
+                $creative->ensureCreativePack($workspace, $item, [
+                    'with_video' => true,
+                    'with_animation' => true,
+                ]);
+            });
+
         $sofia = Contact::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
@@ -421,12 +435,14 @@ class TriadaWorkspaceSeeder extends Seeder
                 'status' => 'active',
                 'config' => [
                     'channels' => ['content_studio'],
-                    'system_prompt' => 'Editorial brand voice. No fake urgency or fabricated social proof. Propose creative briefs; never auto-publish.',
+                    'system_prompt' => 'Editorial brand voice. No fake urgency or fabricated social proof. Propose creative briefs; generate post-aligned images for every draft; never auto-publish.',
                     'allowed_tools' => [
                         'propose_creative_brief',
                         'generate_image',
                         'generate_platform_variants',
                         'generate_short_video',
+                        'generate_animation',
+                        'ensure_creative_pack',
                     ],
                 ],
             ],
@@ -438,12 +454,14 @@ class TriadaWorkspaceSeeder extends Seeder
                 'status' => 'active',
                 'config' => [
                     'channels' => ['content_studio', 'meta_page', 'wordpress'],
-                    'system_prompt' => 'One core message per draft. Public posts require human approval. Use jewellery-aware image/video tools only via allowlist.',
+                    'system_prompt' => 'One core message per draft. Every post gets an aligned creative image. Public posts require human approval. Use jewellery-aware image/video/animation tools only via allowlist.',
                     'allowed_tools' => [
                         'propose_creative_brief',
                         'generate_image',
                         'generate_platform_variants',
                         'generate_short_video',
+                        'generate_animation',
+                        'ensure_creative_pack',
                     ],
                 ],
             ],

@@ -104,8 +104,55 @@ class CreativeMediaController extends Controller
             'error' => $result['error'],
             'asset' => $result['asset'],
             'sidecar' => $result['sidecar'] ?? null,
-            'note' => 'Short video/animation draft only — human approval still required before public publish.',
+            'note' => 'Short video draft only — human approval still required before public publish.',
         ]);
+    }
+
+    public function generateAnimation(Request $request, string $contentId, CreativeMediaService $creative): JsonResponse
+    {
+        $workspace = $this->workspace($request);
+        $item = $this->content($workspace, $contentId);
+
+        $data = $request->validate([
+            'product' => ['nullable', 'string', 'max:200'],
+            'storyboard' => ['nullable', 'string', 'max:2000'],
+            'caption' => ['nullable', 'string', 'max:4000'],
+            'duration_ms' => ['nullable', 'integer', 'min:1000', 'max:60000'],
+            'width' => ['nullable', 'integer', 'min:64', 'max:4096'],
+            'height' => ['nullable', 'integer', 'min:64', 'max:4096'],
+        ]);
+
+        $result = $creative->generateAnimation($workspace, $item, $data);
+
+        return response()->json([
+            'ok' => $result['ok'],
+            'mode' => $result['mode'],
+            'prompt' => $result['prompt'] ?? null,
+            'brief' => $result['brief'] ?? null,
+            'error' => $result['error'],
+            'asset' => $result['asset'],
+            'sidecar' => $result['sidecar'] ?? null,
+            'note' => 'Marketing animation draft only — human approval still required before public publish.',
+        ]);
+    }
+
+    public function ensureCreative(Request $request, string $contentId, CreativeMediaService $creative): JsonResponse
+    {
+        $workspace = $this->workspace($request);
+        $item = $this->content($workspace, $contentId);
+
+        $data = $request->validate([
+            'force' => ['nullable', 'boolean'],
+            'with_video' => ['nullable', 'boolean'],
+            'with_animation' => ['nullable', 'boolean'],
+            'product' => ['nullable', 'string', 'max:200'],
+            'platforms' => ['nullable', 'array'],
+            'platforms.*' => ['string'],
+        ]);
+
+        $result = $creative->ensureCreativePack($workspace, $item, $data);
+
+        return response()->json($result, ($result['ok'] ?? false) ? 200 : 422);
     }
 
     public function media(Request $request, string $contentId, CreativeMediaService $creative): JsonResponse

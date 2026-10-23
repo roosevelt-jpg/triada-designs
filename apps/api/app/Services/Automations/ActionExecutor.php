@@ -9,6 +9,7 @@ use App\Models\Message;
 use App\Models\Task;
 use App\Models\Workspace;
 use App\Services\AI\AiOrchestrator;
+use App\Services\Automations\ContentWorkflowDispatcher;
 use App\Services\Creative\CreativeMediaService;
 use App\Services\CRM\Zoho\ZohoCrmClient;
 use App\Services\Messaging\DTOs\OutboundMessage;
@@ -60,6 +61,8 @@ class ActionExecutor
             'generate_content_image' => $this->generateContentCreative($workspace, 'image', $config, $context, $dryRun),
             'generate_content_variants' => $this->generateContentCreative($workspace, 'variants', $config, $context, $dryRun),
             'generate_content_video' => $this->generateContentCreative($workspace, 'video', $config, $context, $dryRun),
+            'generate_content_animation' => $this->generateContentCreative($workspace, 'animation', $config, $context, $dryRun),
+            'ensure_content_creative' => $this->generateContentCreative($workspace, 'pack', $config, $context, $dryRun),
             default => ['ok' => false, 'error' => "Unsupported action: {$actionType}"],
         };
     }
@@ -391,7 +394,31 @@ class ActionExecutor
         $item = ContentItem::query()->create($payload);
         $context['content_item_id'] = $item->id;
 
-        return ['ok' => true, 'result' => ['content_item_id' => $item->id, 'status' => 'draft']];
+        // AI creative for every new post: post-aligned image (+ variants) unless opted out.
+        $autoCreative = $config['auto_creative'] ?? true;
+        $creativeResult = null;
+        if ($autoCreative) {
+            $creativeResult = app(CreativeMediaService::class)->ensureCreativePack($workspace, $item, [
+                'with_video' => (bool) ($config['with_video'] ?? false),
+                'with_animation' => (bool) ($config['with_animation'] ?? false),
+                'product' => $config['product'] ?? null,
+            ]);
+            $context['creative_pack'] = [
+                'mode' => $creativeResult['mode'] ?? null,
+                'image_asset_id' => data_get($creativeResult, 'image.asset.id'),
+            ];
+        }
+
+        app(ContentWorkflowDispatcher::class)->dispatch($workspace, $item, 'content_created');
+
+        return [
+            'ok' => true,
+            'result' => [
+                'content_item_id' => $item->id,
+                'status' => 'draft',
+                'creative' => $creativeResult,
+            ],
+        ];
     }
 
     protected function syncZohoLead(Workspace $workspace, array &$context, bool $dryRun): array
@@ -764,13 +791,19 @@ class ActionExecutor
             'image' => $creative->generateImage($workspace, $item, $config),
             'variants' => $creative->generateVariants($workspace, $item, $config['source_media_asset_id'] ?? null, $config['platforms'] ?? null),
             'video' => $creative->generateVideo($workspace, $item, $config),
+            'animation' => $creative->generateAnimation($workspace, $item, $config),
+            'pack' => $creative->ensureCreativePack($workspace, $item, $config),
             default => ['ok' => false, 'error' => 'Unknown creative kind'],
         };
 
         $context['creative_'.$kind] = [
             'mode' => $result['mode'] ?? null,
-            'asset_id' => data_get($result, 'asset.id'),
-            'variant_count' => isset($result['variants']) ? count($result['variants']) : null,
+            'asset_id' => data_get($result, 'asset.id') ?? data_get($result, 'image.asset.id'),
+            'variant_count' => isset($result['variants'])
+                ? (is_array($result['variants']) && isset($result['variants']['variants'])
+                    ? count($result['variants']['variants'])
+                    : (is_countable($result['variants']) ? count($result['variants']) : null))
+                : null,
         ];
 
         return [

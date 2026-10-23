@@ -58,6 +58,69 @@ class VideoGenerationService
     }
 
     /**
+     * Marketing animation (animated SVG locally; live video provider when configured).
+     *
+     * @param  array<string, mixed>  $context
+     * @return array{ok:bool,asset:?MediaAsset,mode:string,prompt:string,error:?string,sidecar:?array}
+     */
+    public function generateAnimationForContent(Workspace $workspace, ContentItem $item, array $context = []): array
+    {
+        $caption = (string) ($context['caption'] ?? $item->body ?? $item->title ?? '');
+        $duration = (int) ($context['duration_ms'] ?? config('creative.video.default_duration_ms', 4000));
+        $width = (int) ($context['width'] ?? 1080);
+        $height = (int) ($context['height'] ?? 1080);
+        $merged = array_merge([
+            'objective' => $item->objective,
+            'channel' => $item->channel,
+            'product' => data_get($item->product_context, 'name') ?? $context['product'] ?? 'Triada Designs jewellery',
+            'duration_ms' => $duration,
+            'storyboard' => $context['storyboard'] ?? 'Subtle jewellery motion loop for feed/stories.',
+            'format' => 'animation',
+        ], $context);
+
+        $prompt = $this->prompts->forVideo($caption, $merged);
+
+        // Local path always produces a first-class animation asset; live still falls back here without keys.
+        if ($this->usesLocalSimulator()) {
+            return $this->persistAnimationOnly($workspace, $item, $prompt, $width, $height, $duration, $merged);
+        }
+
+        try {
+            $live = $this->callProvider($prompt.' — short looping marketing animation', $duration);
+            if (! ($live['ok'] ?? false)) {
+                $local = $this->persistAnimationOnly($workspace, $item, $prompt, $width, $height, $duration, array_merge($merged, [
+                    'fallback_reason' => $live['error'] ?? 'provider_failed',
+                ]));
+                $local['error'] = $live['error'] ?? 'Animation provider failed; wrote local_sim animation.';
+
+                return $local;
+            }
+
+            return $this->persistBinary(
+                $workspace,
+                $item,
+                $prompt,
+                (string) $live['bytes'],
+                (string) ($live['mime_type'] ?? 'video/mp4'),
+                $width,
+                $height,
+                $duration,
+                'live',
+                (string) config('creative.video.provider', 'video'),
+                array_merge($merged, ['kind' => 'animation'])
+            );
+        } catch (\Throwable $e) {
+            Log::warning('creative.animation_failed', ['error' => $e->getMessage()]);
+            $local = $this->persistAnimationOnly($workspace, $item, $prompt, $width, $height, $duration, array_merge($merged, [
+                'fallback_reason' => $e->getMessage(),
+            ]));
+            $local['error'] = $e->getMessage();
+
+            return $local;
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $context
      * @return array{ok:bool,asset:?MediaAsset,mode:string,prompt:string,error:?string,sidecar:?array}
      */
@@ -114,6 +177,65 @@ class VideoGenerationService
 
             return $local;
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     * @return array{ok:bool,asset:?MediaAsset,mode:string,prompt:string,error:?string,sidecar:?array}
+     */
+    protected function persistAnimationOnly(
+        Workspace $workspace,
+        ContentItem $item,
+        string $prompt,
+        int $width,
+        int $height,
+        int $durationMs,
+        array $context
+    ): array {
+        $disk = (string) config('creative.storage_disk', 'public');
+        $prefix = trim((string) config('creative.public_path_prefix', 'creative'), '/');
+        $id = (string) Str::ulid();
+        $animPath = $prefix.'/animation/'.$id.'.svg';
+        $product = (string) ($context['product'] ?? 'Triada Designs');
+
+        Storage::disk($disk)->put($animPath, $this->svg->animated($width, $height, $product, $prompt));
+
+        $status = $this->status();
+        $asset = MediaAsset::query()->create([
+            'workspace_id' => $workspace->id,
+            'content_item_id' => $item->id,
+            'kind' => 'animation',
+            'provider' => (string) ($status['provider'] ?? 'local'),
+            'status' => 'ready',
+            'mode' => 'local_sim',
+            'mime_type' => 'image/svg+xml',
+            'disk' => $disk,
+            'path' => $animPath,
+            'url' => '/storage/'.$animPath,
+            'width' => $width,
+            'height' => $height,
+            'aspect_ratio' => $width === $height ? '1:1' : '9:16',
+            'duration_ms' => $durationMs,
+            'prompt' => $prompt,
+            'metadata' => [
+                'product' => $product,
+                'storyboard' => $context['storyboard'] ?? null,
+                'format' => 'animation',
+                'provider_status' => $status,
+                'note' => 'local_sim CSS-animated SVG — replace with VIDEO_API_KEY for live motion',
+            ],
+        ]);
+
+        return [
+            'ok' => true,
+            'asset' => $asset,
+            'mode' => 'local_sim',
+            'prompt' => $prompt,
+            'error' => null,
+            'sidecar' => [
+                'animation_svg' => $animPath,
+            ],
+        ];
     }
 
     /**
@@ -216,7 +338,7 @@ class VideoGenerationService
         $asset = MediaAsset::query()->create([
             'workspace_id' => $workspace->id,
             'content_item_id' => $item->id,
-            'kind' => 'video',
+            'kind' => (string) ($context['kind'] ?? 'video'),
             'provider' => $provider,
             'status' => 'ready',
             'mode' => $mode,
@@ -232,6 +354,7 @@ class VideoGenerationService
             'metadata' => [
                 'product' => $context['product'] ?? null,
                 'storyboard' => $context['storyboard'] ?? null,
+                'format' => $context['format'] ?? ($context['kind'] ?? 'video'),
             ],
         ]);
 

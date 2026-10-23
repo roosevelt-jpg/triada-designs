@@ -87,6 +87,29 @@ class CreativeMediaApiTest extends TestCase
         $this->assertSame('video', $video['asset']['kind'] ?? null);
         $this->assertNotEmpty($video['sidecar']['placeholder_mp4'] ?? null);
 
+        $animation = $this->withToken($this->token)
+            ->postJson('/api/v1/content/'.$item->id.'/generate-animation', [
+                'storyboard' => 'Subtle jewellery motion loop',
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('mode', 'local_sim')
+            ->json();
+
+        $this->assertSame('animation', $animation['asset']['kind'] ?? null);
+
+        $pack = $this->withToken($this->token)
+            ->postJson('/api/v1/content/'.$item->id.'/ensure-creative', [
+                'force' => false,
+                'with_video' => true,
+                'with_animation' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->json();
+
+        $this->assertTrue(($pack['image']['skipped'] ?? false) || ! empty($pack['image']['asset']));
+
         $this->withToken($this->token)
             ->getJson('/api/v1/content/'.$item->id.'/media')
             ->assertOk()

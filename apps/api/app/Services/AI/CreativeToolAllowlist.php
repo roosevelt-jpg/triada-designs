@@ -13,6 +13,8 @@ class CreativeToolAllowlist
         'generate_image',
         'generate_platform_variants',
         'generate_short_video',
+        'generate_animation',
+        'ensure_creative_pack',
     ];
 
     public const AGENT_KEYS = [
@@ -50,7 +52,15 @@ class CreativeToolAllowlist
             ],
             [
                 'name' => 'generate_short_video',
-                'description' => 'Generate a short marketing video/animation. Local stub without VIDEO_API_KEY.',
+                'description' => 'Generate a short marketing video. Local stub without VIDEO_API_KEY.',
+            ],
+            [
+                'name' => 'generate_animation',
+                'description' => 'Generate a marketing animation (animated SVG locally; live motion with VIDEO_API_KEY).',
+            ],
+            [
+                'name' => 'ensure_creative_pack',
+                'description' => 'Ensure post-aligned image + platform variants + video + animation exist for a content item.',
             ],
         ];
     }

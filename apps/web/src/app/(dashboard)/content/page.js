@@ -16,6 +16,12 @@ function modeTone(mode) {
   return "neutral";
 }
 
+function mediaUrl(url) {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return url.startsWith("/") ? url : `/${url}`;
+}
+
 export default function ContentPage() {
   const [items, setItems] = useState([]);
   const [publications, setPublications] = useState([]);
@@ -26,6 +32,16 @@ export default function ContentPage() {
   const [busyId, setBusyId] = useState(null);
   const [notice, setNotice] = useState("");
 
+  const refreshMedia = useCallback(async (itemId) => {
+    try {
+      const media = await apiFetch(`/v1/content/${itemId}/media`);
+      setMediaByItem((prev) => ({ ...prev, [itemId]: media }));
+      return media;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -35,34 +51,32 @@ export default function ContentPage() {
         apiFetch("/v1/publications"),
         apiFetch("/v1/creative/status").catch(() => null),
       ]);
-      setItems(response.data || []);
+      const list = response.data || [];
+      setItems(list);
       setPublications(pubs.data || []);
       setCreativeStatus(creative);
+      await Promise.all(list.map((item) => refreshMedia(item.id)));
     } catch (err) {
       setError(err.message || "Failed to load content");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshMedia]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  async function refreshMedia(itemId) {
-    try {
-      const media = await apiFetch(`/v1/content/${itemId}/media`);
-      setMediaByItem((prev) => ({ ...prev, [itemId]: media }));
-    } catch {
-      // non-fatal
-    }
-  }
-
   async function approve(id) {
     setBusyId(`approve-${id}`);
     try {
-      await apiFetch(`/v1/content/${id}/approve`, { method: "POST" });
-      setNotice("Approved. Publish still requires the version gate.");
+      const result = await apiFetch(`/v1/content/${id}/approve`, { method: "POST" });
+      const mode = result.creative?.mode || "local_sim";
+      setNotice(
+        `Approved (v${result.content?.approval_version ?? "?"}). Creative pack ${
+          result.creative?.ok ? "ready" : "pending"
+        } (${mode}). Publish still requires the version gate.`
+      );
       await load();
     } catch (err) {
       setError(err.message);
@@ -166,11 +180,56 @@ export default function ContentPage() {
         },
       });
       setNotice(
-        `Short video/animation drafted (${result.mode}). ${
+        `Short video drafted (${result.mode}). ${
           result.sidecar?.placeholder_mp4
             ? "Local stub includes animated SVG + placeholder mp4."
             : ""
         }`
+      );
+      await refreshMedia(item.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function generateAnimation(item) {
+    setBusyId(`anim-${item.id}`);
+    setNotice("");
+    try {
+      const result = await apiFetch(`/v1/content/${item.id}/generate-animation`, {
+        method: "POST",
+        body: {
+          product: item.product_context?.name || "Triada Designs jewellery",
+          storyboard: "Subtle jewellery motion loop for feed and stories.",
+        },
+      });
+      setNotice(`Marketing animation drafted (${result.mode}).`);
+      await refreshMedia(item.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function ensureCreative(item) {
+    setBusyId(`pack-${item.id}`);
+    setNotice("");
+    try {
+      const result = await apiFetch(`/v1/content/${item.id}/ensure-creative`, {
+        method: "POST",
+        body: {
+          force: true,
+          with_video: true,
+          with_animation: true,
+          product: item.product_context?.name || "Triada Designs jewellery",
+        },
+      });
+      const variantCount = result.variants?.variants?.length || result.variants?.length || 0;
+      setNotice(
+        `Full creative pack ready (${result.mode}): image + ${variantCount} variants + video + animation.`
       );
       await refreshMedia(item.id);
     } catch (err) {
@@ -186,7 +245,7 @@ export default function ContentPage() {
   return (
     <DashboardShell
       title="Content studio"
-      description="Draft → creative AI (image / variants / short video) → human approval → schedule/publish. Adapters: WordPress + Meta page (local sim without credentials)."
+      description="Draft → creative AI (image / platform variants / short video / animation) → human approval → schedule/publish. Every post gets post-aligned creatives. Adapters: WordPress + Meta page (local sim without credentials)."
     >
       {loading ? <Skeleton className="h-64" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -197,7 +256,7 @@ export default function ContentPage() {
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="ops-section-title">Creative AI</h2>
             <Badge tone={modeTone(imageMode)}>Image: {imageMode}</Badge>
-            <Badge tone={modeTone(videoMode)}>Video: {videoMode}</Badge>
+            <Badge tone={modeTone(videoMode)}>Video/anim: {videoMode}</Badge>
             <Badge tone="neutral">Resize: {creativeStatus.resize_engine}</Badge>
           </div>
           <p className="max-w-3xl text-sm text-muted">{creativeStatus.honesty}</p>
@@ -216,6 +275,13 @@ export default function ContentPage() {
             const media = mediaByItem[item.id];
             const assets = media?.assets || [];
             const variants = media?.variants || [];
+            const sourceImages = assets.filter(
+              (a) => a.kind === "image" && !a.metadata?.platform_target
+            );
+            const videos = assets.filter((a) => a.kind === "video");
+            const animations = assets.filter((a) => a.kind === "animation");
+            const hero = sourceImages[0] || assets.find((a) => a.kind === "image");
+
             return (
               <article key={item.id} className="surface-card p-5">
                 <div className="flex items-start justify-between gap-3">
@@ -238,7 +304,33 @@ export default function ContentPage() {
                   {item.product_context?.name ? ` · ${item.product_context.name}` : ""}
                 </p>
 
+                {hero?.url ? (
+                  <div className="mt-4 overflow-hidden rounded-sm border border-line bg-stone/30">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={mediaUrl(hero.url)}
+                      alt={`${item.title} creative`}
+                      className="max-h-56 w-full object-contain"
+                    />
+                    <div className="flex flex-wrap items-center gap-2 border-t border-line px-3 py-2 text-xs">
+                      <Badge tone={modeTone(hero.mode)}>{hero.mode}</Badge>
+                      <span className="text-muted">
+                        {hero.kind} · {hero.width}×{hero.height}
+                        {hero.aspect_ratio ? ` · ${hero.aspect_ratio}` : ""}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-muted">No creative image yet — generate pack below.</p>
+                )}
+
                 <div className="mt-4 flex flex-wrap gap-2">
+                  <Button
+                    disabled={busyId === `pack-${item.id}`}
+                    onClick={() => ensureCreative(item)}
+                  >
+                    Generate full creative
+                  </Button>
                   <Button
                     variant="secondary"
                     disabled={busyId === `img-${item.id}`}
@@ -260,35 +352,89 @@ export default function ContentPage() {
                   >
                     Generate short video
                   </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={busyId === `anim-${item.id}`}
+                    onClick={() => generateAnimation(item)}
+                  >
+                    Generate animation
+                  </Button>
                   <Button variant="ghost" onClick={() => refreshMedia(item.id)}>
                     Refresh media
                   </Button>
                 </div>
 
-                {assets.length > 0 || variants.length > 0 ? (
+                {variants.length > 0 || videos.length > 0 || animations.length > 0 ? (
                   <div className="mt-4 space-y-3 border-t border-line pt-4">
-                    {assets.slice(0, 4).map((asset) => (
-                      <div key={asset.id} className="flex flex-wrap items-center gap-2 text-sm">
-                        <Badge tone={modeTone(asset.mode)}>{asset.mode}</Badge>
-                        <span className="text-muted">
-                          {asset.kind} · {asset.width}×{asset.height}
-                          {asset.aspect_ratio ? ` · ${asset.aspect_ratio}` : ""}
-                        </span>
-                      </div>
-                    ))}
                     {variants.length > 0 ? (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {variants.map((variant) => (
-                          <div
-                            key={variant.id}
-                            className="rounded-sm border border-line bg-stone/40 px-3 py-2 text-xs"
-                          >
-                            <p className="font-medium text-ink">{variant.platform_target}</p>
-                            <p className="text-muted">
-                              {variant.width}×{variant.height}
-                              {variant.aspect_ratio ? ` · ${variant.aspect_ratio}` : ""}
+                      <div>
+                        <p className="mb-2 text-xs uppercase tracking-wide text-muted">
+                          Platform variants ({variants.length})
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {variants.map((variant) => {
+                            const preview = variant.media_asset?.url || variant.mediaAsset?.url;
+                            return (
+                              <div
+                                key={variant.id}
+                                className="overflow-hidden rounded-sm border border-line bg-stone/40"
+                              >
+                                {preview ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={mediaUrl(preview)}
+                                    alt={variant.platform_target}
+                                    className="h-28 w-full object-contain bg-ivory"
+                                  />
+                                ) : null}
+                                <div className="space-y-1 px-3 py-2 text-xs">
+                                  <p className="font-medium text-ink">{variant.platform_target}</p>
+                                  <p className="text-muted">
+                                    {variant.width}×{variant.height}
+                                    {variant.aspect_ratio ? ` · ${variant.aspect_ratio}` : ""}
+                                  </p>
+                                  <Badge tone={modeTone(variant.mode)}>{variant.mode}</Badge>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {(videos.length > 0 || animations.length > 0) ? (
+                      <div className="flex flex-wrap gap-3">
+                        {videos.map((asset) => (
+                          <div key={asset.id} className="min-w-[140px] flex-1 rounded-sm border border-line p-2 text-xs">
+                            <Badge tone={modeTone(asset.mode)}>{asset.mode}</Badge>
+                            <p className="mt-1 text-muted">
+                              video · {asset.width}×{asset.height}
+                              {asset.duration_ms ? ` · ${Math.round(asset.duration_ms / 1000)}s` : ""}
                             </p>
-                            <Badge tone={modeTone(variant.mode)}>{variant.mode}</Badge>
+                            {asset.url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={mediaUrl(asset.url)}
+                                alt="video storyboard"
+                                className="mt-2 h-20 w-full object-contain"
+                              />
+                            ) : null}
+                          </div>
+                        ))}
+                        {animations.map((asset) => (
+                          <div key={asset.id} className="min-w-[140px] flex-1 rounded-sm border border-line p-2 text-xs">
+                            <Badge tone={modeTone(asset.mode)}>{asset.mode}</Badge>
+                            <p className="mt-1 text-muted">
+                              animation · {asset.width}×{asset.height}
+                            </p>
+                            {asset.url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={mediaUrl(asset.url)}
+                                alt="animation preview"
+                                className="mt-2 h-20 w-full object-contain"
+                              />
+                            ) : null}
                           </div>
                         ))}
                       </div>

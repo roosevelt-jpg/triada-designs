@@ -59,6 +59,12 @@ export default function MetaIntegrationsPage() {
     body: "Hi {{1}}, your Triada Designs jewellery piece is ready to view. Reply INTERESTED to continue.",
     category: "MARKETING",
   });
+  const [waEditId, setWaEditId] = useState("");
+  const [waEditForm, setWaEditForm] = useState({
+    name: "",
+    body: "",
+    category: "MARKETING",
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -244,6 +250,40 @@ export default function MetaIntegrationsPage() {
     }
   }
 
+  function beginEditWaTemplate(tpl) {
+    setWaEditId(tpl.id);
+    setWaEditForm({
+      name: tpl.name || "",
+      body: tpl.body || "",
+      category: (tpl.category || "marketing").toUpperCase(),
+    });
+  }
+
+  async function saveWaTemplate(e) {
+    e.preventDefault();
+    if (!waEditId) return;
+    setBusy("wa-edit");
+    setNotice("");
+    try {
+      const result = await apiFetch(`/v1/integrations/whatsapp/templates/${waEditId}`, {
+        method: "PATCH",
+        body: waEditForm,
+      });
+      if (!result.ok) {
+        setError(result.error || "Template update failed");
+      } else {
+        setNotice(`WhatsApp template updated / re-submitted (${result.mode}). Status: ${result.template?.status}.`);
+        setWaEditId("");
+      }
+      const wa = await apiFetch("/v1/integrations/whatsapp/templates");
+      setWaTemplates(wa);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
   return (
     <DashboardShell
       title="Meta messaging"
@@ -392,7 +432,7 @@ export default function MetaIntegrationsPage() {
             </div>
             <p className="text-sm text-muted">{waTemplates?.status?.message}</p>
             <div className="grid gap-3 md:grid-cols-2">
-              {(waTemplates?.data || []).slice(0, 6).map((tpl) => (
+              {(waTemplates?.data || []).slice(0, 8).map((tpl) => (
                 <div key={tpl.id} className="rounded-md border border-line px-3 py-3">
                   <div className="flex items-start justify-between gap-2">
                     <p className="font-medium text-ink">{tpl.name}</p>
@@ -404,9 +444,53 @@ export default function MetaIntegrationsPage() {
                   <p className="mt-2 text-xs uppercase tracking-wide text-muted">
                     {tpl.category} · {tpl.publish_mode || "draft"} · {tpl.external_template_id || "no external id"}
                   </p>
+                  <div className="mt-3">
+                    <Button variant="ghost" onClick={() => beginEditWaTemplate(tpl)}>
+                      Edit / re-submit
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
+            {waEditId ? (
+              <form className="grid gap-3 border border-line bg-stone/30 p-4 md:grid-cols-2" onSubmit={saveWaTemplate}>
+                <p className="md:col-span-2 text-sm font-medium text-ink">Edit WhatsApp Cloud template</p>
+                <Input
+                  label="Template name"
+                  name="wa-edit-name"
+                  value={waEditForm.name}
+                  onChange={(e) => setWaEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                />
+                <label className="text-sm">
+                  <span className="mb-1 block text-muted">Category</span>
+                  <select
+                    className="w-full rounded-md border border-line bg-ivory px-3 py-2"
+                    value={waEditForm.category}
+                    onChange={(e) => setWaEditForm((prev) => ({ ...prev, category: e.target.value }))}
+                  >
+                    <option value="MARKETING">MARKETING</option>
+                    <option value="UTILITY">UTILITY</option>
+                    <option value="AUTHENTICATION">AUTHENTICATION</option>
+                  </select>
+                </label>
+                <div className="md:col-span-2">
+                  <Input
+                    label="Body"
+                    name="wa-edit-body"
+                    value={waEditForm.body}
+                    onChange={(e) => setWaEditForm((prev) => ({ ...prev, body: e.target.value }))}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="submit" disabled={busy === "wa-edit"}>
+                    Save / re-submit
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => setWaEditId("")}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            ) : null}
             <form className="grid gap-3 border-t border-line pt-4 md:grid-cols-2" onSubmit={createWaTemplate}>
               <Input
                 label="Template name"

@@ -89,6 +89,18 @@ class WhatsAppCloudApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('ok', true)
             ->assertJsonPath('mode', 'local');
+
+        $updated = $this->withToken($this->token)
+            ->patchJson('/api/v1/integrations/whatsapp/templates/'.$created['template']['id'], [
+                'body' => 'Hi {{1}}, your Triada Designs piece is ready for viewing. Reply INTERESTED.',
+                'category' => 'MARKETING',
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('mode', 'local_sim')
+            ->json();
+
+        $this->assertStringContainsString('viewing', $updated['template']['body'] ?? '');
     }
 
     public function test_opt_out_blocks_marketing_send(): void
