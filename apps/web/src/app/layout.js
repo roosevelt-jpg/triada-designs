@@ -17,11 +17,15 @@ const sans = DM_Sans({
 
 export const metadata = {
   title: {
-    default: "Triada Designs",
-    template: "%s · Triada Designs",
+    default: "Admin · Triada Designs",
+    template: "%s · Triada Designs Admin",
   },
   description:
-    "Thoughtfully selected products and services through a personal, design-led customer experience. AI sales and marketing operations for Triada Designs.",
+    "Triada Designs AI sales and marketing operations — admin login for the ops subdomain.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default function RootLayout({ children }) {

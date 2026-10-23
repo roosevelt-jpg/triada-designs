@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { DEMO_CREDENTIALS } from "@/lib/constants";
-import { apiFetch, setStoredToken } from "@/lib/api-client";
+import { DEMO_CREDENTIALS, PUBLIC_SITE_URL } from "@/lib/constants";
+import { apiFetch, getStoredToken, setStoredToken } from "@/lib/api-client";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,6 +13,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState(DEMO_CREDENTIALS.password);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (getStoredToken()) {
+      router.replace("/overview");
+    }
+  }, [router]);
 
   async function onSubmit(event) {
     event.preventDefault();
@@ -43,6 +48,9 @@ export default function LoginPage() {
           <div className="hidden bg-[linear-gradient(150deg,#70563f,#9a7958_45%,#c7ae8a)] p-10 text-white md:flex md:flex-col md:justify-between">
             <div>
               <p className="font-display text-4xl">Triada Designs</p>
+              <p className="mt-2 text-sm uppercase tracking-[0.16em] text-white/70">
+                Admin · Operations
+              </p>
               <p className="mt-4 max-w-sm text-sm text-white/85">
                 Sign in to the AI sales and marketing operations platform.
                 Unified inbox, CRM, content approvals, WordPress, and Zoho.
@@ -54,15 +62,23 @@ export default function LoginPage() {
           </div>
 
           <div className="p-8 md:p-10">
-            <Link href="/" className="font-display text-3xl text-ink md:hidden">
+            <p className="font-display text-3xl text-ink md:hidden">
               Triada Designs
-            </Link>
+            </p>
             <h1 className="mt-4 font-sans text-xl font-medium md:mt-0">
-              Sign in
+              Admin sign in
             </h1>
             <p className="mt-2 text-sm text-muted">
-              Use your workspace credentials. Demo credentials are prefilled for
-              local development.
+              Workspace administrators and operators only. Public site remains
+              on{" "}
+              <a
+                href={PUBLIC_SITE_URL}
+                className="text-brown-dark underline-offset-2 hover:underline"
+                rel="noreferrer"
+              >
+                triada-designs.com
+              </a>
+              .
             </p>
 
             <form className="mt-8 space-y-4" onSubmit={onSubmit}>
@@ -89,12 +105,6 @@ export default function LoginPage() {
                 {loading ? "Signing in…" : "Sign in"}
               </Button>
             </form>
-
-            <p className="mt-6 text-sm text-muted">
-              <Link href="/" className="text-brown-dark underline-offset-2 hover:underline">
-                Back to marketing site
-              </Link>
-            </p>
           </div>
         </div>
       </div>

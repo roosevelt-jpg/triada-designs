@@ -1,8 +1,13 @@
 # Triada Designs — AI Sales & Marketing Operations Platform
 
-Monorepo for the Triada Designs AI Sales OS: Next.js (JavaScript) frontend, Laravel REST API, MySQL/Redis-ready infrastructure, with first-class **WordPress** and **Zoho CRM** integration modules.
+Monorepo for the Triada Designs **admin / ops subdomain**: Next.js (JavaScript) staff dashboard with admin login, Laravel REST API, MySQL/Redis-ready infrastructure, and first-class **WordPress** + **Zoho CRM** integration modules.
 
-Marketing site brand: [triada-designs.com](https://triada-designs.com)
+| Domain | Role |
+|---|---|
+| [triada-designs.com](https://triada-designs.com) | Public marketing / commerce |
+| `ops.triada-designs.com` (this app) | Admin login + AI Sales OS |
+
+Visiting `/` redirects to **Admin sign in**.
 
 ## Stack
 
@@ -19,7 +24,7 @@ Marketing site brand: [triada-designs.com](https://triada-designs.com)
 ## Repository layout
 
 ```text
-apps/web          Next.js marketing site + operations dashboard
+apps/web          Next.js admin/ops dashboard (login-first subdomain app)
 apps/api          Laravel API, migrations, WP/Zoho services
 infrastructure/   Docker Compose + Dockerfiles
 docs/             Architecture and integration docs
@@ -53,7 +58,7 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:43127](http://127.0.0.1:43127).
+Open [http://127.0.0.1:43127](http://127.0.0.1:43127) — redirects to admin login.
 
 ### Docker Compose (MySQL + Redis + services)
 

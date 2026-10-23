@@ -3,7 +3,7 @@
 ## Completed in this slice (Milestone 1)
 
 1. Monorepo scaffolding (`apps/web`, `apps/api`, `infrastructure`, `docs`)
-2. Brand tokens + marketing homepage + auth
+2. Brand tokens + admin login (ops subdomain) + auth
 3. Sanctum login, workspace seed, dashboard metrics from DB
 4. Inbox with human takeover / resume AI
 5. Contacts, leads, products, services, content approval

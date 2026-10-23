@@ -7,16 +7,11 @@ export default function NotFound() {
       <p className="font-display text-5xl text-ink">Triada Designs</p>
       <h1 className="font-sans text-xl font-medium">Page not found</h1>
       <p className="max-w-md text-muted">
-        That page isn’t available. Return home or open the operations platform.
+        That page isn’t available on the operations admin. Return to sign in.
       </p>
-      <div className="flex gap-3">
-        <Link href="/">
-          <Button>Go home</Button>
-        </Link>
-        <Link href="/login">
-          <Button variant="secondary">Sign in</Button>
-        </Link>
-      </div>
+      <Link href="/login">
+        <Button>Admin sign in</Button>
+      </Link>
     </div>
   );
 }

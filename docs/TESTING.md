@@ -19,7 +19,7 @@ npm run build
 
 ## Manual smoke
 
-1. Open marketing site
+1. Open ops app root → redirects to admin login
 2. Sign in with demo credentials
 3. Overview metrics load
 4. Open inbox conversation, takeover, reply
