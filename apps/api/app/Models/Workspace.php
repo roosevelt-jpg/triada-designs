@@ -16,13 +16,22 @@ class Workspace extends Model
         'timezone',
         'default_language',
         'settings',
+        'automations_paused',
+        'outbound_paused',
     ];
 
     protected function casts(): array
     {
         return [
             'settings' => 'array',
+            'automations_paused' => 'boolean',
+            'outbound_paused' => 'boolean',
         ];
+    }
+
+    public function automationWorkflows(): HasMany
+    {
+        return $this->hasMany(AutomationWorkflow::class);
     }
 
     public function memberships(): HasMany

@@ -1,16 +1,119 @@
-import { DashboardShell } from "@/components/layout/DashboardShell";
-import { EmptyState } from "@/components/ui/EmptyState";
+"use client";
 
-export default function Page() {
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { DashboardShell } from "@/components/layout/DashboardShell";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { apiFetch } from "@/lib/api-client";
+
+function statusTone(status) {
+  if (status === "active") return "success";
+  if (status === "disabled") return "danger";
+  return "warning";
+}
+
+export default function AutomationsPage() {
+  const [items, setItems] = useState([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await apiFetch("/v1/automations");
+      setItems(response.data || []);
+    } catch (err) {
+      setError(err.message || "Failed to load automations");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function toggleStatus(workflow) {
+    setBusyId(workflow.id);
+    setError("");
+    try {
+      const path =
+        workflow.status === "active"
+          ? `/v1/automations/${workflow.id}/deactivate`
+          : `/v1/automations/${workflow.id}/activate`;
+      await apiFetch(path, { method: "POST" });
+      await load();
+    } catch (err) {
+      setError(err.message || "Failed to update status");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <DashboardShell
       title="Automations"
-      description="Foundation screen for Milestone 1. Deeper workflows land in later milestones per the implementation plan."
+      description="Validated workflows with dry-run, enable/disable, and execution history. Outbound and workspace emergency pauses are enforced at runtime."
     >
-      <EmptyState
-        title="Foundation ready"
-        description="Navigation, auth, and design system are in place. Feature depth expands after CRM, inbox, and WordPress/Zoho paths."
-      />
+      {loading ? <Skeleton className="h-64" /> : null}
+      {error ? <ErrorState message={error} onRetry={load} /> : null}
+      {!loading && !error && items.length === 0 ? (
+        <EmptyState
+          title="No workflows yet"
+          description="Seeded demo workflows appear here after migrate + seed."
+        />
+      ) : null}
+      {!loading && !error && items.length > 0 ? (
+        <div className="space-y-4 fade-rise">
+          {items.map((workflow) => (
+            <article
+              key={workflow.id}
+              className="surface-card flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between"
+            >
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-display text-2xl text-ink">{workflow.name}</h3>
+                  <Badge tone={statusTone(workflow.status)}>{workflow.status}</Badge>
+                </div>
+                <p className="text-sm text-muted">
+                  {workflow.description || "No description"}
+                </p>
+                <p className="text-xs uppercase tracking-wide text-muted">
+                  Trigger · {workflow.trigger_type?.replaceAll("_", " ")} · v
+                  {workflow.version} · {workflow.run_count ?? 0} live runs ·{" "}
+                  {workflow.node_summary?.length ?? 0} nodes
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={busyId === workflow.id}
+                  onClick={() => toggleStatus(workflow)}
+                >
+                  {busyId === workflow.id
+                    ? "Updating…"
+                    : workflow.status === "active"
+                      ? "Disable"
+                      : "Activate"}
+                </Button>
+                <Link
+                  href={`/automations/${workflow.id}`}
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-stone"
+                >
+                  Open builder
+                </Link>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
     </DashboardShell>
   );
 }

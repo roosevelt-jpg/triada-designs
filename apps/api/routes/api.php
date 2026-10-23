@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\AutomationController;
 use App\Http\Controllers\Api\V1\CatalogController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\ConversationController;
@@ -56,5 +57,19 @@ Route::prefix('v1')->group(function () {
         Route::get('/integrations/health', [IntegrationController::class, 'health']);
         Route::get('/integrations/wordpress/posts', [IntegrationController::class, 'wordpressPosts']);
         Route::post('/integrations/wordpress/drafts', [IntegrationController::class, 'createWordpressDraft']);
+
+        Route::get('/automations', [AutomationController::class, 'index']);
+        Route::post('/automations', [AutomationController::class, 'store']);
+        Route::post('/automations/validate', [AutomationController::class, 'validateDefinition']);
+        Route::get('/automations/{workflowId}', [AutomationController::class, 'show']);
+        Route::put('/automations/{workflowId}', [AutomationController::class, 'update']);
+        Route::patch('/automations/{workflowId}', [AutomationController::class, 'update']);
+        Route::delete('/automations/{workflowId}', [AutomationController::class, 'destroy']);
+        Route::post('/automations/{workflowId}/activate', [AutomationController::class, 'activate']);
+        Route::post('/automations/{workflowId}/deactivate', [AutomationController::class, 'deactivate']);
+        Route::post('/automations/{workflowId}/dry-run', [AutomationController::class, 'dryRun']);
+        Route::post('/automations/{workflowId}/run', [AutomationController::class, 'run']);
+        Route::get('/automations/{workflowId}/runs', [AutomationController::class, 'runs']);
+        Route::get('/automations/{workflowId}/runs/{runId}', [AutomationController::class, 'showRun']);
     });
 });
