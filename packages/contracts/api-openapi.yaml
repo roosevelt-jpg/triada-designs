@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: Triada Designs API
+  version: 0.1.0
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+  /api/v1/auth/login:
+    post:
+      summary: Login
+      responses:
+        "200":
+          description: Token issued
+  /api/v1/integrations/health:
+    get:
+      summary: WordPress and Zoho health
+      responses:
+        "200":
+          description: Health payload

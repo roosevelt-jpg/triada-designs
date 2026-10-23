@@ -1,0 +1,51 @@
+# dependencies
+node_modules/
+vendor/
+
+# env / secrets
+.env
+.env.local
+.env.*.local
+apps/api/.env
+apps/web/.env.local
+*.pem
+
+# logs / caches
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.phpunit.result.cache
+apps/api/storage/*.key
+apps/api/storage/logs/*
+apps/api/storage/framework/cache/*
+apps/api/storage/framework/sessions/*
+apps/api/storage/framework/views/*
+apps/api/bootstrap/cache/*.php
+!apps/api/storage/logs/.gitignore
+!apps/api/storage/framework/cache/.gitignore
+!apps/api/storage/framework/sessions/.gitignore
+!apps/api/storage/framework/views/.gitignore
+!apps/api/bootstrap/cache/.gitignore
+
+# databases
+*.sqlite
+*.sqlite-journal
+apps/api/database/database.sqlite
+
+# next / build
+apps/web/.next/
+apps/web/out/
+dist/
+build/
+coverage/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# misc
+tmp/
+.tmp/
