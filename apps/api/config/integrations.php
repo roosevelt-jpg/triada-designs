@@ -105,9 +105,10 @@ return [
         'page_access_token' => env('META_PAGE_ACCESS_TOKEN'),
         'graph_version' => env('META_GRAPH_VERSION', 'v21.0'),
         'graph_base' => env('META_GRAPH_BASE', 'https://graph.facebook.com'),
-        'whatsapp_phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
-        'whatsapp_business_account_id' => env('WHATSAPP_BUSINESS_ACCOUNT_ID'),
-        'whatsapp_access_token' => env('WHATSAPP_ACCESS_TOKEN'),
+        // Prefer META_WA_* aliases; WHATSAPP_* kept for compatibility.
+        'whatsapp_phone_number_id' => env('META_WA_PHONE_NUMBER_ID') ?: env('WHATSAPP_PHONE_NUMBER_ID'),
+        'whatsapp_business_account_id' => env('META_WA_BUSINESS_ACCOUNT_ID') ?: env('WHATSAPP_BUSINESS_ACCOUNT_ID'),
+        'whatsapp_access_token' => env('META_WA_ACCESS_TOKEN') ?: env('WHATSAPP_ACCESS_TOKEN'),
         'timeout' => (int) env('META_TIMEOUT', 15),
     ],
 ];

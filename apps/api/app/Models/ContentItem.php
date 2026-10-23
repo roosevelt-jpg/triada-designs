@@ -25,6 +25,8 @@ class ContentItem extends Model
         'campaign_key',
         'published_at',
         'publish_metadata',
+        'creative_brief',
+        'product_context',
     ];
 
     protected function casts(): array
@@ -34,6 +36,18 @@ class ContentItem extends Model
             'scheduled_for' => 'datetime',
             'published_at' => 'datetime',
             'publish_metadata' => 'array',
+            'creative_brief' => 'array',
+            'product_context' => 'array',
         ];
+    }
+
+    public function mediaAssets()
+    {
+        return $this->hasMany(MediaAsset::class);
+    }
+
+    public function contentVariants()
+    {
+        return $this->hasMany(ContentVariant::class);
     }
 }

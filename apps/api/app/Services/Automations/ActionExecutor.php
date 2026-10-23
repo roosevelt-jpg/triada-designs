@@ -9,10 +9,12 @@ use App\Models\Message;
 use App\Models\Task;
 use App\Models\Workspace;
 use App\Services\AI\AiOrchestrator;
+use App\Services\Creative\CreativeMediaService;
 use App\Services\CRM\Zoho\ZohoCrmClient;
 use App\Services\Messaging\DTOs\OutboundMessage;
 use App\Services\Messaging\Meta\MetaChannelRegistry;
 use App\Services\Messaging\Meta\OutboundEligibility;
+use App\Services\Messaging\Meta\WhatsAppCloudTemplateService;
 use Illuminate\Support\Str;
 
 class ActionExecutor
@@ -52,6 +54,12 @@ class ActionExecutor
             'sync_zoho_lead', 'sync_crm' => $this->syncZohoLead($workspace, $context, $dryRun),
             'sync_shopify' => $this->syncShopify($workspace, $config, $context, $dryRun),
             'publish_channel_template' => $this->publishChannelTemplate($workspace, $config, $context, $dryRun),
+            'send_whatsapp_template' => $this->sendWhatsAppTemplate($workspace, $config, $context, $dryRun),
+            'check_whatsapp_opt_out' => $this->checkWhatsAppOptOut($config, $context, $dryRun),
+            'whatsapp_window_follow_up' => $this->whatsappWindowFollowUp($workspace, $config, $context, $dryRun),
+            'generate_content_image' => $this->generateContentCreative($workspace, 'image', $config, $context, $dryRun),
+            'generate_content_variants' => $this->generateContentCreative($workspace, 'variants', $config, $context, $dryRun),
+            'generate_content_video' => $this->generateContentCreative($workspace, 'video', $config, $context, $dryRun),
             default => ['ok' => false, 'error' => "Unsupported action: {$actionType}"],
         };
     }
@@ -514,4 +522,262 @@ class ActionExecutor
             'error' => $result['error'] ?? null,
         ];
     }
+
+    /**
+     * Send an approved WhatsApp Cloud template (local sim when no credentials).
+     *
+     * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>  $context
+     * @return array{ok:bool,dry_run?:bool,result?:array<string,mixed>,error?:string,skipped?:bool}
+     */
+    protected function sendWhatsAppTemplate(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if (($context['marketing_opt_out'] ?? false) === true && ($config['purpose'] ?? 'marketing') === 'marketing') {
+            return [
+                'ok' => true,
+                'skipped' => true,
+                'result' => ['reason' => 'marketing_opt_out'],
+            ];
+        }
+
+        $templateName = (string) ($config['template_name'] ?? $context['template_name'] ?? 'jewellery_follow_up');
+        $to = (string) ($config['to'] ?? $context['external_user_id'] ?? $context['wa_id'] ?? '');
+        $language = (string) ($config['language'] ?? 'en');
+
+        $conversation = null;
+        if (! empty($context['conversation_id'])) {
+            $conversation = Conversation::query()
+                ->where('workspace_id', $workspace->id)
+                ->find($context['conversation_id']);
+        }
+
+        $check = $this->eligibility->check(
+            $workspace,
+            $conversation,
+            'whatsapp',
+            (string) ($config['purpose'] ?? 'marketing'),
+            $templateName,
+            [
+                'marketing_opt_out' => $context['marketing_opt_out'] ?? false,
+                'consent' => $context['consent'] ?? true,
+                'sender_type' => 'ai',
+            ]
+        );
+
+        if (! $check['eligible']) {
+            return ['ok' => true, 'skipped' => true, 'result' => $check];
+        }
+
+        if ($to === '') {
+            return ['ok' => false, 'error' => 'send_whatsapp_template requires recipient (to / external_user_id)'];
+        }
+
+        if ($dryRun) {
+            return [
+                'ok' => true,
+                'dry_run' => true,
+                'result' => [
+                    'would_send_template' => $templateName,
+                    'to' => $to,
+                    'eligibility' => $check,
+                ],
+            ];
+        }
+
+        $wa = app(WhatsAppCloudTemplateService::class);
+        $sent = $wa->sendTemplate($to, $templateName, $language, [
+            'components' => $config['components'] ?? [],
+        ]);
+
+        $context['whatsapp_template_send'] = $sent;
+
+        return [
+            'ok' => (bool) ($sent['ok'] ?? false),
+            'result' => array_merge($sent, ['eligibility' => $check]),
+            'error' => $sent['error'] ?? null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>  $context
+     * @return array{ok:bool,dry_run?:bool,result?:array<string,mixed>}
+     */
+    protected function checkWhatsAppOptOut(array $config, array &$context, bool $dryRun): array
+    {
+        $body = strtolower((string) ($context['message_body'] ?? $context['body'] ?? $context['message'] ?? ''));
+        $keywords = $config['keywords'] ?? ['stop', 'unsubscribe', 'opt out', 'opt-out'];
+        $optedOut = false;
+        foreach ($keywords as $keyword) {
+            if ($keyword !== '' && str_contains($body, strtolower((string) $keyword))) {
+                $optedOut = true;
+                break;
+            }
+        }
+
+        $context['marketing_opt_out'] = $optedOut || (bool) ($context['marketing_opt_out'] ?? false);
+
+        $result = [
+            'marketing_opt_out' => $context['marketing_opt_out'],
+            'matched' => $optedOut,
+            'keywords' => $keywords,
+        ];
+
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => $result];
+        }
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    /**
+     * Outside the 24h window → route to approved template path (never free-form marketing).
+     *
+     * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>  $context
+     * @return array{ok:bool,dry_run?:bool,result?:array<string,mixed>,error?:string}
+     */
+    protected function whatsappWindowFollowUp(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        $conversation = null;
+        if (! empty($context['conversation_id'])) {
+            $conversation = Conversation::query()
+                ->where('workspace_id', $workspace->id)
+                ->find($context['conversation_id']);
+        }
+
+        $templateName = (string) ($config['template_name'] ?? $context['template_name'] ?? 'jewellery_follow_up');
+        $check = $this->eligibility->check(
+            $workspace,
+            $conversation,
+            'whatsapp',
+            (string) ($config['purpose'] ?? 'marketing'),
+            null,
+            [
+                'marketing_opt_out' => $context['marketing_opt_out'] ?? false,
+                'consent' => $context['consent'] ?? true,
+                'sender_type' => 'ai',
+            ]
+        );
+
+        if ($check['window_open']) {
+            $context['whatsapp_path'] = 'session_message';
+
+            return [
+                'ok' => true,
+                'result' => [
+                    'path' => 'session_message',
+                    'window_open' => true,
+                    'note' => 'Customer service window open — free-form reply allowed if eligible.',
+                    'eligibility' => $check,
+                ],
+                'dry_run' => $dryRun,
+            ];
+        }
+
+        $context['whatsapp_path'] = 'template';
+        $context['template_name'] = $templateName;
+
+        if ($dryRun) {
+            return [
+                'ok' => true,
+                'dry_run' => true,
+                'result' => [
+                    'path' => 'template',
+                    'would_use_template' => $templateName,
+                    'window_open' => false,
+                ],
+            ];
+        }
+
+        // Create ops task; do not auto-send marketing templates without explicit send_whatsapp_template node.
+        $task = Task::query()->create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $context['contact_id'] ?? null,
+            'conversation_id' => $context['conversation_id'] ?? null,
+            'type' => 'follow_up',
+            'title' => 'WhatsApp template path: '.$templateName,
+            'description' => 'Service window closed. Use approved template "'.$templateName.'" — never free-form marketing outside the window.',
+            'due_at' => now()->addHours(2),
+            'status' => 'open',
+        ]);
+
+        $context['task_id'] = $task->id;
+
+        return [
+            'ok' => true,
+            'result' => [
+                'path' => 'template',
+                'template_name' => $templateName,
+                'task_id' => $task->id,
+                'window_open' => false,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>  $context
+     * @return array{ok:bool,dry_run?:bool,result?:array<string,mixed>,error?:string}
+     */
+    protected function generateContentCreative(
+        Workspace $workspace,
+        string $kind,
+        array $config,
+        array &$context,
+        bool $dryRun
+    ): array {
+        $contentId = $config['content_item_id'] ?? $context['content_item_id'] ?? null;
+        $item = null;
+        if ($contentId) {
+            $item = ContentItem::query()
+                ->where('workspace_id', $workspace->id)
+                ->find($contentId);
+        }
+
+        if (! $item) {
+            $created = $this->createContentDraft($workspace, $config, $context, $dryRun);
+            if ($dryRun) {
+                return $created;
+            }
+            $item = ContentItem::query()->find($context['content_item_id'] ?? null);
+        }
+
+        if (! $item) {
+            return ['ok' => false, 'error' => 'No content item for creative generation'];
+        }
+
+        if ($dryRun) {
+            return [
+                'ok' => true,
+                'dry_run' => true,
+                'result' => [
+                    'would_generate' => $kind,
+                    'content_item_id' => $item->id,
+                    'note' => 'Creative drafts only — approval still required before publish.',
+                ],
+            ];
+        }
+
+        $creative = app(CreativeMediaService::class);
+        $result = match ($kind) {
+            'image' => $creative->generateImage($workspace, $item, $config),
+            'variants' => $creative->generateVariants($workspace, $item, $config['source_media_asset_id'] ?? null, $config['platforms'] ?? null),
+            'video' => $creative->generateVideo($workspace, $item, $config),
+            default => ['ok' => false, 'error' => 'Unknown creative kind'],
+        };
+
+        $context['creative_'.$kind] = [
+            'mode' => $result['mode'] ?? null,
+            'asset_id' => data_get($result, 'asset.id'),
+            'variant_count' => isset($result['variants']) ? count($result['variants']) : null,
+        ];
+
+        return [
+            'ok' => (bool) ($result['ok'] ?? false),
+            'result' => $result,
+            'error' => $result['error'] ?? null,
+        ];
+    }
 }
+

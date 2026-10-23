@@ -4,6 +4,7 @@ namespace App\Services\AI;
 
 use App\Models\AgentConfig;
 use App\Models\AiRun;
+use App\Models\ContentItem;
 use App\Models\KnowledgeSource;
 use App\Models\Lead;
 use App\Models\Product;
@@ -11,6 +12,8 @@ use App\Models\ServiceOffering;
 use App\Models\Task;
 use App\Models\Workspace;
 use App\Services\AI\Contracts\LlmAdapterInterface;
+use App\Services\Creative\CreativeMediaService;
+use App\Services\Creative\JewelleryPromptBuilder;
 use Illuminate\Support\Str;
 
 class AiOrchestrator
@@ -357,5 +360,98 @@ TXT);
         }
 
         return $effects;
+    }
+
+    /**
+     * Allowlisted creative tools for marketing / content agents.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function runCreativeTool(Workspace $workspace, string $agentKey, string $tool, array $payload = []): array
+    {
+        if (! CreativeToolAllowlist::allows($agentKey, $tool)) {
+            return [
+                'ok' => false,
+                'error' => "Tool {$tool} is not allowlisted for agent {$agentKey}.",
+                'allowlist' => CreativeToolAllowlist::catalog(),
+            ];
+        }
+
+        $contentId = $payload['content_item_id'] ?? null;
+        $item = null;
+        if ($contentId) {
+            $item = ContentItem::query()
+                ->where('workspace_id', $workspace->id)
+                ->where('id', $contentId)
+                ->first();
+        }
+
+        if (! $item && in_array($tool, ['generate_image', 'generate_platform_variants', 'generate_short_video'], true)) {
+            $item = ContentItem::query()->create([
+                'workspace_id' => $workspace->id,
+                'title' => (string) ($payload['title'] ?? 'AI creative draft'),
+                'content_type' => 'social_post',
+                'objective' => (string) ($payload['objective'] ?? 'awareness'),
+                'status' => 'draft',
+                'body' => (string) ($payload['caption'] ?? $payload['message'] ?? ''),
+                'channel' => (string) ($payload['channel'] ?? 'instagram'),
+                'approval_version' => 0,
+                'product_context' => array_filter([
+                    'name' => $payload['product'] ?? null,
+                    'materials' => $payload['materials'] ?? null,
+                ]),
+            ]);
+        }
+
+        $creative = app(CreativeMediaService::class);
+        $prompts = app(JewelleryPromptBuilder::class);
+
+        $result = match ($tool) {
+            'propose_creative_brief' => [
+                'ok' => true,
+                'brief' => $prompts->creativeBrief(
+                    (string) ($payload['caption'] ?? $item?->body ?? $payload['message'] ?? ''),
+                    $payload
+                ),
+                'mode' => 'brief_only',
+                'note' => 'Brief proposed — generate tools and human approval still required before publish.',
+            ],
+            'generate_image' => $creative->generateImage($workspace, $item, $payload),
+            'generate_platform_variants' => $creative->generateVariants(
+                $workspace,
+                $item,
+                $payload['source_media_asset_id'] ?? null,
+                $payload['platforms'] ?? null
+            ),
+            'generate_short_video' => $creative->generateVideo($workspace, $item, $payload),
+            default => ['ok' => false, 'error' => 'Unknown tool'],
+        };
+
+        AiRun::query()->create([
+            'workspace_id' => $workspace->id,
+            'agent_key' => $agentKey,
+            'purpose' => 'creative_tool:'.$tool,
+            'provider' => $this->llm->providerKey(),
+            'model' => $this->llm->model(),
+            'status' => ($result['ok'] ?? false) ? 'completed' : 'failed',
+            'input' => ['tool' => $tool, 'payload' => $payload],
+            'output' => [
+                'mode' => $result['mode'] ?? null,
+                'content_item_id' => $item?->id,
+                'asset_id' => data_get($result, 'asset.id'),
+                'variant_count' => isset($result['variants']) ? count($result['variants']) : null,
+            ],
+            'error_message' => $result['error'] ?? null,
+            'latency_ms' => null,
+        ]);
+
+        return array_merge($result, [
+            'agent_key' => $agentKey,
+            'tool' => $tool,
+            'content_item_id' => $item?->id,
+            'approval_required' => true,
+            'allowlist' => CreativeToolAllowlist::catalog(),
+        ]);
     }
 }

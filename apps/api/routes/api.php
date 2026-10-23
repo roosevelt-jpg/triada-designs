@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\ChannelTemplateController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\ContentPublishController;
 use App\Http\Controllers\Api\V1\ConversationController;
+use App\Http\Controllers\Api\V1\CreativeMediaController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\IntegrationController;
 use App\Http\Controllers\Api\V1\LeadController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\Api\V1\SettingsController;
 use App\Http\Controllers\Api\V1\ShopifyIntegrationController;
 use App\Http\Controllers\Api\V1\SystemTimeController;
 use App\Http\Controllers\Api\V1\WebchatPublicController;
+use App\Http\Controllers\Api\V1\WhatsAppIntegrationController;
 use App\Http\Controllers\Webhooks\ChannelWebhookController;
 use App\Http\Controllers\Webhooks\MetaWebhookController;
 use App\Http\Controllers\Webhooks\ShopifyWebhookController;
@@ -81,6 +83,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/content/{contentId}/publish', [ContentPublishController::class, 'publish']);
         Route::get('/publications', [ContentPublishController::class, 'publications']);
 
+        Route::get('/creative/status', [CreativeMediaController::class, 'status']);
+        Route::get('/content/{contentId}/media', [CreativeMediaController::class, 'media']);
+        Route::post('/content/{contentId}/generate-image', [CreativeMediaController::class, 'generateImage']);
+        Route::post('/content/{contentId}/generate-variants', [CreativeMediaController::class, 'generateVariants']);
+        Route::post('/content/{contentId}/generate-video', [CreativeMediaController::class, 'generateVideo']);
+
         Route::get('/integrations', [IntegrationController::class, 'index']);
         Route::get('/integrations/health', [IntegrationController::class, 'health']);
         Route::get('/integrations/wordpress/posts', [IntegrationController::class, 'wordpressPosts']);
@@ -95,6 +103,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/integrations/meta/verify-token/rotate', [MetaIntegrationController::class, 'rotateVerifyToken']);
         Route::post('/integrations/meta/test-send', [MetaIntegrationController::class, 'testSend']);
         Route::post('/integrations/meta/simulate-inbound', [MetaIntegrationController::class, 'simulateInbound']);
+
+        Route::get('/integrations/whatsapp/status', [WhatsAppIntegrationController::class, 'status']);
+        Route::get('/integrations/whatsapp/templates', [WhatsAppIntegrationController::class, 'templates']);
+        Route::post('/integrations/whatsapp/templates/sync', [WhatsAppIntegrationController::class, 'syncTemplates']);
+        Route::post('/integrations/whatsapp/templates', [WhatsAppIntegrationController::class, 'createTemplate']);
+        Route::post('/integrations/whatsapp/send-template', [WhatsAppIntegrationController::class, 'sendTemplate']);
 
         Route::get('/integrations/shopify/status', [ShopifyIntegrationController::class, 'status']);
         Route::post('/integrations/shopify/connect', [ShopifyIntegrationController::class, 'connect']);
@@ -126,6 +140,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/agents/activity', [AgentOrchestrationController::class, 'activity']);
         Route::post('/agents/test-run', [AgentOrchestrationController::class, 'testRun']);
         Route::post('/agents/process-inbound', [AgentOrchestrationController::class, 'processInbound']);
+        Route::get('/agents/creative-tools', [AgentOrchestrationController::class, 'creativeTools']);
+        Route::post('/agents/creative-tools/run', [AgentOrchestrationController::class, 'runCreativeTool']);
         Route::get('/agents', [OpsDataController::class, 'agents']);
         Route::patch('/agents/{agentId}', [OpsDataController::class, 'updateAgent']);
 

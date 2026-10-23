@@ -305,18 +305,22 @@ class TriadaWorkspaceSeeder extends Seeder
                 'objective' => 'awareness',
                 'status' => 'in_review',
                 'created_by' => $user->id,
-                'body' => 'Soft light, quiet materials, and a ritual that feels personal. Explore the collection at Triada Designs.',
+                'body' => 'Soft light on brushed gold. A quiet pendant for everyday rituals — explore Triada Designs jewellery.',
                 'channel' => 'instagram',
                 'scheduled_for' => now()->addDays(3),
                 'campaign_key' => 'spring-rituals',
                 'approval_version' => 0,
+                'product_context' => [
+                    'name' => 'Brushed gold pendant',
+                    'materials' => '18k gold vermeil, fine chain',
+                ],
             ]
         );
 
         ContentItem::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'title' => 'Barrier cream evening ritual',
+                'title' => 'Evening stack — refined metals',
             ],
             [
                 'content_type' => 'campaign',
@@ -325,11 +329,15 @@ class TriadaWorkspaceSeeder extends Seeder
                 'created_by' => $user->id,
                 'approved_by' => $user->id,
                 'approved_at' => now()->subDay(),
-                'body' => 'An evening ritual for calm skin. Human-approved caption ready for scheduled publish.',
+                'body' => 'An evening stack of refined metals. Human-approved caption ready for scheduled publish.',
                 'channel' => 'facebook',
                 'scheduled_for' => now()->addDays(5),
                 'campaign_key' => 'spring-rituals',
                 'approval_version' => 1,
+                'product_context' => [
+                    'name' => 'Mixed-metal ring stack',
+                    'materials' => 'sterling silver, rose gold plate',
+                ],
             ]
         );
 
@@ -409,22 +417,34 @@ class TriadaWorkspaceSeeder extends Seeder
                 'key' => 'marketing',
                 'name' => 'Marketing agent',
                 'role' => 'marketing',
-                'description' => 'Drafts campaign concepts and channel-ready copy for human approval.',
+                'description' => 'Drafts campaign concepts, creative briefs, and channel-ready copy for human approval.',
                 'status' => 'active',
                 'config' => [
                     'channels' => ['content_studio'],
-                    'system_prompt' => 'Editorial brand voice. No fake urgency or fabricated social proof.',
+                    'system_prompt' => 'Editorial brand voice. No fake urgency or fabricated social proof. Propose creative briefs; never auto-publish.',
+                    'allowed_tools' => [
+                        'propose_creative_brief',
+                        'generate_image',
+                        'generate_platform_variants',
+                        'generate_short_video',
+                    ],
                 ],
             ],
             [
                 'key' => 'content',
                 'name' => 'Content agent',
                 'role' => 'content',
-                'description' => 'Produces captions and creative briefs for Content Studio drafts.',
+                'description' => 'Produces captions, jewellery creative briefs, and Content Studio media drafts.',
                 'status' => 'active',
                 'config' => [
                     'channels' => ['content_studio', 'meta_page', 'wordpress'],
-                    'system_prompt' => 'One core message per draft. Public posts require human approval.',
+                    'system_prompt' => 'One core message per draft. Public posts require human approval. Use jewellery-aware image/video tools only via allowlist.',
+                    'allowed_tools' => [
+                        'propose_creative_brief',
+                        'generate_image',
+                        'generate_platform_variants',
+                        'generate_short_video',
+                    ],
                 ],
             ],
             [

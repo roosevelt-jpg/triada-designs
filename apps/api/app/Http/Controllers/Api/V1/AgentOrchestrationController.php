@@ -7,6 +7,7 @@ use App\Models\AiRun;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AI\AiOrchestrator;
+use App\Services\AI\CreativeToolAllowlist;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -68,6 +69,43 @@ class AgentOrchestrationController extends Controller
         ]);
 
         return response()->json($ai->processInbound($this->workspace($request), $data));
+    }
+
+    public function creativeTools(): JsonResponse
+    {
+        return response()->json([
+            'agents' => CreativeToolAllowlist::AGENT_KEYS,
+            'tools' => CreativeToolAllowlist::catalog(),
+            'note' => 'Tools produce drafts/assets only. Public publish still requires human approval.',
+        ]);
+    }
+
+    public function runCreativeTool(Request $request, AiOrchestrator $ai): JsonResponse
+    {
+        $data = $request->validate([
+            'agent_key' => ['required', 'string'],
+            'tool' => ['required', 'string'],
+            'content_item_id' => ['nullable', 'string'],
+            'caption' => ['nullable', 'string'],
+            'message' => ['nullable', 'string'],
+            'title' => ['nullable', 'string'],
+            'product' => ['nullable', 'string'],
+            'materials' => ['nullable', 'string'],
+            'channel' => ['nullable', 'string'],
+            'objective' => ['nullable', 'string'],
+            'storyboard' => ['nullable', 'string'],
+            'platforms' => ['nullable', 'array'],
+            'source_media_asset_id' => ['nullable', 'string'],
+        ]);
+
+        $result = $ai->runCreativeTool(
+            $this->workspace($request),
+            $data['agent_key'],
+            $data['tool'],
+            $data
+        );
+
+        return response()->json($result, ($result['ok'] ?? false) ? 200 : 422);
     }
 
     protected function workspace(Request $request): Workspace

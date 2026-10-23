@@ -60,6 +60,12 @@ class WorkflowDefinition
         'sync_crm',
         'sync_shopify',
         'publish_channel_template',
+        'send_whatsapp_template',
+        'check_whatsapp_opt_out',
+        'whatsapp_window_follow_up',
+        'generate_content_image',
+        'generate_content_variants',
+        'generate_content_video',
     ];
 
     /**

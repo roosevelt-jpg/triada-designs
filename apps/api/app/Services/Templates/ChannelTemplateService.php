@@ -164,9 +164,59 @@ class ChannelTemplateService
         $hasCreds = $integration && $integration->secrets()->exists();
         $live = $mode === 'live' && $hasCreds;
 
+        if ($template->platform === 'whatsapp') {
+            $wa = app(\App\Services\Messaging\Meta\WhatsAppCloudTemplateService::class);
+            $submit = app(\App\Services\Messaging\Meta\MetaGraphClient::class)->submitWhatsAppMessageTemplate([
+                'name' => preg_replace('/[^a-z0-9_]/', '_', strtolower($template->slug)) ?: 'jewellery_template',
+                'language' => $template->language ?: 'en',
+                'category' => strtoupper($template->category ?: 'MARKETING'),
+                'components' => data_get($template->metadata, 'components', [
+                    ['type' => 'BODY', 'text' => $template->body],
+                ]),
+            ]);
+
+            if (! ($submit['ok'] ?? false)) {
+                $template->forceFill([
+                    'last_publish_error' => $submit['error_message'] ?? 'whatsapp_publish_failed',
+                ])->save();
+
+                return [
+                    'ok' => false,
+                    'template' => $template->fresh(),
+                    'mode' => (string) ($submit['mode'] ?? 'blocked'),
+                    'external_template_id' => null,
+                    'error' => $submit['error_message'] ?? 'WhatsApp Cloud template publish failed',
+                ];
+            }
+
+            $template->forceFill([
+                'status' => 'published',
+                'published_at' => now(),
+                'publish_mode' => $submit['mode'] ?? 'local_sim',
+                'external_template_id' => $submit['external_template_id'] ?? null,
+                'last_publish_error' => null,
+                'metadata' => array_merge($template->metadata ?? [], [
+                    'publish_result' => $submit,
+                    'wa_status' => $wa->status(),
+                ]),
+            ])->save();
+
+            $this->audit($workspace, $actorId, 'channel_template.publish', $template, [
+                'mode' => $submit['mode'] ?? 'local_sim',
+                'platform' => 'whatsapp',
+            ]);
+
+            return [
+                'ok' => true,
+                'template' => $template->fresh(),
+                'mode' => (string) ($submit['mode'] ?? 'local_sim'),
+                'external_template_id' => $submit['external_template_id'] ?? null,
+                'error' => null,
+            ];
+        }
+
         if ($live) {
-            // Production path placeholder: real Graph/WhatsApp/LinkedIn/TikTok template APIs
-            // attach here once credentials and app review are present.
+            // Production path for LinkedIn/TikTok/etc. once credentials + app review are present.
             $externalId = 'live-'.$template->platform.'-'.Str::lower((string) Str::ulid());
             $template->forceFill([
                 'status' => 'published',

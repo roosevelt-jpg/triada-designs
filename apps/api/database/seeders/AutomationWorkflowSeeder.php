@@ -379,7 +379,7 @@ class AutomationWorkflowSeeder extends Seeder
             ],
             [
                 'name' => 'WhatsApp jewellery follow-up',
-                'description' => 'After a delay, notify ops to send the approved WhatsApp jewellery follow-up template (never free-form outside the service window).',
+                'description' => 'After a delay: opt-out check → window path (template if closed) → send approved Cloud template when eligible (local sim without credentials).',
                 'trigger_type' => 'follow_up_due',
                 'status' => 'draft',
                 'definition' => [
@@ -395,15 +395,33 @@ class AutomationWorkflowSeeder extends Seeder
                             'type' => 'delay',
                             'label' => 'Wait 24h',
                             'config' => ['seconds' => 86400],
-                            'next' => 'act_publish_tpl',
+                            'next' => 'act_optout',
                         ],
-                        'act_publish_tpl' => [
+                        'act_optout' => [
                             'type' => 'action',
-                            'label' => 'Publish WA template',
+                            'label' => 'Opt-out check',
                             'config' => [
-                                'action_type' => 'publish_channel_template',
-                                'platform' => 'whatsapp',
-                                'template_slug' => 'wa-jewellery-follow-up',
+                                'action_type' => 'check_whatsapp_opt_out',
+                            ],
+                            'next' => 'act_window',
+                        ],
+                        'act_window' => [
+                            'type' => 'action',
+                            'label' => 'Window → template path',
+                            'config' => [
+                                'action_type' => 'whatsapp_window_follow_up',
+                                'template_name' => 'jewellery_follow_up',
+                                'purpose' => 'marketing',
+                            ],
+                            'next' => 'act_send_tpl',
+                        ],
+                        'act_send_tpl' => [
+                            'type' => 'action',
+                            'label' => 'Send WA template',
+                            'config' => [
+                                'action_type' => 'send_whatsapp_template',
+                                'template_name' => 'jewellery_follow_up',
+                                'purpose' => 'marketing',
                             ],
                             'next' => 'act_task',
                         ],
@@ -414,6 +432,54 @@ class AutomationWorkflowSeeder extends Seeder
                                 'action_type' => 'create_task',
                                 'type' => 'follow_up',
                                 'title' => 'Confirm WhatsApp jewellery follow-up',
+                            ],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => [
+                            'type' => 'end',
+                            'label' => 'Done',
+                            'config' => [],
+                        ],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'Content creative draft (jewellery)',
+                'description' => 'When content is approved, generate jewellery-aware image + platform variants for distribution — never auto-publishes.',
+                'trigger_type' => 'content_approved',
+                'status' => 'draft',
+                'definition' => [
+                    'entry' => 'trigger_approved',
+                    'nodes' => [
+                        'trigger_approved' => [
+                            'type' => 'trigger',
+                            'label' => 'Content approved',
+                            'config' => ['trigger_type' => 'content_approved'],
+                            'next' => 'act_image',
+                        ],
+                        'act_image' => [
+                            'type' => 'action',
+                            'label' => 'Generate image',
+                            'config' => [
+                                'action_type' => 'generate_content_image',
+                                'product' => 'Triada Designs jewellery',
+                            ],
+                            'next' => 'act_variants',
+                        ],
+                        'act_variants' => [
+                            'type' => 'action',
+                            'label' => 'Generate variants',
+                            'config' => [
+                                'action_type' => 'generate_content_variants',
+                            ],
+                            'next' => 'act_notify',
+                        ],
+                        'act_notify' => [
+                            'type' => 'action',
+                            'label' => 'Notify marketing',
+                            'config' => [
+                                'action_type' => 'notify_team',
+                                'message' => 'Creative variants ready — schedule/publish still requires human action.',
                             ],
                             'next' => 'end_ok',
                         ],

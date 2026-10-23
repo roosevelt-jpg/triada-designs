@@ -20,7 +20,11 @@ export const PALETTE_ITEMS = [
   { id: "sync_crm", kind: "action", type: "action", actionType: "sync_crm", label: "Sync CRM", icon: "⇄" },
   { id: "sync_shopify", kind: "action", type: "action", actionType: "sync_shopify", label: "Sync Shopify", icon: "◈" },
   { id: "publish_tpl", kind: "action", type: "action", actionType: "publish_channel_template", label: "Publish template", icon: "⇪" },
+  { id: "wa_template", kind: "action", type: "action", actionType: "send_whatsapp_template", label: "WA template", icon: "✆" },
+  { id: "wa_window", kind: "action", type: "action", actionType: "whatsapp_window_follow_up", label: "WA window path", icon: "◷" },
+  { id: "wa_optout", kind: "action", type: "action", actionType: "check_whatsapp_opt_out", label: "WA opt-out", icon: "⊘" },
   { id: "ai_reply", kind: "action", type: "action", actionType: "ai_reply", label: "AI reply", icon: "✦" },
+  { id: "gen_image", kind: "action", type: "action", actionType: "generate_content_image", label: "Gen image", icon: "▣" },
   { id: "handoff", kind: "node", type: "human_handoff", label: "Handoff", icon: "⤴" },
   { id: "notify", kind: "action", type: "action", actionType: "notify_team", label: "Notify team", icon: "⚑" },
   { id: "end", kind: "node", type: "end", label: "End", icon: "■" },
@@ -59,6 +63,12 @@ export const ACTION_TYPES = [
   "sync_crm",
   "sync_shopify",
   "publish_channel_template",
+  "send_whatsapp_template",
+  "check_whatsapp_opt_out",
+  "whatsapp_window_follow_up",
+  "generate_content_image",
+  "generate_content_variants",
+  "generate_content_video",
 ];
 
 export const CONDITION_OPERATORS = [
