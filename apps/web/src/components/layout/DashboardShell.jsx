@@ -85,10 +85,10 @@ export function DashboardShell({ children, title, description, actions }) {
                           href={item.href}
                           onClick={() => setOpen(false)}
                           className={cn(
-                            "block rounded-md bg-transparent px-2.5 py-2 text-[13.5px] font-normal transition-colors duration-150",
+                            "block rounded-md px-2.5 py-2 text-[13.5px] transition-colors duration-150",
                             active
                               ? "bg-sand font-medium text-brown-dark"
-                              : "text-ink/80 hover:bg-ivory hover:text-ink"
+                              : "font-normal text-ink/80 hover:bg-ivory hover:text-ink"
                           )}
                         >
                           {item.label}
