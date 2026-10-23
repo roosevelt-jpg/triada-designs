@@ -30,6 +30,7 @@ class WorkflowDefinition
     public const TRIGGER_TYPES = [
         'incoming_message',
         'incoming_meta_message',
+        'comment_to_dm',
         'whatsapp_template_needed',
         'new_contact',
         'lead_qualified',
@@ -37,6 +38,7 @@ class WorkflowDefinition
         'follow_up_due',
         'content_approved',
         'shopify_order_updated',
+        'shopify_order_created',
         'manual',
     ];
 
@@ -44,15 +46,20 @@ class WorkflowDefinition
         'create_task',
         'update_lead_stage',
         'assign_conversation',
+        'assign_human',
         'add_tag',
         'notify_team',
         'draft_reply',
+        'ai_reply',
         'ai_classify',
         'ai_qualify',
         'ai_escalate',
         'send_eligible_reply',
         'create_content_draft',
         'sync_zoho_lead',
+        'sync_crm',
+        'sync_shopify',
+        'publish_channel_template',
     ];
 
     /**

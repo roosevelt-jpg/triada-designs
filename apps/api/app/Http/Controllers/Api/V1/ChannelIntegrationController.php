@@ -8,6 +8,7 @@ use App\Models\Workspace;
 use App\Services\Messaging\Channels\ChannelControlPlane;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ChannelIntegrationController extends Controller
 {
@@ -19,13 +20,14 @@ class ChannelIntegrationController extends Controller
     public function connect(Request $request, ChannelControlPlane $channels): JsonResponse
     {
         $data = $request->validate([
-            'channel' => ['required', 'in:telegram,tiktok,email,webchat'],
+            'channel' => ['required', Rule::in(ChannelControlPlane::CHANNELS)],
             'access_token' => ['nullable', 'string'],
             'bot_token' => ['nullable', 'string'],
             'api_key' => ['nullable', 'string'],
             'external_account_id' => ['nullable', 'string'],
             'display_name' => ['nullable', 'string'],
             'from_address' => ['nullable', 'email'],
+            'shop_domain' => ['nullable', 'string'],
             'scopes' => ['nullable', 'array'],
         ]);
         $data['actor_id'] = (string) $request->user()->id;
@@ -38,7 +40,7 @@ class ChannelIntegrationController extends Controller
     public function disconnect(Request $request, ChannelControlPlane $channels): JsonResponse
     {
         $data = $request->validate([
-            'channel' => ['required', 'in:telegram,tiktok,email,webchat'],
+            'channel' => ['required', Rule::in(ChannelControlPlane::CHANNELS)],
         ]);
 
         return response()->json($channels->disconnect($this->workspace($request), $data['channel']));
@@ -47,7 +49,7 @@ class ChannelIntegrationController extends Controller
     public function simulateInbound(Request $request, ChannelControlPlane $channels): JsonResponse
     {
         $data = $request->validate([
-            'channel' => ['required', 'in:telegram,tiktok,email,webchat'],
+            'channel' => ['required', Rule::in(ChannelControlPlane::CHANNELS)],
             'body' => ['required', 'string'],
             'external_user_id' => ['nullable', 'string'],
             'contact_name' => ['nullable', 'string'],

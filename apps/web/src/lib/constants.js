@@ -32,6 +32,7 @@ export const DASHBOARD_NAV = [
     label: "Marketing",
     items: [
       { href: "/content", label: "Content studio" },
+      { href: "/templates", label: "Channel templates" },
       { href: "/calendar", label: "Calendar" },
       { href: "/campaigns", label: "Campaigns" },
     ],
@@ -48,6 +49,7 @@ export const DASHBOARD_NAV = [
     label: "Administration",
     items: [
       { href: "/integrations", label: "Integrations" },
+      { href: "/integrations/channels", label: "Sales channels" },
       { href: "/analytics", label: "Analytics" },
       { href: "/team", label: "Team" },
       { href: "/audit-logs", label: "Audit logs" },

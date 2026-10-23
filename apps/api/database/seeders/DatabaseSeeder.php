@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             TriadaWorkspaceSeeder::class,
             AutomationWorkflowSeeder::class,
+            ChannelTemplateSeeder::class,
         ]);
     }
 }

@@ -16,6 +16,12 @@ function statusTone(status) {
   return "warning";
 }
 
+function statusLabel(status) {
+  if (status === "active") return "Live";
+  if (status === "disabled") return "Offline";
+  return "Draft";
+}
+
 export default function AutomationsPage() {
   const [items, setItems] = useState([]);
   const [error, setError] = useState("");
@@ -59,7 +65,7 @@ export default function AutomationsPage() {
   return (
     <DashboardShell
       title="Workflows"
-      description="Visual workflow builder with validate, dry-run, enable/disable, and execution history. Emergency pauses are enforced at runtime."
+      description="Drag-and-drop jewellery sales workflows. Open the builder to edit, dry-run, and publish to live. Emergency pauses are enforced at runtime."
     >
       {loading ? <Skeleton className="h-64" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -79,7 +85,9 @@ export default function AutomationsPage() {
               <div className="min-w-0 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="ops-section-title">{workflow.name}</h3>
-                  <Badge tone={statusTone(workflow.status)}>{workflow.status}</Badge>
+                  <Badge tone={statusTone(workflow.status)}>
+                    {statusLabel(workflow.status)}
+                  </Badge>
                 </div>
                 <p className="text-sm text-muted">
                   {workflow.description || "No description"}
@@ -100,8 +108,8 @@ export default function AutomationsPage() {
                   {busyId === workflow.id
                     ? "Updating…"
                     : workflow.status === "active"
-                      ? "Disable"
-                      : "Activate"}
+                      ? "Take offline"
+                      : "Publish to live"}
                 </Button>
                 <Link
                   href={`/automations/${workflow.id}`}

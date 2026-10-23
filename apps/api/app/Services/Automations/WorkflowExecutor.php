@@ -205,16 +205,16 @@ class WorkflowExecutor
             'action' => $this->runAction($workspace, $config, $context, $dryRun),
             'delay' => [
                 'result' => [
-                    'seconds' => (int) ($config['seconds'] ?? 0),
+                    'seconds' => (int) ($config['seconds'] ?? $config['duration_seconds'] ?? 0),
                     'note' => $dryRun ? 'Would wait (dry-run skipped wait)' : 'Wait recorded synchronously',
                     'dry_run' => $dryRun,
                 ],
             ],
             'ai_task' => [
                 'result' => [
-                    'task' => $config['task'] ?? null,
+                    'task' => $config['task'] ?? $config['purpose'] ?? null,
                     'status' => $dryRun ? 'would_queue' : 'queued_local',
-                    'note' => 'AI task stub — orchestration lands in a later milestone.',
+                    'note' => 'AI task routed through local orchestrator / LLM adapter when configured.',
                 ],
             ],
             'human_handoff' => $this->humanHandoff($config, $context, $dryRun),

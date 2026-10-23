@@ -40,12 +40,15 @@ export function NodeConfigPanel({
     return (
       <div className="flex h-full flex-col">
         <div className="border-b border-line px-4 py-3">
-          <h3 className="font-display text-xl text-ink">Add step</h3>
+          <h3 className="font-display text-xl text-ink">Inspector</h3>
           <p className="mt-1 text-sm text-muted">
-            Select a node on the canvas to configure it, or add a new step.
+            Select a node on the canvas, or drag an action from the palette.
           </p>
         </div>
         <div className="flex-1 space-y-2 overflow-y-auto p-4">
+          <p className="text-xs font-medium uppercase tracking-[0.1em] text-muted">
+            Quick add
+          </p>
           {NODE_TYPES.map((type) => (
             <button
               key={type.value}
@@ -64,6 +67,7 @@ export function NodeConfigPanel({
 
   const config = node.config || {};
   const otherKeys = nodeKeys.filter((k) => k !== nodeKey);
+  const action = config.action_type || "notify_team";
 
   return (
     <div className="flex h-full flex-col">
@@ -146,10 +150,19 @@ export function NodeConfigPanel({
             <Input
               label="Value"
               name="value"
-              value={config.value ?? ""}
-              onChange={(e) =>
-                onChange({ config: { ...config, value: e.target.value } })
+              value={
+                Array.isArray(config.value)
+                  ? config.value.join(", ")
+                  : (config.value ?? "")
               }
+              onChange={(e) => {
+                const raw = e.target.value;
+                const value =
+                  config.operator === "in"
+                    ? raw.split(",").map((s) => s.trim()).filter(Boolean)
+                    : raw;
+                onChange({ config: { ...config, value } });
+              }}
             />
           </>
         ) : null}
@@ -160,7 +173,7 @@ export function NodeConfigPanel({
               <span className="block text-[13px] font-medium text-ink">Action</span>
               <select
                 className={fieldClass}
-                value={config.action_type || "notify_team"}
+                value={action}
                 onChange={(e) =>
                   onChange({ config: { ...config, action_type: e.target.value } })
                 }
@@ -172,14 +185,45 @@ export function NodeConfigPanel({
                 ))}
               </select>
             </label>
+            {action === "publish_channel_template" ? (
+              <>
+                <Input
+                  label="Platform"
+                  name="platform"
+                  value={config.platform || "whatsapp"}
+                  onChange={(e) =>
+                    onChange({ config: { ...config, platform: e.target.value } })
+                  }
+                />
+                <Input
+                  label="Template slug"
+                  name="template_slug"
+                  value={config.template_slug || ""}
+                  onChange={(e) =>
+                    onChange({
+                      config: { ...config, template_slug: e.target.value },
+                    })
+                  }
+                />
+              </>
+            ) : null}
+            {action === "sync_shopify" ? (
+              <Input
+                label="Resource"
+                name="resource"
+                value={config.resource || "order"}
+                onChange={(e) =>
+                  onChange({ config: { ...config, resource: e.target.value } })
+                }
+              />
+            ) : null}
             <Input
               label="Message / template"
               name="message"
               value={config.message || config.template || config.title || ""}
               onChange={(e) => {
                 const v = e.target.value;
-                const action = config.action_type || "notify_team";
-                if (action === "draft_reply") {
+                if (action === "draft_reply" || action === "ai_reply") {
                   onChange({ config: { ...config, template: v } });
                 } else if (action === "create_task") {
                   onChange({ config: { ...config, title: v } });
@@ -197,10 +241,14 @@ export function NodeConfigPanel({
             name="duration"
             type="number"
             min={1}
-            value={config.duration_seconds ?? 60}
+            value={config.seconds ?? config.duration_seconds ?? 60}
             onChange={(e) =>
               onChange({
-                config: { ...config, duration_seconds: Number(e.target.value) || 1 },
+                config: {
+                  ...config,
+                  seconds: Number(e.target.value) || 1,
+                  duration_seconds: Number(e.target.value) || 1,
+                },
               })
             }
           />
@@ -208,11 +256,17 @@ export function NodeConfigPanel({
 
         {node.type === "ai_task" ? (
           <Input
-            label="Purpose"
-            name="purpose"
-            value={config.purpose || ""}
+            label="Task / purpose"
+            name="task"
+            value={config.task || config.purpose || ""}
             onChange={(e) =>
-              onChange({ config: { ...config, purpose: e.target.value } })
+              onChange({
+                config: {
+                  ...config,
+                  task: e.target.value,
+                  purpose: e.target.value,
+                },
+              })
             }
           />
         ) : null}

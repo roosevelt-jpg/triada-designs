@@ -11,17 +11,25 @@ import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 
+/** Jewellery multi-channel list — credential paste + local simulator until live tokens. */
 const CHANNELS = [
-  { key: "telegram", title: "Telegram", hint: "Bot token" },
+  { key: "webchat", title: "Website / webchat", hint: "Widget token (local seed)" },
+  { key: "facebook", title: "Facebook", hint: "Page access token" },
+  { key: "instagram", title: "Instagram", hint: "IG messaging token" },
+  { key: "whatsapp", title: "WhatsApp", hint: "Cloud API token" },
+  { key: "shopify", title: "Shopify", hint: "Admin API access token" },
   { key: "tiktok", title: "TikTok", hint: "Access token (when eligible)" },
+  { key: "linkedin", title: "LinkedIn", hint: "Access token" },
   { key: "email", title: "Email", hint: "Provider API key" },
-  { key: "webchat", title: "Webchat", hint: "Widget token (seeded locally)" },
+  { key: "telegram", title: "Telegram", hint: "Bot token" },
 ];
 
 function tone(status) {
-  if (status === "healthy" || status === "connected" || status === "seeded") return "success";
+  if (status === "healthy" || status === "connected") return "success";
+  if (status === "local" || status === "seeded") return "neutral";
   if (status === "error") return "danger";
   if (status === "awaiting_credentials") return "warning";
+  if (status === "disconnected") return "neutral";
   return "neutral";
 }
 
@@ -32,7 +40,10 @@ export default function ChannelsIntegrationsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [tokens, setTokens] = useState({});
-  const [sim, setSim] = useState({ channel: "telegram", body: "Hello from the local channel simulator" });
+  const [sim, setSim] = useState({
+    channel: "webchat",
+    body: "Hi — interested in a gold hoop pair from Triada Designs",
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -65,7 +76,9 @@ export default function ChannelsIntegrationsPage() {
       });
       setStatus(data);
       setTokens((prev) => ({ ...prev, [channel]: "" }));
-      setNotice(`${channel} saved. Status remains local/awaiting_credentials until live tokens.`);
+      setNotice(
+        `${channel} saved. Status stays awaiting_credentials / local until live tokens + INTEGRATION_MODE=live — never faked as healthy live.`
+      );
     } catch (err) {
       setError(err.message);
     } finally {
@@ -93,7 +106,9 @@ export default function ChannelsIntegrationsPage() {
   async function ensureWidget() {
     setBusy("widget");
     try {
-      const data = await apiFetch("/v1/integrations/channels/webchat-token", { method: "POST" });
+      const data = await apiFetch("/v1/integrations/channels/webchat-token", {
+        method: "POST",
+      });
       setStatus(data);
       setNotice(`Widget token ready: ${data.webchat_widget?.public_token}`);
     } catch (err) {
@@ -105,12 +120,19 @@ export default function ChannelsIntegrationsPage() {
 
   return (
     <DashboardShell
-      title="Messaging channels"
-      description="Telegram, TikTok, Email, and website live chat. Local simulators until provider credentials exist."
+      title="Sales channels"
+      description="Jewellery retail across Facebook, Website, Shopify, TikTok, Instagram, WhatsApp, LinkedIn, Email, and Telegram. Connect credentials here; Meta deep-ops remain in the Meta hub."
       actions={
-        <Link href="/integrations">
-          <Button variant="secondary">All integrations</Button>
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/templates">
+            <Button size="sm">Templates</Button>
+          </Link>
+          <Link href="/integrations">
+            <Button size="sm" variant="secondary">
+              All integrations
+            </Button>
+          </Link>
+        </div>
       }
     >
       {loading ? <Skeleton className="h-40" /> : null}
@@ -120,7 +142,7 @@ export default function ChannelsIntegrationsPage() {
       {!loading && status ? (
         <div className="space-y-6">
           <p className="text-sm text-muted">{status.honesty}</p>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {CHANNELS.map((ch) => {
               const row = status.channels?.[ch.key] || {};
               return (
@@ -131,12 +153,22 @@ export default function ChannelsIntegrationsPage() {
                     <Badge tone="neutral">{row.mode || "local"}</Badge>
                   </div>
                   <p className="mt-2 text-xs text-muted">Webhook: {row.webhook_path}</p>
+                  {row.hub && row.hub !== "/integrations/channels" ? (
+                    <p className="mt-1 text-xs text-muted">
+                      Deep setup:{" "}
+                      <Link href={row.hub} className="text-brown-dark underline">
+                        {row.hub}
+                      </Link>
+                    </p>
+                  ) : null}
                   <div className="mt-3">
                     <Input
                       label={ch.hint}
                       type="password"
                       value={tokens[ch.key] || ""}
-                      onChange={(e) => setTokens((prev) => ({ ...prev, [ch.key]: e.target.value }))}
+                      onChange={(e) =>
+                        setTokens((prev) => ({ ...prev, [ch.key]: e.target.value }))
+                      }
                       autoComplete="off"
                     />
                   </div>
@@ -154,7 +186,10 @@ export default function ChannelsIntegrationsPage() {
 
           <Card className="p-5">
             <h2 className="font-display text-2xl">Local inbound simulator</h2>
-            <div className="mt-3 grid gap-3 md:grid-cols-[160px_1fr_auto]">
+            <p className="mt-1 text-sm text-muted">
+              Exercise jewellery inquiry flows without live provider tokens (Shopify excluded).
+            </p>
+            <div className="mt-3 grid gap-3 md:grid-cols-[180px_1fr_auto]">
               <label className="text-sm">
                 <span className="mb-1 block text-muted">Channel</span>
                 <select
@@ -162,7 +197,7 @@ export default function ChannelsIntegrationsPage() {
                   value={sim.channel}
                   onChange={(e) => setSim((prev) => ({ ...prev, channel: e.target.value }))}
                 >
-                  {CHANNELS.map((c) => (
+                  {CHANNELS.filter((c) => c.key !== "shopify").map((c) => (
                     <option key={c.key} value={c.key}>
                       {c.title}
                     </option>
@@ -183,7 +218,7 @@ export default function ChannelsIntegrationsPage() {
           </Card>
 
           <Card className="p-5">
-            <h2 className="font-display text-2xl">Webchat widget</h2>
+            <h2 className="font-display text-2xl">Website chat widget</h2>
             <p className="mt-2 text-sm text-muted">
               Embed <code>/widget/chat.js</code> with public token. Rate-limited public endpoint:{" "}
               <code>POST /api/v1/webchat/messages</code>.
@@ -191,7 +226,12 @@ export default function ChannelsIntegrationsPage() {
             <p className="mt-2 text-sm">
               Token: <code>{status.webchat_widget?.public_token || "not issued"}</code>
             </p>
-            <Button className="mt-3" variant="secondary" disabled={busy === "widget"} onClick={ensureWidget}>
+            <Button
+              className="mt-3"
+              variant="secondary"
+              disabled={busy === "widget"}
+              onClick={ensureWidget}
+            >
               Ensure widget token
             </Button>
           </Card>

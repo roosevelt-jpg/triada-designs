@@ -81,7 +81,7 @@ class WorkflowValidator
             }
 
             if ($type === 'delay') {
-                $seconds = (int) ($node['config']['seconds'] ?? 0);
+                $seconds = (int) ($node['config']['seconds'] ?? $node['config']['duration_seconds'] ?? 0);
                 if ($seconds < 1 || $seconds > 86400 * 30) {
                     $errors[] = "Delay node {$key} seconds must be between 1 and 2592000.";
                 }
@@ -91,8 +91,9 @@ class WorkflowValidator
             }
 
             if ($type === 'ai_task') {
-                if (empty($node['config']['task'])) {
-                    $errors[] = "AI task node {$key} requires config.task.";
+                $task = $node['config']['task'] ?? $node['config']['purpose'] ?? null;
+                if (empty($task)) {
+                    $errors[] = "AI task node {$key} requires config.task (or purpose).";
                 }
                 if (empty($node['next']) || ! isset($nodes[$node['next']])) {
                     $errors[] = "AI task node {$key} must define a valid next.";

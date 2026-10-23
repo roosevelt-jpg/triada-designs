@@ -13,13 +13,15 @@ import {
 import { cn } from "@/lib/cn";
 
 /**
- * Lightweight absolute-position canvas. No heavy graph libs.
+ * Drag-and-drop absolute-position canvas. No heavy graph libs / no JSON editor.
  * @param {{
- *   definition: { entry: string, nodes: Record<string, object> },
+ *   definition: { entry: string, nodes: Record<string, object>, layout?: object },
  *   selectedKey: string|null,
  *   onSelect: (key: string|null) => void,
  *   connectMode: { from: string, kind: "next"|"next_true"|"next_false" }|null,
  *   onConnectTarget: (toKey: string) => void,
+ *   onDropPalette: (item: object, pos: {x:number,y:number}) => void,
+ *   onMoveNode: (key: string, pos: {x:number,y:number}) => void,
  * }} props
  */
 export function WorkflowCanvas({
@@ -28,15 +30,20 @@ export function WorkflowCanvas({
   onSelect,
   connectMode,
   onConnectTarget,
+  onDropPalette,
+  onMoveNode,
 }) {
   const { entry, nodes } = normalizeDefinition(definition);
   const positions = useMemo(() => layoutNodes(definition), [definition]);
   const edges = useMemo(() => collectEdges(definition), [definition]);
   const size = useMemo(() => canvasSize(positions), [positions]);
   const wrapRef = useRef(null);
+  const stageRef = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const dragRef = useRef(null);
+  const [dragOver, setDragOver] = useState(false);
+  const panDragRef = useRef(null);
+  const nodeDragRef = useRef(null);
 
   useEffect(() => {
     function onKey(e) {
@@ -66,10 +73,20 @@ export function WorkflowCanvas({
     setPan({ x: 0, y: 0 });
   }
 
+  function clientToCanvas(clientX, clientY) {
+    const stage = stageRef.current;
+    if (!stage) return { x: 48, y: 48 };
+    const rect = stage.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left) / zoom,
+      y: (clientY - rect.top) / zoom,
+    };
+  }
+
   function onPointerDownBackground(e) {
     if (e.target !== e.currentTarget && !e.target.dataset?.canvasBg) return;
     if (e.button !== 0) return;
-    dragRef.current = {
+    panDragRef.current = {
       startX: e.clientX,
       startY: e.clientY,
       panX: pan.x,
@@ -79,17 +96,42 @@ export function WorkflowCanvas({
   }
 
   function onPointerMove(e) {
-    if (!dragRef.current) return;
-    const dx = e.clientX - dragRef.current.startX;
-    const dy = e.clientY - dragRef.current.startY;
+    if (nodeDragRef.current) {
+      nodeDragRef.current.moved = true;
+      const { key, offsetX, offsetY } = nodeDragRef.current;
+      const pos = clientToCanvas(e.clientX, e.clientY);
+      onMoveNode?.(key, { x: pos.x - offsetX, y: pos.y - offsetY });
+      return;
+    }
+    if (!panDragRef.current) return;
+    const dx = e.clientX - panDragRef.current.startX;
+    const dy = e.clientY - panDragRef.current.startY;
     setPan({
-      x: dragRef.current.panX + dx,
-      y: dragRef.current.panY + dy,
+      x: panDragRef.current.panX + dx,
+      y: panDragRef.current.panY + dy,
     });
   }
 
   function onPointerUp() {
-    dragRef.current = null;
+    panDragRef.current = null;
+    nodeDragRef.current = null;
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    setDragOver(false);
+    const raw = e.dataTransfer.getData("application/x-triada-palette");
+    if (!raw || !onDropPalette) return;
+    try {
+      const item = JSON.parse(raw);
+      const pos = clientToCanvas(e.clientX, e.clientY);
+      onDropPalette(item, {
+        x: Math.max(16, pos.x - NODE_W / 2),
+        y: Math.max(16, pos.y - NODE_H / 2),
+      });
+    } catch {
+      /* ignore bad payload */
+    }
   }
 
   const nodeKeys = Object.keys(nodes);
@@ -99,6 +141,9 @@ export function WorkflowCanvas({
       <div className="flex flex-wrap items-center gap-2 border-b border-line bg-white px-3 py-2">
         <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted">
           Canvas
+        </span>
+        <span className="hidden text-xs text-muted sm:inline">
+          Drag actions from the palette · drag nodes to rearrange · connect in inspector
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <button
@@ -132,12 +177,23 @@ export function WorkflowCanvas({
 
       <div
         ref={wrapRef}
-        className="workflow-canvas relative flex-1 overflow-auto"
+        className={cn(
+          "workflow-canvas relative flex-1 overflow-auto",
+          dragOver && "ring-2 ring-inset ring-brown/30"
+        )}
         role="application"
         aria-label="Workflow canvas"
         onPointerDown={onPointerDownBackground}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("application/x-triada-palette")) {
+            e.preventDefault();
+            setDragOver(true);
+          }
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
         onClick={(e) => {
           if (e.target === e.currentTarget || e.target.dataset?.canvasBg) {
             onSelect(null);
@@ -155,12 +211,13 @@ export function WorkflowCanvas({
           }}
         />
         <div
+          ref={stageRef}
           className="relative origin-top-left"
           style={{
             width: size.width,
             height: size.height,
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transition: "transform 160ms ease",
+            transition: nodeDragRef.current ? "none" : "transform 160ms ease",
           }}
         >
           <svg
@@ -212,9 +269,9 @@ export function WorkflowCanvas({
           </svg>
 
           {nodeKeys.length === 0 ? (
-            <div className="absolute inset-0 flex items-center justify-center p-8">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8">
               <p className="max-w-sm text-center text-sm text-muted">
-                No steps yet. Add a trigger from the panel to start this workflow.
+                Drag an action from the palette onto this canvas to start the workflow.
               </p>
             </div>
           ) : null}
@@ -233,7 +290,7 @@ export function WorkflowCanvas({
                   selected
                     ? "border-brown ring-2 ring-brown/25"
                     : "border-line hover:border-champagne",
-                  connectMode ? "cursor-crosshair" : "cursor-pointer"
+                  connectMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"
                 )}
                 style={{
                   left: pos.x,
@@ -241,12 +298,25 @@ export function WorkflowCanvas({
                   width: NODE_W,
                   minHeight: NODE_H,
                 }}
+                onPointerDown={(e) => {
+                  if (connectMode || e.button !== 0) return;
+                  e.stopPropagation();
+                  const canvasPos = clientToCanvas(e.clientX, e.clientY);
+                  nodeDragRef.current = {
+                    key,
+                    offsetX: canvasPos.x - pos.x,
+                    offsetY: canvasPos.y - pos.y,
+                    moved: false,
+                  };
+                  e.currentTarget.setPointerCapture?.(e.pointerId);
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (connectMode) {
                     onConnectTarget(key);
                     return;
                   }
+                  if (nodeDragRef.current?.moved) return;
                   onSelect(key);
                 }}
                 aria-pressed={selected}
@@ -271,7 +341,11 @@ export function WorkflowCanvas({
                 <span className="w-full truncate text-sm font-medium text-ink">
                   {node.label || key}
                 </span>
-                <span className="w-full truncate text-[11px] text-muted">{key}</span>
+                <span className="w-full truncate text-[11px] text-muted">
+                  {node.config?.action_type
+                    ? String(node.config.action_type).replaceAll("_", " ")
+                    : key}
+                </span>
               </button>
             );
           })}

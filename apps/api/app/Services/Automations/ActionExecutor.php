@@ -40,16 +40,18 @@ class ActionExecutor
         return match ($actionType) {
             'create_task' => $this->createTask($workspace, $config, $context, $dryRun),
             'update_lead_stage' => $this->updateLeadStage($workspace, $config, $context, $dryRun),
-            'assign_conversation' => $this->assignConversation($workspace, $config, $context, $dryRun),
+            'assign_conversation', 'assign_human' => $this->assignConversation($workspace, $config, $context, $dryRun),
             'add_tag' => $this->addTag($config, $context, $dryRun),
             'notify_team' => $this->notifyTeam($config, $context, $dryRun),
-            'draft_reply' => $this->draftReply($workspace, $config, $context, $dryRun),
+            'draft_reply', 'ai_reply' => $this->draftReply($workspace, $config, $context, $dryRun),
             'ai_classify' => $this->aiAction($workspace, 'support', 'classify', $context, $dryRun),
             'ai_qualify' => $this->aiAction($workspace, 'lead_qualification', 'qualify', $context, $dryRun),
             'ai_escalate' => $this->aiAction($workspace, 'support', 'escalate', $context, $dryRun),
             'send_eligible_reply' => $this->sendEligibleReply($workspace, $config, $context, $dryRun),
             'create_content_draft' => $this->createContentDraft($workspace, $config, $context, $dryRun),
-            'sync_zoho_lead' => $this->syncZohoLead($workspace, $context, $dryRun),
+            'sync_zoho_lead', 'sync_crm' => $this->syncZohoLead($workspace, $context, $dryRun),
+            'sync_shopify' => $this->syncShopify($workspace, $config, $context, $dryRun),
+            'publish_channel_template' => $this->publishChannelTemplate($workspace, $config, $context, $dryRun),
             default => ['ok' => false, 'error' => "Unsupported action: {$actionType}"],
         };
     }
@@ -418,5 +420,98 @@ class ActionExecutor
         $lead->forceFill(['external_crm_id' => $remote['id'] ?? null])->save();
 
         return ['ok' => true, 'result' => ['zoho' => $remote, 'lead_id' => $lead->id]];
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>  $context
+     * @return array{ok:bool,dry_run?:bool,result?:array<string,mixed>,error?:string}
+     */
+    protected function syncShopify(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        $resource = (string) ($config['resource'] ?? $context['shopify_resource'] ?? 'order');
+        $externalId = $context['shopify_order_id'] ?? $context['external_order_id'] ?? null;
+
+        $payload = [
+            'workspace_id' => $workspace->id,
+            'resource' => $resource,
+            'external_id' => $externalId,
+            'note' => 'Shopify sync queued via automation. Live Admin API requires credentials.',
+        ];
+
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_sync_shopify' => $payload]];
+        }
+
+        $context['shopify_sync'] = array_merge($payload, [
+            'synced_at' => now()->toIso8601String(),
+            'mode' => 'local_record',
+        ]);
+
+        return ['ok' => true, 'result' => $context['shopify_sync']];
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>  $context
+     * @return array{ok:bool,dry_run?:bool,result?:array<string,mixed>,error?:string,skipped?:bool}
+     */
+    protected function publishChannelTemplate(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        $templateId = $config['template_id'] ?? $context['channel_template_id'] ?? null;
+        $platform = (string) ($config['platform'] ?? $context['channel'] ?? 'whatsapp');
+        $slug = (string) ($config['template_slug'] ?? $context['template_slug'] ?? '');
+
+        $query = \App\Models\ChannelTemplate::query()->where('workspace_id', $workspace->id);
+        if ($templateId) {
+            $query->where('id', $templateId);
+        } elseif ($slug !== '') {
+            $query->where('platform', $platform)->where('slug', $slug);
+        } else {
+            return ['ok' => false, 'error' => 'publish_channel_template requires template_id or template_slug'];
+        }
+
+        $template = $query->first();
+        if (! $template) {
+            return ['ok' => false, 'error' => 'Channel template not found'];
+        }
+
+        if ($dryRun) {
+            return [
+                'ok' => true,
+                'dry_run' => true,
+                'result' => [
+                    'would_publish' => [
+                        'id' => $template->id,
+                        'platform' => $template->platform,
+                        'slug' => $template->slug,
+                        'status' => $template->status,
+                    ],
+                ],
+            ];
+        }
+
+        // Automations never auto-approve public posts; only publish already-approved templates.
+        if (! in_array($template->status, ['approved', 'published'], true)) {
+            return [
+                'ok' => true,
+                'skipped' => true,
+                'result' => [
+                    'reason' => 'template_not_approved',
+                    'status' => $template->status,
+                    'note' => 'Human approval required before automation can publish a channel template.',
+                ],
+            ];
+        }
+
+        $service = app(\App\Services\Templates\ChannelTemplateService::class);
+        $result = $service->publish($template, $context['actor_id'] ?? null);
+        $context['channel_template_publish'] = $result;
+
+        return [
+            'ok' => (bool) ($result['ok'] ?? false),
+            'result' => $result,
+            'error' => $result['error'] ?? null,
+        ];
     }
 }

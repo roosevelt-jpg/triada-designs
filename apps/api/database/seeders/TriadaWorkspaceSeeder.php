@@ -479,7 +479,7 @@ class TriadaWorkspaceSeeder extends Seeder
             ]
         );
 
-        foreach (['telegram', 'tiktok', 'email'] as $provider) {
+        foreach (['telegram', 'tiktok', 'email', 'linkedin'] as $provider) {
             \App\Models\Integration::query()->updateOrCreate(
                 [
                     'workspace_id' => $workspace->id,
@@ -489,13 +489,19 @@ class TriadaWorkspaceSeeder extends Seeder
                 [
                     'display_name' => match ($provider) {
                         'telegram' => 'Telegram Bot',
-                        'tiktok' => 'TikTok Business Messaging',
+                        'tiktok' => 'TikTok',
                         'email' => 'Email',
+                        'linkedin' => 'LinkedIn',
                         default => ucfirst($provider),
                     },
                     'status' => 'awaiting_credentials',
-                    'capabilities' => ['messages.send', 'messages.receive'],
-                    'metadata' => ['seeded' => true],
+                    'capabilities' => match ($provider) {
+                        'tiktok' => ['posts.publish', 'templates', 'webhooks'],
+                        'linkedin' => ['posts.publish', 'templates', 'messaging'],
+                        'email' => ['messages.send', 'messages.receive', 'templates'],
+                        default => ['messages.send', 'messages.receive'],
+                    },
+                    'metadata' => ['seeded' => true, 'vertical' => 'jewellery'],
                 ]
             );
         }

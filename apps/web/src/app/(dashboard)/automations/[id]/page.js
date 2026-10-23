@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { ActionPalette } from "@/components/workflow-builder/ActionPalette";
 import { DryRunContextForm } from "@/components/workflow-builder/DryRunContextForm";
 import { NodeConfigPanel } from "@/components/workflow-builder/NodeConfigPanel";
 import { WorkflowCanvas } from "@/components/workflow-builder/WorkflowCanvas";
@@ -17,9 +18,11 @@ import {
   addNode,
   cloneDefinition,
   defaultContextFor,
+  liveStatusLabel,
   normalizeDefinition,
   removeNode,
   setEntry,
+  setNodePosition,
   updateNode,
 } from "@/lib/workflow-definition";
 
@@ -46,7 +49,7 @@ export default function AutomationBuilderPage() {
   const workflowId = params?.id;
 
   const [workflow, setWorkflow] = useState(null);
-  const [definition, setDefinition] = useState({ entry: "", nodes: {} });
+  const [definition, setDefinition] = useState({ entry: "", nodes: {}, layout: {} });
   const [savedSnapshot, setSavedSnapshot] = useState("");
   const [context, setContext] = useState({});
   const [selectedKey, setSelectedKey] = useState(null);
@@ -114,6 +117,32 @@ export default function AutomationBuilderPage() {
     setSelectedKey(key);
   }
 
+  function handlePaletteAdd(item) {
+    const { definition: next, key } = addNode(definition, {
+      type: item.type,
+      label: item.label,
+      actionType: item.actionType,
+    });
+    patchDefinition(next);
+    setSelectedKey(key);
+  }
+
+  function handleDropPalette(item, pos) {
+    const { definition: next, key } = addNode(definition, {
+      type: item.type,
+      label: item.label,
+      actionType: item.actionType,
+      x: pos.x,
+      y: pos.y,
+    });
+    patchDefinition(next);
+    setSelectedKey(key);
+  }
+
+  function handleMoveNode(key, pos) {
+    patchDefinition(setNodePosition(definition, key, pos));
+  }
+
   function handleNodeChange(patch) {
     if (!selectedKey) return;
     patchDefinition(updateNode(definition, selectedKey, patch));
@@ -164,7 +193,7 @@ export default function AutomationBuilderPage() {
       setValidation(result.validation);
       setNotice(
         result.workflow.status === "draft"
-          ? "Saved. Active workflows revert to draft after edits — re-activate when ready."
+          ? "Saved as draft. Publish to live when ready."
           : "Saved."
       );
     } catch (err) {
@@ -197,8 +226,8 @@ export default function AutomationBuilderPage() {
     }
   }
 
-  async function activate() {
-    setBusy("activate");
+  async function publishToLive() {
+    setBusy("publish");
     setError("");
     setNotice("");
     try {
@@ -216,9 +245,9 @@ export default function AutomationBuilderPage() {
       setDefinition(def);
       setSavedSnapshot(JSON.stringify(def));
       setValidation(result.validation);
-      setNotice("Workflow activated.");
+      setNotice("Published to live — workflow is active.");
     } catch (err) {
-      setError(err.data?.message || err.message || "Activate failed");
+      setError(err.data?.message || err.message || "Publish to live failed");
       if (err.data?.validation) setValidation(err.data.validation);
     } finally {
       setBusy("");
@@ -234,7 +263,7 @@ export default function AutomationBuilderPage() {
         method: "POST",
       });
       setWorkflow(result.workflow);
-      setNotice("Workflow disabled.");
+      setNotice("Workflow taken offline (disabled).");
     } catch (err) {
       setError(err.message || "Disable failed");
     } finally {
@@ -295,7 +324,7 @@ export default function AutomationBuilderPage() {
   return (
     <DashboardShell
       title={workflow?.name || "Workflow builder"}
-      description="Edit steps visually, validate, dry-run, then activate. Definitions stay as internal JSON — never the editing surface."
+      description="Drag actions onto the canvas, connect steps in the inspector, dry-run, then publish to live. JSON is never the editing surface."
       actions={
         workflow ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -304,22 +333,25 @@ export default function AutomationBuilderPage() {
                 Unsaved changes
               </span>
             ) : null}
+            <Badge tone={statusTone(workflow.status)}>
+              {liveStatusLabel(workflow.status)}
+            </Badge>
             <Button size="sm" variant="secondary" disabled={!!busy} onClick={runValidate}>
               {busy === "validate" ? "Validating…" : "Validate"}
             </Button>
             <Button size="sm" variant="secondary" disabled={!!busy} onClick={saveDefinition}>
-              {busy === "save" ? "Saving…" : "Save"}
+              {busy === "save" ? "Saving…" : "Save draft"}
             </Button>
             {workflow.status === "active" ? (
               <Button size="sm" variant="ghost" disabled={!!busy} onClick={deactivate}>
-                {busy === "deactivate" ? "Disabling…" : "Disable"}
+                {busy === "deactivate" ? "Taking offline…" : "Take offline"}
               </Button>
             ) : (
-              <Button size="sm" disabled={!!busy} onClick={activate}>
-                {busy === "activate" ? "Activating…" : "Activate"}
+              <Button size="sm" disabled={!!busy} onClick={publishToLive}>
+                {busy === "publish" ? "Publishing…" : "Publish to live"}
               </Button>
             )}
-            <Button size="sm" disabled={!!busy} onClick={dryRun}>
+            <Button size="sm" variant="secondary" disabled={!!busy} onClick={dryRun}>
               {busy === "dry-run" ? "Running…" : "Dry-run"}
             </Button>
           </div>
@@ -347,7 +379,10 @@ export default function AutomationBuilderPage() {
           <section className="surface-card flex flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={statusTone(workflow.status)}>{workflow.status}</Badge>
+                <Badge tone={statusTone(workflow.status)}>
+                  {liveStatusLabel(workflow.status)}
+                  {workflow.status === "active" ? " · active" : ""}
+                </Badge>
                 <Badge tone="neutral">v{workflow.version}</Badge>
                 <Badge tone="brand">
                   {workflow.trigger_type?.replaceAll("_", " ")}
@@ -370,7 +405,9 @@ export default function AutomationBuilderPage() {
             <section className="surface-card p-4">
               <h3 className="text-sm font-medium text-ink">Validation</h3>
               <p className="mt-1 text-sm text-muted">
-                {validation.valid ? "Ready to activate." : "Fix errors before activation."}
+                {validation.valid
+                  ? "Ready to publish to live."
+                  : "Fix errors before publishing to live."}
               </p>
               {validation.errors?.length ? (
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-danger">
@@ -390,7 +427,8 @@ export default function AutomationBuilderPage() {
           ) : null}
 
           <section className="overflow-hidden rounded-md border border-line bg-white shadow-card">
-            <div className="grid min-h-[520px] lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid min-h-[560px] lg:grid-cols-[200px_minmax(0,1fr)_300px]">
+              <ActionPalette onAdd={handlePaletteAdd} />
               <div className="min-h-[420px] border-b border-line lg:border-b-0 lg:border-r">
                 <WorkflowCanvas
                   definition={definition}
@@ -401,6 +439,8 @@ export default function AutomationBuilderPage() {
                   }}
                   connectMode={connectMode}
                   onConnectTarget={handleConnectTarget}
+                  onDropPalette={handleDropPalette}
+                  onMoveNode={handleMoveNode}
                 />
               </div>
               <div className="min-h-[320px] bg-ivory/50">

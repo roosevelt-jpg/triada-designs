@@ -74,7 +74,12 @@ export default function IntegrationsPage() {
           </Link>
           <Link href="/integrations/channels">
             <Button size="sm" variant="secondary">
-              Channels
+              Sales channels
+            </Button>
+          </Link>
+          <Link href="/templates">
+            <Button size="sm" variant="secondary">
+              Templates
             </Button>
           </Link>
         </div>

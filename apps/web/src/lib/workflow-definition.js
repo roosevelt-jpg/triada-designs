@@ -1,18 +1,35 @@
 /** Helpers for the visual workflow builder. JSON is storage only — never the edit surface. */
 
 export const NODE_TYPES = [
-  { value: "trigger", label: "Trigger" },
-  { value: "condition", label: "Condition" },
-  { value: "action", label: "Action" },
-  { value: "delay", label: "Delay" },
-  { value: "ai_task", label: "AI task" },
-  { value: "human_handoff", label: "Human handoff" },
-  { value: "end", label: "End" },
+  { value: "trigger", label: "Trigger", icon: "▶", blurb: "Start when an event fires" },
+  { value: "condition", label: "Condition", icon: "◇", blurb: "Branch true / false" },
+  { value: "action", label: "Action", icon: "●", blurb: "Do something" },
+  { value: "delay", label: "Delay", icon: "◷", blurb: "Wait before continuing" },
+  { value: "ai_task", label: "AI reply", icon: "✦", blurb: "AI-assisted step" },
+  { value: "human_handoff", label: "Assign human", icon: "◎", blurb: "Hand off to staff" },
+  { value: "end", label: "End", icon: "■", blurb: "Stop the workflow" },
+];
+
+/** Drag palette: several concrete action types operators can drop onto the canvas. */
+export const PALETTE_ITEMS = [
+  { id: "trigger", kind: "node", type: "trigger", label: "Trigger", icon: "▶" },
+  { id: "message", kind: "action", type: "action", actionType: "send_eligible_reply", label: "Message", icon: "✉" },
+  { id: "condition", kind: "node", type: "condition", label: "Condition", icon: "◇" },
+  { id: "delay", kind: "node", type: "delay", label: "Delay", icon: "◷" },
+  { id: "assign_human", kind: "action", type: "action", actionType: "assign_human", label: "Assign human", icon: "◎" },
+  { id: "sync_crm", kind: "action", type: "action", actionType: "sync_crm", label: "Sync CRM", icon: "⇄" },
+  { id: "sync_shopify", kind: "action", type: "action", actionType: "sync_shopify", label: "Sync Shopify", icon: "◈" },
+  { id: "publish_tpl", kind: "action", type: "action", actionType: "publish_channel_template", label: "Publish template", icon: "⇪" },
+  { id: "ai_reply", kind: "action", type: "action", actionType: "ai_reply", label: "AI reply", icon: "✦" },
+  { id: "handoff", kind: "node", type: "human_handoff", label: "Handoff", icon: "⤴" },
+  { id: "notify", kind: "action", type: "action", actionType: "notify_team", label: "Notify team", icon: "⚑" },
+  { id: "end", kind: "node", type: "end", label: "End", icon: "■" },
 ];
 
 export const TRIGGER_TYPES = [
   "incoming_message",
   "incoming_meta_message",
+  "comment_to_dm",
   "whatsapp_template_needed",
   "new_contact",
   "lead_qualified",
@@ -20,6 +37,7 @@ export const TRIGGER_TYPES = [
   "follow_up_due",
   "content_approved",
   "shopify_order_updated",
+  "shopify_order_created",
   "manual",
 ];
 
@@ -27,15 +45,20 @@ export const ACTION_TYPES = [
   "create_task",
   "update_lead_stage",
   "assign_conversation",
+  "assign_human",
   "add_tag",
   "notify_team",
   "draft_reply",
+  "ai_reply",
   "ai_classify",
   "ai_qualify",
   "ai_escalate",
   "send_eligible_reply",
   "create_content_draft",
   "sync_zoho_lead",
+  "sync_crm",
+  "sync_shopify",
+  "publish_channel_template",
 ];
 
 export const CONDITION_OPERATORS = [
@@ -44,6 +67,9 @@ export const CONDITION_OPERATORS = [
   "contains",
   "greater_than",
   "less_than",
+  "gte",
+  "lte",
+  "in",
   "exists",
 ];
 
@@ -54,19 +80,23 @@ const GAP_Y = 72;
 
 /**
  * @param {Record<string, unknown>} definition
- * @returns {{ entry: string, nodes: Record<string, object> }}
+ * @returns {{ entry: string, nodes: Record<string, object>, layout?: Record<string, {x:number,y:number}> }}
  */
 export function normalizeDefinition(definition) {
   if (!definition || typeof definition !== "object") {
-    return { entry: "", nodes: {} };
+    return { entry: "", nodes: {}, layout: {} };
   }
   const nodes = { ...(definition.nodes || {}) };
   const entry = typeof definition.entry === "string" ? definition.entry : "";
-  return { entry, nodes };
+  const layout =
+    definition.layout && typeof definition.layout === "object"
+      ? { ...definition.layout }
+      : {};
+  return { entry, nodes, layout };
 }
 
 /**
- * @param {{ entry: string, nodes: Record<string, object> }} definition
+ * @param {{ entry: string, nodes: Record<string, object>, layout?: Record<string, {x:number,y:number}> }} definition
  */
 export function cloneDefinition(definition) {
   return JSON.parse(JSON.stringify(normalizeDefinition(definition)));
@@ -74,11 +104,12 @@ export function cloneDefinition(definition) {
 
 /**
  * Auto-layout nodes top-to-bottom with branch columns.
- * @param {{ entry: string, nodes: Record<string, object> }} definition
+ * Respects saved layout positions when present.
+ * @param {{ entry: string, nodes: Record<string, object>, layout?: Record<string, {x:number,y:number}> }} definition
  * @returns {Record<string, { x: number, y: number }>}
  */
 export function layoutNodes(definition) {
-  const { entry, nodes } = normalizeDefinition(definition);
+  const { entry, nodes, layout } = normalizeDefinition(definition);
   const positions = {};
   const keys = Object.keys(nodes);
   if (keys.length === 0) return positions;
@@ -106,7 +137,6 @@ export function layoutNodes(definition) {
     walk(entry, 0, 0);
   }
 
-  // Place orphans not reachable from entry
   let orphanDepth = Math.max(0, ...Object.values(depthMap), -1) + 1;
   keys.forEach((key) => {
     if (!visited.has(key)) {
@@ -119,6 +149,10 @@ export function layoutNodes(definition) {
   const minLane = Math.min(...lanes, 0);
 
   keys.forEach((key) => {
+    if (layout[key] && typeof layout[key].x === "number" && typeof layout[key].y === "number") {
+      positions[key] = { x: layout[key].x, y: layout[key].y };
+      return;
+    }
     const depth = depthMap[key] ?? 0;
     const lane = (laneMap[key] ?? 0) - minLane;
     positions[key] = {
@@ -132,12 +166,12 @@ export function layoutNodes(definition) {
 
 export function canvasSize(positions) {
   const vals = Object.values(positions);
-  if (vals.length === 0) return { width: 640, height: 360 };
+  if (vals.length === 0) return { width: 720, height: 420 };
   const maxX = Math.max(...vals.map((p) => p.x));
   const maxY = Math.max(...vals.map((p) => p.y));
   return {
-    width: Math.max(640, maxX + NODE_W + 80),
-    height: Math.max(360, maxY + NODE_H + 80),
+    width: Math.max(720, maxX + NODE_W + 120),
+    height: Math.max(420, maxY + NODE_H + 120),
   };
 }
 
@@ -167,13 +201,14 @@ function slugify(label) {
 }
 
 /**
- * @param {{ entry: string, nodes: Record<string, object> }} definition
- * @param {{ type: string, label?: string }} opts
+ * @param {{ entry: string, nodes: Record<string, object>, layout?: object }} definition
+ * @param {{ type: string, label?: string, actionType?: string, x?: number, y?: number }} opts
  */
 export function addNode(definition, opts) {
   const next = cloneDefinition(definition);
   const type = opts.type || "action";
-  const label = opts.label || NODE_TYPES.find((t) => t.value === type)?.label || "Node";
+  const label =
+    opts.label || NODE_TYPES.find((t) => t.value === type)?.label || "Node";
   let base = `${type.slice(0, 4)}_${slugify(label)}`;
   let key = base;
   let i = 1;
@@ -181,7 +216,7 @@ export function addNode(definition, opts) {
     key = `${base}_${i++}`;
   }
 
-  const config = defaultConfigFor(type);
+  const config = defaultConfigFor(type, opts.actionType);
   next.nodes[key] = {
     type,
     label,
@@ -193,6 +228,11 @@ export function addNode(definition, opts) {
         : { next: null }),
   };
 
+  if (typeof opts.x === "number" && typeof opts.y === "number") {
+    next.layout = next.layout || {};
+    next.layout[key] = { x: opts.x, y: opts.y };
+  }
+
   if (!next.entry && type === "trigger") {
     next.entry = key;
   }
@@ -200,27 +240,35 @@ export function addNode(definition, opts) {
   return { definition: next, key };
 }
 
-export function defaultConfigFor(type) {
+export function defaultConfigFor(type, actionType) {
   if (type === "trigger") return { trigger_type: "incoming_message" };
   if (type === "condition") {
     return { field: "intent", operator: "equals", value: "" };
   }
   if (type === "action") {
-    return { action_type: "notify_team", message: "" };
+    return {
+      action_type: actionType || "notify_team",
+      message: "",
+      ...(actionType === "publish_channel_template"
+        ? { platform: "whatsapp", template_slug: "" }
+        : {}),
+      ...(actionType === "sync_shopify" ? { resource: "order" } : {}),
+    };
   }
-  if (type === "delay") return { duration_seconds: 60 };
-  if (type === "ai_task") return { purpose: "draft_reply" };
+  if (type === "delay") return { seconds: 60 };
+  if (type === "ai_task") return { task: "draft_reply", purpose: "draft_reply" };
   if (type === "human_handoff") return { reason: "" };
   return {};
 }
 
 /**
- * @param {{ entry: string, nodes: Record<string, object> }} definition
+ * @param {{ entry: string, nodes: Record<string, object>, layout?: object }} definition
  * @param {string} key
  */
 export function removeNode(definition, key) {
   const next = cloneDefinition(definition);
   delete next.nodes[key];
+  if (next.layout) delete next.layout[key];
   if (next.entry === key) {
     const firstTrigger = Object.entries(next.nodes).find(([, n]) => n.type === "trigger");
     next.entry = firstTrigger ? firstTrigger[0] : Object.keys(next.nodes)[0] || "";
@@ -234,7 +282,7 @@ export function removeNode(definition, key) {
 }
 
 /**
- * @param {{ entry: string, nodes: Record<string, object> }} definition
+ * @param {{ entry: string, nodes: Record<string, object>, layout?: object }} definition
  * @param {string} key
  * @param {object} patch
  */
@@ -268,6 +316,22 @@ export function updateNode(definition, key, patch) {
   return next;
 }
 
+/**
+ * @param {{ entry: string, nodes: Record<string, object>, layout?: object }} definition
+ * @param {string} key
+ * @param {{ x: number, y: number }} pos
+ */
+export function setNodePosition(definition, key, pos) {
+  const next = cloneDefinition(definition);
+  if (!next.nodes[key]) return next;
+  next.layout = next.layout || {};
+  next.layout[key] = {
+    x: Math.max(16, Math.round(pos.x)),
+    y: Math.max(16, Math.round(pos.y)),
+  };
+  return next;
+}
+
 export function setEntry(definition, key) {
   const next = cloneDefinition(definition);
   if (next.nodes[key]) next.entry = key;
@@ -289,6 +353,13 @@ export function defaultContextFor(triggerType) {
       automation_mode: "ai",
     };
   }
+  if (triggerType === "comment_to_dm") {
+    return {
+      intent: "product_inquiry",
+      channel: "instagram",
+      automation_mode: "ai",
+    };
+  }
   if (triggerType === "whatsapp_template_needed") {
     return {
       channel: "whatsapp",
@@ -296,11 +367,21 @@ export function defaultContextFor(triggerType) {
       automation_mode: "ai",
     };
   }
+  if (triggerType === "shopify_order_created" || triggerType === "shopify_order_updated") {
+    return {
+      channel: "shopify",
+      shopify_order_id: "sim-order-1001",
+      external_order_id: "sim-order-1001",
+    };
+  }
   if (triggerType === "content_approved") {
-    return { content_title: "Warm neutrals for spring rituals" };
+    return { content_title: "Quiet sparkle — jewellery showcase" };
   }
   if (triggerType === "lead_qualified") {
     return { lead_score: 82 };
+  }
+  if (triggerType === "follow_up_due") {
+    return { channel: "whatsapp", template_slug: "wa-jewellery-follow-up" };
   }
   return {};
 }
@@ -316,4 +397,10 @@ export function nodeTypeIcon(type) {
     end: "■",
   };
   return map[type] || "○";
+}
+
+export function liveStatusLabel(status) {
+  if (status === "active") return "Live";
+  if (status === "disabled") return "Disabled";
+  return "Draft";
 }

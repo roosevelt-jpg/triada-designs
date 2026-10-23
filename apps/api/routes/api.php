@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\AutomationController;
 use App\Http\Controllers\Api\V1\CatalogController;
 use App\Http\Controllers\Api\V1\ChannelIntegrationController;
+use App\Http\Controllers\Api\V1\ChannelTemplateController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\ContentPublishController;
 use App\Http\Controllers\Api\V1\ConversationController;
@@ -104,6 +105,16 @@ Route::prefix('v1')->group(function () {
         Route::post('/integrations/channels/disconnect', [ChannelIntegrationController::class, 'disconnect']);
         Route::post('/integrations/channels/simulate-inbound', [ChannelIntegrationController::class, 'simulateInbound']);
         Route::post('/integrations/channels/webchat-token', [ChannelIntegrationController::class, 'ensureWebchatToken']);
+
+        Route::get('/channel-templates', [ChannelTemplateController::class, 'index']);
+        Route::post('/channel-templates', [ChannelTemplateController::class, 'store']);
+        Route::get('/channel-templates/{templateId}', [ChannelTemplateController::class, 'show']);
+        Route::put('/channel-templates/{templateId}', [ChannelTemplateController::class, 'update']);
+        Route::patch('/channel-templates/{templateId}', [ChannelTemplateController::class, 'update']);
+        Route::post('/channel-templates/{templateId}/submit-review', [ChannelTemplateController::class, 'submitReview']);
+        Route::post('/channel-templates/{templateId}/approve', [ChannelTemplateController::class, 'approve']);
+        Route::post('/channel-templates/{templateId}/reject', [ChannelTemplateController::class, 'reject']);
+        Route::post('/channel-templates/{templateId}/publish', [ChannelTemplateController::class, 'publish']);
 
         Route::get('/settings', [SettingsController::class, 'show']);
         Route::patch('/settings', [SettingsController::class, 'update']);

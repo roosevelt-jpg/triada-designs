@@ -20,8 +20,86 @@ class AutomationWorkflowSeeder extends Seeder
 
         $workflows = [
             [
+                'name' => 'Jewellery product inquiry',
+                'description' => 'Website / webchat jewellery product inquiry: AI draft reply, notify team, open follow-up. Editable in the visual builder.',
+                'trigger_type' => 'incoming_message',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_incoming',
+                    'nodes' => [
+                        'trigger_incoming' => [
+                            'type' => 'trigger',
+                            'label' => 'Incoming website chat',
+                            'config' => ['trigger_type' => 'incoming_message'],
+                            'next' => 'cond_product',
+                        ],
+                        'cond_product' => [
+                            'type' => 'condition',
+                            'label' => 'Jewellery inquiry?',
+                            'config' => [
+                                'field' => 'intent',
+                                'operator' => 'equals',
+                                'value' => 'product_inquiry',
+                            ],
+                            'next_true' => 'act_ai_reply',
+                            'next_false' => 'act_handoff_task',
+                        ],
+                        'act_ai_reply' => [
+                            'type' => 'action',
+                            'label' => 'AI jewellery reply',
+                            'config' => [
+                                'action_type' => 'ai_reply',
+                                'template' => 'Thank you for your interest in Triada Designs jewellery. Share the piece, metal preference, and size — a specialist will confirm availability.',
+                            ],
+                            'next' => 'act_notify',
+                        ],
+                        'act_notify' => [
+                            'type' => 'action',
+                            'label' => 'Notify team',
+                            'config' => [
+                                'action_type' => 'notify_team',
+                                'message' => 'New jewellery product inquiry needs review.',
+                            ],
+                            'next' => 'act_task',
+                        ],
+                        'act_task' => [
+                            'type' => 'action',
+                            'label' => 'Create follow-up task',
+                            'config' => [
+                                'action_type' => 'create_task',
+                                'type' => 'follow_up',
+                                'title' => 'Respond to jewellery inquiry',
+                                'description' => 'Confirm availability, materials, and sizing for the requested piece.',
+                            ],
+                            'next' => 'end_ok',
+                        ],
+                        'act_handoff_task' => [
+                            'type' => 'action',
+                            'label' => 'Queue general follow-up',
+                            'config' => [
+                                'action_type' => 'create_task',
+                                'type' => 'follow_up',
+                                'title' => 'Review non-product inquiry',
+                            ],
+                            'next' => 'handoff',
+                        ],
+                        'handoff' => [
+                            'type' => 'human_handoff',
+                            'label' => 'Assign human',
+                            'config' => ['reason' => 'Intent is not a jewellery product inquiry'],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => [
+                            'type' => 'end',
+                            'label' => 'Done',
+                            'config' => [],
+                        ],
+                    ],
+                ],
+            ],
+            [
                 'name' => 'Incoming sales inquiry',
-                'description' => 'When a webchat product inquiry arrives, draft a reply, notify the team, and open a follow-up task.',
+                'description' => 'Legacy alias kept for tests — mirrors jewellery product inquiry on webchat.',
                 'trigger_type' => 'incoming_message',
                 'status' => 'active',
                 'definition' => [
@@ -288,6 +366,207 @@ class AutomationWorkflowSeeder extends Seeder
                                 'action_type' => 'create_task',
                                 'type' => 'sales',
                                 'title' => 'Call qualified lead',
+                            ],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => [
+                            'type' => 'end',
+                            'label' => 'Done',
+                            'config' => [],
+                        ],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'WhatsApp jewellery follow-up',
+                'description' => 'After a delay, notify ops to send the approved WhatsApp jewellery follow-up template (never free-form outside the service window).',
+                'trigger_type' => 'follow_up_due',
+                'status' => 'draft',
+                'definition' => [
+                    'entry' => 'trigger_followup',
+                    'nodes' => [
+                        'trigger_followup' => [
+                            'type' => 'trigger',
+                            'label' => 'Follow-up due',
+                            'config' => ['trigger_type' => 'follow_up_due'],
+                            'next' => 'delay_wait',
+                        ],
+                        'delay_wait' => [
+                            'type' => 'delay',
+                            'label' => 'Wait 24h',
+                            'config' => ['seconds' => 86400],
+                            'next' => 'act_publish_tpl',
+                        ],
+                        'act_publish_tpl' => [
+                            'type' => 'action',
+                            'label' => 'Publish WA template',
+                            'config' => [
+                                'action_type' => 'publish_channel_template',
+                                'platform' => 'whatsapp',
+                                'template_slug' => 'wa-jewellery-follow-up',
+                            ],
+                            'next' => 'act_task',
+                        ],
+                        'act_task' => [
+                            'type' => 'action',
+                            'label' => 'Confirm send task',
+                            'config' => [
+                                'action_type' => 'create_task',
+                                'type' => 'follow_up',
+                                'title' => 'Confirm WhatsApp jewellery follow-up',
+                            ],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => [
+                            'type' => 'end',
+                            'label' => 'Done',
+                            'config' => [],
+                        ],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'IG/FB comment to DM',
+                'description' => 'When a jewellery comment arrives on Instagram or Facebook, draft a DM opener and assign a human if unsure.',
+                'trigger_type' => 'comment_to_dm',
+                'status' => 'draft',
+                'definition' => [
+                    'entry' => 'trigger_comment',
+                    'nodes' => [
+                        'trigger_comment' => [
+                            'type' => 'trigger',
+                            'label' => 'Comment to DM',
+                            'config' => ['trigger_type' => 'comment_to_dm'],
+                            'next' => 'cond_channel',
+                        ],
+                        'cond_channel' => [
+                            'type' => 'condition',
+                            'label' => 'IG or FB?',
+                            'config' => [
+                                'field' => 'channel',
+                                'operator' => 'in',
+                                'value' => ['instagram', 'facebook'],
+                            ],
+                            'next_true' => 'act_draft',
+                            'next_false' => 'end_ok',
+                        ],
+                        'act_draft' => [
+                            'type' => 'action',
+                            'label' => 'Draft DM opener',
+                            'config' => [
+                                'action_type' => 'draft_reply',
+                                'template' => 'Thanks for commenting on our jewellery post. We can help with sizing and availability — reply here.',
+                            ],
+                            'next' => 'act_send',
+                        ],
+                        'act_send' => [
+                            'type' => 'action',
+                            'label' => 'Send eligible DM',
+                            'config' => [
+                                'action_type' => 'send_eligible_reply',
+                                'purpose' => 'transactional',
+                            ],
+                            'next' => 'act_assign',
+                        ],
+                        'act_assign' => [
+                            'type' => 'action',
+                            'label' => 'Assign human',
+                            'config' => [
+                                'action_type' => 'assign_human',
+                            ],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => [
+                            'type' => 'end',
+                            'label' => 'Done',
+                            'config' => [],
+                        ],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'Shopify order notice',
+                'description' => 'When a Shopify order is created, sync order context and queue the approved order-notice template for human/ops send.',
+                'trigger_type' => 'shopify_order_created',
+                'status' => 'draft',
+                'definition' => [
+                    'entry' => 'trigger_order',
+                    'nodes' => [
+                        'trigger_order' => [
+                            'type' => 'trigger',
+                            'label' => 'Shopify order created',
+                            'config' => ['trigger_type' => 'shopify_order_created'],
+                            'next' => 'act_sync',
+                        ],
+                        'act_sync' => [
+                            'type' => 'action',
+                            'label' => 'Sync Shopify order',
+                            'config' => [
+                                'action_type' => 'sync_shopify',
+                                'resource' => 'order',
+                            ],
+                            'next' => 'act_tpl',
+                        ],
+                        'act_tpl' => [
+                            'type' => 'action',
+                            'label' => 'Queue order template',
+                            'config' => [
+                                'action_type' => 'publish_channel_template',
+                                'platform' => 'shopify',
+                                'template_slug' => 'shopify-order-notice',
+                            ],
+                            'next' => 'act_notify',
+                        ],
+                        'act_notify' => [
+                            'type' => 'action',
+                            'label' => 'Notify ops',
+                            'config' => [
+                                'action_type' => 'notify_team',
+                                'message' => 'Shopify jewellery order notice prepared.',
+                            ],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => [
+                            'type' => 'end',
+                            'label' => 'Done',
+                            'config' => [],
+                        ],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'TikTok / LinkedIn post draft',
+                'description' => 'After content is approved, create a distribution task for TikTok or LinkedIn jewellery posts — never auto-publishes public content.',
+                'trigger_type' => 'content_approved',
+                'status' => 'draft',
+                'definition' => [
+                    'entry' => 'trigger_content',
+                    'nodes' => [
+                        'trigger_content' => [
+                            'type' => 'trigger',
+                            'label' => 'Content approved',
+                            'config' => ['trigger_type' => 'content_approved'],
+                            'next' => 'act_draft',
+                        ],
+                        'act_draft' => [
+                            'type' => 'action',
+                            'label' => 'Create channel draft',
+                            'config' => [
+                                'action_type' => 'create_content_draft',
+                                'title' => 'Jewellery social variant',
+                                'channel' => 'tiktok',
+                                'body' => 'Quiet sparkle for everyday rituals. Explore Triada Designs jewellery.',
+                            ],
+                            'next' => 'act_task',
+                        ],
+                        'act_task' => [
+                            'type' => 'action',
+                            'label' => 'Human schedule task',
+                            'config' => [
+                                'action_type' => 'create_task',
+                                'type' => 'content',
+                                'title' => 'Schedule TikTok / LinkedIn jewellery post',
+                                'description' => 'Human must schedule or publish — automation never posts publicly.',
                             ],
                             'next' => 'end_ok',
                         ],
