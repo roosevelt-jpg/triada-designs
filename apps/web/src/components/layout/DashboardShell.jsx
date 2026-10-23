@@ -8,6 +8,7 @@ import { DASHBOARD_NAV } from "@/lib/constants";
 import { apiFetch, getStoredToken, setStoredToken } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 /** @param {{ children: import("react").ReactNode, title: string, description?: string, actions?: import("react").ReactNode }} props */
 export function DashboardShell({ children, title, description, actions }) {
@@ -51,8 +52,8 @@ export function DashboardShell({ children, title, description, actions }) {
           )}
         >
           <div className="mb-8 flex items-center justify-between px-2">
-            <Link href="/overview" className="font-display text-2xl tracking-tight">
-              Triada
+            <Link href="/overview" className="inline-flex items-center gap-2" aria-label="Triada Designs overview">
+              <BrandLogo variant="primary" className="h-9 w-auto max-w-[160px]" />
             </Link>
             <button
               type="button"

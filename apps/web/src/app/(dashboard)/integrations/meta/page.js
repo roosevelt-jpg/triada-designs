@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -202,9 +203,12 @@ export default function MetaIntegrationsPage() {
       title="Meta messaging"
       description="Manage Facebook, Instagram, and WhatsApp from Triada. One-time Meta Developer App / App Review may still require Meta; day-to-day messaging automation stays here."
       actions={
-        <Link href="/integrations" className="text-sm text-brown-dark underline-offset-2 hover:underline">
-          All integrations
-        </Link>
+        <div className="flex items-center gap-4">
+          <BrandLogo variant="symbol" className="h-9 w-9" />
+          <Link href="/integrations" className="text-sm text-brown-dark underline-offset-2 hover:underline">
+            All integrations
+          </Link>
+        </div>
       }
     >
       {loading ? (

@@ -61,11 +61,19 @@ export default function IntegrationsPage() {
   return (
     <DashboardShell
       title="Integrations"
-      description="WordPress, Zoho, and Meta messaging. Local seed/simulator mode runs without credentials; switch INTEGRATION_MODE=live when ready. Never shown as healthy without tokens."
+      description="WordPress, Zoho, Meta, Shopify, and messaging channels. Local seed/simulator mode runs without credentials; switch INTEGRATION_MODE=live when ready. Never shown as healthy without tokens."
       actions={
-        <Link href="/integrations/meta">
-          <Button>Meta messaging hub</Button>
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/integrations/meta">
+            <Button>Meta hub</Button>
+          </Link>
+          <Link href="/integrations/shopify">
+            <Button variant="secondary">Shopify</Button>
+          </Link>
+          <Link href="/integrations/channels">
+            <Button variant="secondary">Channels</Button>
+          </Link>
+        </div>
       }
     >
       {loading ? (

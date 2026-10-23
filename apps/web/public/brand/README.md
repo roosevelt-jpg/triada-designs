@@ -1,12 +1,14 @@
 # Brand assets
 
-Place approved Triada Designs logo files here when supplied:
+Proposed Triada Designs mark/wordmark system matching ivory / sand / brown / champagne tokens from brand guidelines.
 
-- triada-logo-primary.svg
-- triada-logo-dark.svg
-- triada-logo-light.svg
-- triada-symbol.svg
-- triada-wordmark.svg
-- triada-favicon.svg
+| File | Use |
+|---|---|
+| `triada-logo-primary.svg` | Default admin UI (login, shell) |
+| `triada-logo-dark.svg` | Light backgrounds needing stronger mark contrast |
+| `triada-logo-light.svg` | Dark / brown hero panels (Meta hub, login aside) |
+| `triada-symbol.svg` | Compact mark |
+| `triada-wordmark.svg` | Text-only lockup |
+| `triada-favicon.svg` | Favicon / PWA |
 
-Until official artwork arrives, the marketing UI uses a typographic wordmark set in Cormorant Garamond.
+**Status:** Proposed until the brand owner supplies official vector artwork. Do not claim these as historical brand assets.

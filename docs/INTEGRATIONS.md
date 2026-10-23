@@ -106,10 +106,54 @@ WHATSAPP_ACCESS_TOKEN=
 
 **UI:** `/integrations/meta` — day-to-day Meta messaging ops. One-time Developer App / App Review may still require Meta once.
 
-## Shopify (scaffolded)
+## Shopify
 
-Config keys exist; product records are local until a secure OAuth connection and scopes are completed in a later milestone. Status remains **disconnected**. Do not claim live Shopify sync until authorized and tested.
+**Services:** `App\Services\Commerce\Shopify\ShopifyClient`, `ShopifySyncService`
+
+**Capabilities**
+
+- Connect / disconnect (paste Admin API token or OAuth scaffold URL when `SHOPIFY_CLIENT_ID` set)
+- Product + order sync (local simulator fixtures when credentials absent)
+- Webhook ingest `POST /api/webhooks/shopify` with HMAC verification when secret set
+- Admin UI: `/integrations/shopify`
+
+**Env:** `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `SHOPIFY_REDIRECT_URI`, `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_ACCESS_TOKEN`, `SHOPIFY_WEBHOOK_SECRET`
+
+Status stays **disconnected** / **awaiting_credentials** until live tokens + `INTEGRATION_MODE=live`. Never claim healthy without that.
+
+## Telegram / TikTok / Email / Webchat
+
+**Services:** `App\Services\Messaging\Channels\*`
+
+| Channel | Webhook | Admin |
+|---|---|---|
+| Telegram | `POST /api/webhooks/telegram` | `/integrations/channels` |
+| TikTok | `POST /api/webhooks/tiktok` | `/integrations/channels` |
+| Email | `POST /api/webhooks/email` | `/integrations/channels` |
+| Webchat | Public `POST /api/v1/webchat/messages` + embed `/widget/chat.js` | token ensure on channels page |
+
+Local inbound simulator: `POST /api/v1/integrations/channels/simulate-inbound`.
+
+## AI orchestration
+
+**Adapter:** `LlmAdapterInterface` → `LocalHeuristicLlmAdapter` (default) or `HttpLlmAdapter` when `LLM_API_KEY` + live mode.
+
+**Orchestrator:** classify / draft / qualify / escalate; wired into Meta inbound + channel inbound + automation `draft_reply` / `ai_*` actions.
+
+**Admin:** `/agents` — enable/pause, prompts, test run, `ai_runs` activity.
+
+## Content publishing
+
+**Adapters:** WordPress + Meta page via `ContentPublishService`.
+
+Gates: human approval + approval_version check before publish. UI: Content Studio + Calendar + publication logs.
+
+## Meta App Review
+
+See `docs/meta/APP_REVIEW_CHECKLIST.md`.
 
 ## Honesty policy
 
-Local fallback responses are labeled `source: seeded` / `local` / `awaiting_credentials`. Live failures surface as `status: error` with a message—never silent fake success presented as production connectivity. Meta never reports healthy without credentials and `INTEGRATION_MODE=live`.
+Local fallback responses are labeled `source: seeded` / `local` / `awaiting_credentials`. Live failures surface as `status: error` with a message—never silent fake success presented as production connectivity. Meta/Shopify/LLM never report healthy without credentials and `INTEGRATION_MODE=live`.
+
+Gap audit cross-link (Agent Store): `internal/spec-implementation-gap-audit.md` · fill notes: `internal/remaining-gaps-fill.md`.

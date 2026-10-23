@@ -135,21 +135,24 @@ INTEGRATION_MODE=local   # set live only with real tokens
 - Simulate inbound: UI simulator or `POST /api/v1/integrations/meta/simulate-inbound`
 - Emergency pauses: Settings → outbound / automations
 
+## Shopify / channels / AI / publish (local simulators)
+
+| Area | How to try |
+|---|---|
+| Shopify | `/integrations/shopify` → Sync products now (local fixtures) |
+| Telegram/TikTok/Email/Webchat | `/integrations/channels` → Simulate inbound |
+| Webchat embed | `/widget/chat.js` + token `wc_triada_local_widget` → `POST /api/v1/webchat/messages` |
+| AI agents | `/agents` → Test run (local heuristic until `LLM_API_KEY`) |
+| Content publish | Content Studio → Approve → Publish WordPress/Meta (approval version gate) |
+| Meta App Review notes | `docs/meta/APP_REVIEW_CHECKLIST.md` |
+| AWS/Vercel proof | `./scripts/verify-aws-dry-run.sh`, `apps/web/vercel.json`, `infrastructure/aws/` |
+| e2e / a11y | `cd apps/web && npm run test:e2e` / `npm run test:a11y` (Playwright; skip if browsers fail to install) |
+
+Status language: **local / seeded / live / disconnected / awaiting credentials** — Meta/Shopify/LLM never shown healthy without real tokens + `INTEGRATION_MODE=live`.
+
 ## Milestone status
 
-This repository ships a **usable production-oriented slice** (not full E2E of the implementation spec):
-
-- Auth (Sanctum), workspace/roles seed via `TriadaWorkspaceSeeder`
-- Dashboard overview with persisted metrics
-- Unified inbox + human takeover + Meta channel filters
-- Contacts, leads, opportunities, products, services, content approval
-- WordPress + Zoho modules with local seed / live modes
-- Meta messaging control plane + local simulator (credentials later)
-- Automation runtime + Meta-aware workflows + JS builder
-- Working shells: agents, knowledge, calendar, campaigns, analytics, team, audit logs, settings
-- Brand design system (ivory/sand/brown, Cormorant + DM Sans)
-
-Later milestones: live Meta App Review + tokens, Shopify sync, full Content Studio publishing adapters, AI orchestration, AWS production hardening.
+Production-oriented platform slice with simulators for all major modules. Still blocked on real Meta App Review tokens, Shopify OAuth shop, LLM key, Telegram/TikTok/email provider accounts, and AWS/Vercel account deploy — configs and local verify scripts are shipped.
 
 ## Docs
 
@@ -158,3 +161,4 @@ Later milestones: live Meta App Review + tokens, Shopify sync, full Content Stud
 - `docs/DATABASE_SCHEMA.md`
 - `docs/SECURITY.md`
 - `docs/DEPLOYMENT.md`
+- `docs/meta/APP_REVIEW_CHECKLIST.md`

@@ -8,6 +8,7 @@ use App\Models\Lead;
 use App\Models\Message;
 use App\Models\Task;
 use App\Models\Workspace;
+use App\Services\AI\AiOrchestrator;
 use App\Services\CRM\Zoho\ZohoCrmClient;
 use App\Services\Messaging\DTOs\OutboundMessage;
 use App\Services\Messaging\Meta\MetaChannelRegistry;
@@ -20,6 +21,7 @@ class ActionExecutor
         protected ZohoCrmClient $zoho,
         protected MetaChannelRegistry $metaChannels,
         protected OutboundEligibility $eligibility,
+        protected AiOrchestrator $ai,
     ) {
     }
 
@@ -41,7 +43,10 @@ class ActionExecutor
             'assign_conversation' => $this->assignConversation($workspace, $config, $context, $dryRun),
             'add_tag' => $this->addTag($config, $context, $dryRun),
             'notify_team' => $this->notifyTeam($config, $context, $dryRun),
-            'draft_reply' => $this->draftReply($config, $context, $dryRun),
+            'draft_reply' => $this->draftReply($workspace, $config, $context, $dryRun),
+            'ai_classify' => $this->aiAction($workspace, 'support', 'classify', $context, $dryRun),
+            'ai_qualify' => $this->aiAction($workspace, 'lead_qualification', 'qualify', $context, $dryRun),
+            'ai_escalate' => $this->aiAction($workspace, 'support', 'escalate', $context, $dryRun),
             'send_eligible_reply' => $this->sendEligibleReply($workspace, $config, $context, $dryRun),
             'create_content_draft' => $this->createContentDraft($workspace, $config, $context, $dryRun),
             'sync_zoho_lead' => $this->syncZohoLead($workspace, $context, $dryRun),
@@ -175,12 +180,41 @@ class ActionExecutor
         return ['ok' => true, 'result' => $notification];
     }
 
-    protected function draftReply(array $config, array &$context, bool $dryRun): array
+    protected function draftReply(Workspace $workspace, array $config, array &$context, bool $dryRun): array
     {
+        $message = (string) ($context['message_body'] ?? $context['body'] ?? $context['message'] ?? '');
+        $useAi = (bool) ($config['use_ai'] ?? true);
+
+        if ($useAi && $message !== '') {
+            $result = $this->ai->runAgent($workspace, (string) ($config['agent_key'] ?? 'support'), 'draft_reply', [
+                'message' => $message,
+                'channel' => $context['channel'] ?? 'webchat',
+                'conversation_id' => $context['conversation_id'] ?? null,
+                'contact_id' => $context['contact_id'] ?? null,
+                'dry_run' => $dryRun,
+            ]);
+
+            $draft = [
+                'body' => (string) ($result['text'] ?? $config['template'] ?? ''),
+                'ai_generated' => true,
+                'provider' => $result['provider'] ?? 'local_heuristic',
+                'ai_run_id' => $result['ai_run_id'] ?? null,
+                'channel' => $context['channel'] ?? 'webchat',
+            ];
+
+            if ($dryRun) {
+                return ['ok' => true, 'dry_run' => true, 'result' => $draft];
+            }
+
+            $context['draft_reply'] = $draft;
+
+            return ['ok' => (bool) ($result['ok'] ?? false), 'result' => $draft];
+        }
+
         $template = (string) ($config['template'] ?? 'Thanks for reaching out. A Triada Designs specialist will help shortly.');
         $draft = [
             'body' => $template,
-            'ai_generated' => true,
+            'ai_generated' => false,
             'channel' => $context['channel'] ?? 'webchat',
         ];
 
@@ -191,6 +225,33 @@ class ActionExecutor
         $context['draft_reply'] = $draft;
 
         return ['ok' => true, 'result' => $draft];
+    }
+
+    protected function aiAction(
+        Workspace $workspace,
+        string $agentKey,
+        string $purpose,
+        array &$context,
+        bool $dryRun
+    ): array {
+        $result = $this->ai->runAgent($workspace, $agentKey, $purpose, array_merge($context, [
+            'message' => $context['message_body'] ?? $context['body'] ?? $context['message'] ?? '',
+            'dry_run' => $dryRun,
+        ]));
+
+        if (! $dryRun && ($result['ok'] ?? false)) {
+            $context['ai_'.$purpose] = $result['parsed'] ?? $result;
+            if (! empty($result['side_effects']['lead_id'])) {
+                $context['lead_id'] = $result['side_effects']['lead_id'];
+            }
+        }
+
+        return [
+            'ok' => (bool) ($result['ok'] ?? false),
+            'dry_run' => $dryRun,
+            'result' => $result,
+            'error' => $result['error'] ?? null,
+        ];
     }
 
     protected function sendEligibleReply(Workspace $workspace, array $config, array &$context, bool $dryRun): array

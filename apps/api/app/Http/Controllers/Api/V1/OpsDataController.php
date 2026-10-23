@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\AgentConfig;
+use App\Models\AiRun;
 use App\Models\AuditLog;
 use App\Models\Contact;
 use App\Models\ContentItem;
@@ -41,6 +42,8 @@ class OpsDataController extends Controller
             'status' => ['sometimes', 'in:active,paused,draft'],
             'paused' => ['sometimes', 'boolean'],
             'config' => ['sometimes', 'array'],
+            'description' => ['sometimes', 'string', 'max:2000'],
+            'name' => ['sometimes', 'string', 'max:255'],
         ]);
 
         $agent = AgentConfig::query()
@@ -122,6 +125,9 @@ class OpsDataController extends Controller
                 'opportunities' => Opportunity::query()->where('workspace_id', $workspaceId)->count(),
                 'content_items' => ContentItem::query()->where('workspace_id', $workspaceId)->count(),
                 'human_takeovers' => Conversation::query()->where('workspace_id', $workspaceId)->where('automation_mode', 'human')->count(),
+                'ai_runs' => AiRun::query()->where('workspace_id', $workspaceId)->count(),
+                'ai_prompt_tokens' => (int) AiRun::query()->where('workspace_id', $workspaceId)->sum('prompt_tokens'),
+                'ai_completion_tokens' => (int) AiRun::query()->where('workspace_id', $workspaceId)->sum('completion_tokens'),
             ],
             'conversations_by_channel' => $byChannel,
             'notes' => [

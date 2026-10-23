@@ -23,6 +23,8 @@ class ContentItem extends Model
         'channel',
         'scheduled_for',
         'campaign_key',
+        'published_at',
+        'publish_metadata',
     ];
 
     protected function casts(): array
@@ -30,6 +32,8 @@ class ContentItem extends Model
         return [
             'approved_at' => 'datetime',
             'scheduled_for' => 'datetime',
+            'published_at' => 'datetime',
+            'publish_metadata' => 'array',
         ];
     }
 }

@@ -1,0 +1,36 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Triada Designs API skeleton (replace ACCOUNT placeholders before deploy)
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: production
+  OpsFrontendUrl:
+    Type: String
+    Default: https://ops.triada-designs.com
+
+Resources:
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/triada-api-${EnvironmentName}
+      RetentionInDays: 30
+
+  WorkerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/triada-worker-${EnvironmentName}
+      RetentionInDays: 30
+
+  # Placeholder notes — expand with VPC, ALB, ECS Cluster/Service, RDS, Redis in account-specific stacks.
+  ConfigNote:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /triada/${EnvironmentName}/frontend-url
+      Type: String
+      Value: !Ref OpsFrontendUrl
+      Description: FRONTEND_URL for Laravel CORS / Sanctum
+
+Outputs:
+  FrontendUrlParameter:
+    Value: !Ref ConfigNote

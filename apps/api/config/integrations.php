@@ -39,7 +39,38 @@ return [
         'client_secret' => env('SHOPIFY_CLIENT_SECRET'),
         'redirect_uri' => env('SHOPIFY_REDIRECT_URI'),
         'api_version' => env('SHOPIFY_API_VERSION', '2025-01'),
+        'shop_domain' => env('SHOPIFY_SHOP_DOMAIN'),
+        'access_token' => env('SHOPIFY_ACCESS_TOKEN'),
+        'webhook_secret' => env('SHOPIFY_WEBHOOK_SECRET'),
+        'scopes' => env('SHOPIFY_SCOPES', 'read_products,read_orders,read_inventory'),
+        'timeout' => (int) env('SHOPIFY_TIMEOUT', 20),
     ],
+
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
+    ],
+
+    'tiktok' => [
+        'access_token' => env('TIKTOK_ACCESS_TOKEN'),
+        'webhook_secret' => env('TIKTOK_WEBHOOK_SECRET'),
+    ],
+
+    'email' => [
+        'provider' => env('EMAIL_CHANNEL_PROVIDER', 'log'),
+        'api_key' => env('EMAIL_CHANNEL_API_KEY'),
+        'from_address' => env('EMAIL_CHANNEL_FROM', env('MAIL_FROM_ADDRESS')),
+        'webhook_secret' => env('EMAIL_CHANNEL_WEBHOOK_SECRET'),
+    ],
+
+    'llm' => [
+        'provider' => env('LLM_PROVIDER', 'openai_compatible'),
+        'api_key' => env('LLM_API_KEY'),
+        'model' => env('LLM_MODEL', 'gpt-4o-mini'),
+        'base_url' => env('LLM_BASE_URL', 'https://api.openai.com/v1'),
+        'timeout' => (int) env('LLM_TIMEOUT', 30),
+    ],
+
 
     /*
     |--------------------------------------------------------------------------

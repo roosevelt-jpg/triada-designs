@@ -10,6 +10,7 @@ use App\Models\Integration;
 use App\Models\Message;
 use App\Models\WebhookEvent;
 use App\Models\Workspace;
+use App\Services\AI\AiOrchestrator;
 use App\Services\Automations\WorkflowExecutor;
 use App\Services\Messaging\DTOs\NormalizedMessage;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,7 @@ class MetaInboundProcessor
     public function __construct(
         protected MetaChannelRegistry $registry,
         protected WorkflowExecutor $workflows,
+        protected AiOrchestrator $ai,
     ) {
     }
 
@@ -72,10 +74,29 @@ class MetaInboundProcessor
                 continue;
             }
 
-            $run = $this->maybeRunAutomation($workspace, $channel, $result, $item);
+            $aiResult = null;
+            try {
+                $aiResult = $this->ai->processInbound($workspace, [
+                    'message' => $item->body,
+                    'channel' => $channel,
+                    'conversation_id' => $result['conversation']['id'] ?? null,
+                    'contact_id' => $result['contact']['id'] ?? null,
+                ]);
+            } catch (\Throwable $e) {
+                $aiResult = ['ok' => false, 'error' => $e->getMessage()];
+            }
+
+            $run = $this->maybeRunAutomation($workspace, $channel, $result, $item, $aiResult);
             if ($run) {
                 $automations[] = $run;
             }
+
+            $result['ai'] = [
+                'intent' => $aiResult['intent'] ?? null,
+                'suggested_reply' => $aiResult['suggested_reply'] ?? null,
+                'needs_human' => $aiResult['needs_human'] ?? false,
+            ];
+            $stored[array_key_last($stored)] = $result;
         }
 
         return [
@@ -248,7 +269,8 @@ class MetaInboundProcessor
         Workspace $workspace,
         string $channel,
         array $persisted,
-        NormalizedMessage $item
+        NormalizedMessage $item,
+        ?array $aiResult = null
     ): ?array {
         $trigger = in_array($channel, ['facebook', 'instagram', 'whatsapp'], true)
             ? 'incoming_meta_message'
@@ -266,12 +288,14 @@ class MetaInboundProcessor
 
         $context = [
             'channel' => $channel,
-            'intent' => 'product_inquiry',
+            'intent' => $aiResult['intent'] ?? 'product_inquiry',
             'automation_mode' => $persisted['conversation']['automation_mode'] ?? 'ai',
             'conversation_id' => $persisted['conversation']['id'] ?? null,
             'contact_id' => $persisted['contact']['id'] ?? null,
             'message_body' => $item->body,
+            'draft_reply' => ['body' => $aiResult['suggested_reply'] ?? null],
             'requires_whatsapp_template' => false,
+            'needs_human' => $aiResult['needs_human'] ?? false,
         ];
 
         try {

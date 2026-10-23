@@ -387,15 +387,68 @@ class TriadaWorkspaceSeeder extends Seeder
                 'role' => 'support',
                 'description' => 'Answers product, order, and policy questions from approved knowledge.',
                 'status' => 'active',
-                'config' => ['channels' => ['webchat', 'facebook', 'instagram', 'whatsapp'], 'escalation' => true],
+                'config' => [
+                    'channels' => ['webchat', 'facebook', 'instagram', 'whatsapp', 'telegram', 'email'],
+                    'escalation' => true,
+                    'system_prompt' => 'Be calm, factual, and escalate complaints. Never invent stock or policies.',
+                ],
             ],
             [
                 'key' => 'sales',
-                'name' => 'Sales qualification agent',
+                'name' => 'Sales agent',
                 'role' => 'sales',
-                'description' => 'Qualifies purchase and consultation intent; creates CRM follow-ups.',
+                'description' => 'Recommends verified products/services and guides purchase or consultation intent.',
                 'status' => 'active',
-                'config' => ['channels' => ['webchat', 'facebook', 'instagram', 'whatsapp'], 'create_leads' => true],
+                'config' => [
+                    'channels' => ['webchat', 'facebook', 'instagram', 'whatsapp', 'telegram'],
+                    'create_leads' => true,
+                    'system_prompt' => 'Consultative, not pushy. Recommend only catalog-backed options.',
+                ],
+            ],
+            [
+                'key' => 'marketing',
+                'name' => 'Marketing agent',
+                'role' => 'marketing',
+                'description' => 'Drafts campaign concepts and channel-ready copy for human approval.',
+                'status' => 'active',
+                'config' => [
+                    'channels' => ['content_studio'],
+                    'system_prompt' => 'Editorial brand voice. No fake urgency or fabricated social proof.',
+                ],
+            ],
+            [
+                'key' => 'content',
+                'name' => 'Content agent',
+                'role' => 'content',
+                'description' => 'Produces captions and creative briefs for Content Studio drafts.',
+                'status' => 'active',
+                'config' => [
+                    'channels' => ['content_studio', 'meta_page', 'wordpress'],
+                    'system_prompt' => 'One core message per draft. Public posts require human approval.',
+                ],
+            ],
+            [
+                'key' => 'lead_qualification',
+                'name' => 'Lead qualification agent',
+                'role' => 'lead_qualification',
+                'description' => 'Scores inbound intent and updates CRM lead stage.',
+                'status' => 'active',
+                'config' => [
+                    'channels' => ['webchat', 'facebook', 'instagram', 'whatsapp', 'telegram', 'email'],
+                    'create_leads' => true,
+                    'system_prompt' => 'Score from explicit purchase/service signals only.',
+                ],
+            ],
+            [
+                'key' => 'sales_ops',
+                'name' => 'Sales ops agent',
+                'role' => 'sales_ops',
+                'description' => 'Creates follow-up tasks, flags SLA risks, and prepares handoffs.',
+                'status' => 'active',
+                'config' => [
+                    'channels' => ['internal'],
+                    'system_prompt' => 'Prefer clear next actions and owners. Do not invent revenue.',
+                ],
             ],
             [
                 'key' => 'meta_messaging',
@@ -409,6 +462,41 @@ class TriadaWorkspaceSeeder extends Seeder
             AgentConfig::query()->updateOrCreate(
                 ['workspace_id' => $workspace->id, 'key' => $agent['key']],
                 $agent
+            );
+        }
+
+        \App\Models\WebchatWidgetToken::query()->firstOrCreate(
+            [
+                'workspace_id' => $workspace->id,
+                'name' => 'Website widget',
+            ],
+            [
+                'public_token' => 'wc_triada_local_widget',
+                'status' => 'active',
+                'rate_limit_per_minute' => 30,
+                'allowed_origins' => ['*'],
+                'metadata' => ['seeded' => true],
+            ]
+        );
+
+        foreach (['telegram', 'tiktok', 'email'] as $provider) {
+            \App\Models\Integration::query()->updateOrCreate(
+                [
+                    'workspace_id' => $workspace->id,
+                    'provider' => $provider,
+                    'external_account_id' => $provider.'-primary',
+                ],
+                [
+                    'display_name' => match ($provider) {
+                        'telegram' => 'Telegram Bot',
+                        'tiktok' => 'TikTok Business Messaging',
+                        'email' => 'Email',
+                        default => ucfirst($provider),
+                    },
+                    'status' => 'awaiting_credentials',
+                    'capabilities' => ['messages.send', 'messages.receive'],
+                    'metadata' => ['seeded' => true],
+                ]
             );
         }
 

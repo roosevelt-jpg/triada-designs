@@ -1,0 +1,33 @@
+{
+  "family": "triada-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/triada-ecs-execution",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/triada-ecs-task",
+  "containerDefinitions": [
+    {
+      "name": "worker",
+      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/triada-api:latest",
+      "essential": true,
+      "command": ["php", "artisan", "queue:work", "--sleep=1", "--tries=3", "--max-time=3600"],
+      "environment": [
+        { "name": "APP_ENV", "value": "production" },
+        { "name": "QUEUE_CONNECTION", "value": "redis" }
+      ],
+      "secrets": [
+        { "name": "APP_KEY", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:triada/app-key" },
+        { "name": "DB_PASSWORD", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:triada/db-password" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/triada-worker",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "worker"
+        }
+      }
+    }
+  ]
+}

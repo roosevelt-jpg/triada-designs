@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { PUBLIC_SITE_URL } from "@/lib/constants";
@@ -47,8 +48,8 @@ export default function LoginPage() {
         <div className="grid w-full max-w-5xl overflow-hidden rounded-xl border border-line bg-white shadow-popover md:grid-cols-[1.1fr_0.9fr]">
           <div className="hidden bg-[linear-gradient(150deg,#70563f,#9a7958_45%,#c7ae8a)] p-10 text-white md:flex md:flex-col md:justify-between">
             <div>
-              <p className="font-display text-4xl">Triada Designs</p>
-              <p className="mt-2 text-sm uppercase tracking-[0.16em] text-white/70">
+              <BrandLogo variant="light" className="h-12 w-auto max-w-[240px]" />
+              <p className="mt-4 text-sm uppercase tracking-[0.16em] text-white/70">
                 Admin · Operations
               </p>
               <p className="mt-4 max-w-sm text-sm text-white/85">
@@ -62,10 +63,10 @@ export default function LoginPage() {
           </div>
 
           <div className="p-8 md:p-10">
-            <p className="font-display text-3xl text-ink md:hidden">
-              Triada Designs
-            </p>
-            <h1 className="mt-4 font-sans text-xl font-medium md:mt-0">
+            <div className="md:hidden">
+              <BrandLogo variant="primary" className="h-10 w-auto" />
+            </div>
+            <h1 className="mt-4 font-sans text-xl font-medium">
               Admin sign in
             </h1>
             <p className="mt-2 text-sm text-muted">
