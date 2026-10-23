@@ -68,10 +68,48 @@ ZOHO_WEBHOOK_SECRET=
 - `POST /api/webhooks/zoho`
 - `GET /api/v1/integrations/health`
 
+## Meta messaging (Facebook / Instagram / WhatsApp)
+
+**Adapters:** `App\Services\Messaging\Meta\*` implementing `MessagingChannelInterface`
+
+**Capabilities**
+
+- Dashboard connect / disconnect (paste tokens later)
+- Webhook verify + ingest (`/api/webhooks/meta`, `/api/webhooks/whatsapp`)
+- Inbound normalize → conversations/messages with idempotency
+- Outbound with eligibility (pause, takeover, consent, WA window/templates)
+- Local simulator when credentials absent (never reports `healthy` without live mode + tokens)
+- Accounts list (seeded Pages/IG/WABA until live)
+
+**Env**
+
+```bash
+META_APP_ID=
+META_APP_SECRET=
+META_VERIFY_TOKEN=triada-local-verify
+META_WEBHOOK_SECRET=
+META_PAGE_ACCESS_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_BUSINESS_ACCOUNT_ID=
+WHATSAPP_ACCESS_TOKEN=
+```
+
+**Routes**
+
+- `GET /api/v1/integrations/meta/status`
+- `POST /api/v1/integrations/meta/connect|disconnect|test-send|simulate-inbound`
+- `GET /api/v1/integrations/meta/accounts|webhook`
+- `POST /api/v1/integrations/meta/webhook/subscribe`
+- `POST /api/v1/integrations/meta/verify-token/rotate`
+- `GET|POST /api/webhooks/meta`
+- `GET|POST /api/webhooks/whatsapp`
+
+**UI:** `/integrations/meta` — day-to-day Meta messaging ops. One-time Developer App / App Review may still require Meta once.
+
 ## Shopify (scaffolded)
 
 Config keys exist; product records are local until a secure OAuth connection and scopes are completed in a later milestone. Status remains **disconnected**. Do not claim live Shopify sync until authorized and tested.
 
 ## Honesty policy
 
-Local fallback responses are labeled `source: seeded` and health `status: seeded`. Live failures surface as `status: error` with a message—never silent fake success presented as production connectivity.
+Local fallback responses are labeled `source: seeded` / `local` / `awaiting_credentials`. Live failures surface as `status: error` with a message—never silent fake success presented as production connectivity. Meta never reports healthy without credentials and `INTEGRATION_MODE=live`.
