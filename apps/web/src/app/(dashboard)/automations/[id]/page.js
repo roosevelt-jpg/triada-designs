@@ -37,6 +37,20 @@ function defaultContextFor(triggerType) {
       automation_mode: "ai",
     };
   }
+  if (triggerType === "incoming_meta_message") {
+    return {
+      intent: "product_inquiry",
+      channel: "instagram",
+      automation_mode: "ai",
+    };
+  }
+  if (triggerType === "whatsapp_template_needed") {
+    return {
+      channel: "whatsapp",
+      requires_whatsapp_template: true,
+      automation_mode: "ai",
+    };
+  }
   if (triggerType === "content_approved") {
     return { content_title: "Warm neutrals for spring rituals" };
   }

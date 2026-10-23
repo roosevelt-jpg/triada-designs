@@ -7,6 +7,10 @@ use App\Models\AuditLog;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\User;
+use App\Models\Workspace;
+use App\Services\Messaging\DTOs\OutboundMessage;
+use App\Services\Messaging\Meta\MetaChannelRegistry;
+use App\Services\Messaging\Meta\OutboundEligibility;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,6 +24,7 @@ class ConversationController extends Controller
             ->where('workspace_id', $workspaceId)
             ->with(['contact:id,name,email,preferred_language'])
             ->when($request->string('status')->toString(), fn ($q, $status) => $q->where('status', $status))
+            ->when($request->string('channel')->toString(), fn ($q, $channel) => $q->where('channel', $channel))
             ->orderByDesc('last_message_at')
             ->paginate(30);
 
@@ -47,35 +52,102 @@ class ConversationController extends Controller
         return $this->setMode($request, $conversationId, 'ai', 'conversation.resume_ai');
     }
 
-    public function reply(Request $request, string $conversationId): JsonResponse
-    {
+    public function reply(
+        Request $request,
+        string $conversationId,
+        MetaChannelRegistry $channels,
+        OutboundEligibility $eligibility,
+    ): JsonResponse {
         $workspaceId = $this->workspaceId($request);
+        $workspace = Workspace::query()->findOrFail($workspaceId);
         $data = $request->validate([
             'body' => ['required', 'string', 'max:5000'],
+            'template_name' => ['nullable', 'string', 'max:120'],
+            'purpose' => ['nullable', 'in:transactional,marketing'],
         ]);
 
         $conversation = Conversation::query()
             ->where('workspace_id', $workspaceId)
             ->findOrFail($conversationId);
 
+        $channel = (string) $conversation->channel;
+        $purpose = (string) ($data['purpose'] ?? 'transactional');
+        $check = $eligibility->check(
+            $workspace,
+            $conversation,
+            $channel,
+            $purpose,
+            $data['template_name'] ?? null,
+            [
+                'automation_mode' => 'human',
+                'sender_type' => 'user',
+                'consent' => true,
+            ]
+        );
+
+        // Human staff replies still respect workspace outbound pause + WA template window.
+        if (! $check['eligible'] && in_array($check['reason'], ['outbound_paused', 'whatsapp_template_required', 'consent_required', 'marketing_opt_out'], true)) {
+            return response()->json([
+                'message' => 'Outbound not eligible: '.$check['reason'],
+                'eligibility' => $check,
+            ], 422);
+        }
+
+        $providerMessageId = null;
+        $sendMeta = null;
+        $deliveryStatus = 'sent';
+
+        if (in_array($channel, ['facebook', 'instagram', 'whatsapp'], true)) {
+            $recipient = (string) $conversation->external_conversation_id;
+            if (str_contains($recipient, ':')) {
+                $recipient = explode(':', $recipient)[1] ?? $recipient;
+            }
+
+            $result = $channels->get($channel)->sendMessage(new OutboundMessage(
+                channel: $channel,
+                recipientExternalId: $recipient ?: 'unknown',
+                body: $data['body'],
+                templateName: $data['template_name'] ?? null,
+                purpose: $purpose,
+            ));
+
+            $sendMeta = $result->toArray();
+            $providerMessageId = $result->providerMessageId;
+            $deliveryStatus = $result->ok ? 'sent' : 'failed';
+
+            if (! $result->ok) {
+                return response()->json([
+                    'message' => $result->errorMessage ?: 'Failed to send via Meta adapter',
+                    'result' => $sendMeta,
+                    'eligibility' => $check,
+                ], 422);
+            }
+        }
+
         $message = Message::query()->create([
             'workspace_id' => $workspaceId,
             'conversation_id' => $conversation->id,
+            'provider_message_id' => $providerMessageId,
             'direction' => 'outbound',
             'sender_type' => 'user',
             'sender_id' => (string) $request->user()->id,
             'message_type' => 'text',
             'body' => $data['body'],
-            'delivery_status' => 'sent',
+            'delivery_status' => $deliveryStatus,
             'provider_timestamp' => now(),
+            'metadata' => array_filter([
+                'eligibility' => $check,
+                'send_result' => $sendMeta,
+            ]),
         ]);
 
         $conversation->forceFill([
             'last_message_at' => now(),
             'automation_mode' => 'human',
+            'assigned_user_id' => $request->user()->id,
         ])->save();
 
-        return response()->json($message, 201);
+        return response()->json($message->fresh(), 201);
     }
 
     protected function setMode(Request $request, string $conversationId, string $mode, string $action): JsonResponse

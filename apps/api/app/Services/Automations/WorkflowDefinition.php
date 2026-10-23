@@ -29,6 +29,8 @@ class WorkflowDefinition
 
     public const TRIGGER_TYPES = [
         'incoming_message',
+        'incoming_meta_message',
+        'whatsapp_template_needed',
         'new_contact',
         'lead_qualified',
         'conversation_escalated',

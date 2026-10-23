@@ -12,6 +12,7 @@ import { formatCurrency, formatStage } from "@/lib/formatters";
 
 export default function LeadsPage() {
   const [items, setItems] = useState([]);
+  const [opportunities, setOpportunities] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(null);
@@ -20,8 +21,12 @@ export default function LeadsPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await apiFetch("/v1/leads");
+      const [response, opp] = await Promise.all([
+        apiFetch("/v1/leads"),
+        apiFetch("/v1/opportunities"),
+      ]);
       setItems(response.data || []);
+      setOpportunities(opp.data || []);
     } catch (err) {
       setError(err.message || "Failed to load leads");
     } finally {
@@ -99,6 +104,28 @@ export default function LeadsPage() {
             </article>
           ))}
         </div>
+      ) : null}
+
+      {!loading && !error && opportunities.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="font-display text-2xl">Opportunities</h2>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            {opportunities.map((opp) => (
+              <article key={opp.id} className="surface-card p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-medium">{opp.name}</h3>
+                    <p className="text-sm text-muted">{opp.contact?.name || "—"}</p>
+                  </div>
+                  <Badge tone="brand">{formatStage(opp.stage)}</Badge>
+                </div>
+                <p className="mt-3 text-sm">
+                  {formatCurrency(opp.amount, opp.currency || "USD")} · {opp.source_channel || "—"}
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
       ) : null}
     </DashboardShell>
   );

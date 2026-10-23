@@ -2,12 +2,15 @@
 
 namespace Database\Seeders;
 
+use App\Models\AgentConfig;
 use App\Models\Contact;
 use App\Models\ContentItem;
 use App\Models\Conversation;
 use App\Models\Integration;
+use App\Models\KnowledgeSource;
 use App\Models\Lead;
 use App\Models\Message;
+use App\Models\Opportunity;
 use App\Models\Product;
 use App\Models\Role;
 use App\Models\ServiceOffering;
@@ -72,6 +75,9 @@ class TriadaWorkspaceSeeder extends Seeder
             ['provider' => 'zoho', 'display_name' => 'Zoho CRM', 'status' => 'seeded', 'capabilities' => ['contacts.upsert', 'leads.upsert', 'webhooks']],
             ['provider' => 'shopify', 'display_name' => 'Shopify', 'status' => 'disconnected', 'capabilities' => ['products.read', 'orders.read']],
             ['provider' => 'webchat', 'display_name' => 'Website Live Chat', 'status' => 'seeded', 'capabilities' => ['messages.send', 'messages.receive']],
+            ['provider' => 'facebook', 'display_name' => 'Facebook Messenger', 'status' => 'awaiting_credentials', 'capabilities' => ['messages.send', 'messages.receive', 'webhooks', 'pages']],
+            ['provider' => 'instagram', 'display_name' => 'Instagram Messaging', 'status' => 'awaiting_credentials', 'capabilities' => ['messages.send', 'messages.receive', 'webhooks']],
+            ['provider' => 'whatsapp', 'display_name' => 'WhatsApp Cloud API', 'status' => 'awaiting_credentials', 'capabilities' => ['messages.send', 'messages.receive', 'templates', 'webhooks']],
         ] as $row) {
             Integration::query()->updateOrCreate(
                 [
@@ -85,9 +91,20 @@ class TriadaWorkspaceSeeder extends Seeder
                     'capabilities' => $row['capabilities'],
                     'granted_scopes' => [],
                     'last_health_check_at' => now(),
+                    'metadata' => in_array($row['provider'], ['facebook', 'instagram', 'whatsapp'], true)
+                        ? ['webhook_subscribed' => false, 'connected_via' => 'triada_dashboard']
+                        : null,
                 ]
             );
         }
+
+        $workspace->forceFill([
+            'settings' => array_merge($workspace->settings ?? [], [
+                'meta_verify_token' => 'triada-local-verify',
+                'brand' => 'Triada Designs',
+                'public_site' => 'https://triada-designs.com',
+            ]),
+        ])->save();
 
         $amelia = Contact::query()->updateOrCreate(
             [
@@ -290,7 +307,160 @@ class TriadaWorkspaceSeeder extends Seeder
                 'created_by' => $user->id,
                 'body' => 'Soft light, quiet materials, and a ritual that feels personal. Explore the collection at Triada Designs.',
                 'channel' => 'instagram',
+                'scheduled_for' => now()->addDays(3),
+                'campaign_key' => 'spring-rituals',
                 'approval_version' => 0,
+            ]
+        );
+
+        ContentItem::query()->updateOrCreate(
+            [
+                'workspace_id' => $workspace->id,
+                'title' => 'Barrier cream evening ritual',
+            ],
+            [
+                'content_type' => 'campaign',
+                'objective' => 'conversion',
+                'status' => 'approved',
+                'created_by' => $user->id,
+                'approved_by' => $user->id,
+                'approved_at' => now()->subDay(),
+                'body' => 'An evening ritual for calm skin. Human-approved caption ready for scheduled publish.',
+                'channel' => 'facebook',
+                'scheduled_for' => now()->addDays(5),
+                'campaign_key' => 'spring-rituals',
+                'approval_version' => 1,
+            ]
+        );
+
+        $sofia = Contact::query()->updateOrCreate(
+            [
+                'workspace_id' => $workspace->id,
+                'email_normalized' => 'sofia.meta@example.com',
+            ],
+            [
+                'name' => 'Sofia Reyes',
+                'email' => 'sofia.meta@example.com',
+                'preferred_language' => 'en',
+                'lifecycle_status' => 'lead',
+                'source' => 'instagram',
+            ]
+        );
+
+        $igConversation = Conversation::query()->updateOrCreate(
+            [
+                'workspace_id' => $workspace->id,
+                'external_conversation_id' => 'seed-ig-triada:seed-ig-user-sofia',
+            ],
+            [
+                'contact_id' => $sofia->id,
+                'channel' => 'instagram',
+                'status' => 'open',
+                'priority' => 'normal',
+                'automation_mode' => 'ai',
+                'detected_language' => 'en',
+                'last_message_at' => now()->subMinutes(25),
+                'last_inbound_at' => now()->subMinutes(25),
+            ]
+        );
+
+        if ($igConversation->messages()->count() === 0) {
+            Message::query()->create([
+                'workspace_id' => $workspace->id,
+                'conversation_id' => $igConversation->id,
+                'provider_message_id' => 'seed-ig-msg-1',
+                'direction' => 'inbound',
+                'sender_type' => 'contact',
+                'sender_id' => $sofia->id,
+                'message_type' => 'text',
+                'body' => 'Do you ship the barrier cream internationally?',
+                'detected_language' => 'en',
+                'delivery_status' => 'received',
+                'provider_timestamp' => now()->subMinutes(25),
+            ]);
+        }
+
+        foreach ([
+            [
+                'key' => 'support',
+                'name' => 'Support agent',
+                'role' => 'support',
+                'description' => 'Answers product, order, and policy questions from approved knowledge.',
+                'status' => 'active',
+                'config' => ['channels' => ['webchat', 'facebook', 'instagram', 'whatsapp'], 'escalation' => true],
+            ],
+            [
+                'key' => 'sales',
+                'name' => 'Sales qualification agent',
+                'role' => 'sales',
+                'description' => 'Qualifies purchase and consultation intent; creates CRM follow-ups.',
+                'status' => 'active',
+                'config' => ['channels' => ['webchat', 'facebook', 'instagram', 'whatsapp'], 'create_leads' => true],
+            ],
+            [
+                'key' => 'meta_messaging',
+                'name' => 'Meta messaging agent',
+                'role' => 'channel',
+                'description' => 'Handles Facebook, Instagram, and WhatsApp replies with eligibility checks.',
+                'status' => 'paused',
+                'config' => ['channels' => ['facebook', 'instagram', 'whatsapp'], 'respect_takeover' => true],
+            ],
+        ] as $agent) {
+            AgentConfig::query()->updateOrCreate(
+                ['workspace_id' => $workspace->id, 'key' => $agent['key']],
+                $agent
+            );
+        }
+
+        foreach ([
+            [
+                'title' => 'Shipping and delivery',
+                'source_type' => 'faq',
+                'body' => 'Triada Designs ships to supported regions listed on the public site. Delivery estimates are confirmed at checkout once Shopify is connected.',
+                'tags' => ['shipping', 'faq'],
+            ],
+            [
+                'title' => 'Returns policy',
+                'source_type' => 'policy',
+                'body' => 'Unopened products may be returned within the window published on triada-designs.com. Do not invent extended warranties.',
+                'tags' => ['returns', 'policy'],
+            ],
+            [
+                'title' => 'Sensitive skin recommendations',
+                'source_type' => 'faq',
+                'body' => 'Approved recommendations: Gentle Daily Cleanser and Barrier Recovery Cream. No medical claims.',
+                'tags' => ['skincare', 'faq'],
+            ],
+        ] as $source) {
+            KnowledgeSource::query()->updateOrCreate(
+                [
+                    'workspace_id' => $workspace->id,
+                    'title' => $source['title'],
+                ],
+                [
+                    'source_type' => $source['source_type'],
+                    'status' => 'published',
+                    'body' => $source['body'],
+                    'language' => 'en',
+                    'tags' => $source['tags'],
+                ]
+            );
+        }
+
+        Opportunity::query()->updateOrCreate(
+            [
+                'workspace_id' => $workspace->id,
+                'name' => 'Amelia — consultation + barrier set',
+            ],
+            [
+                'contact_id' => $amelia->id,
+                'name' => 'Amelia — consultation + barrier set',
+                'stage' => 'proposal',
+                'amount' => 180,
+                'currency' => 'USD',
+                'source_channel' => 'webchat',
+                'owner_user_id' => $user->id,
+                'expected_close_at' => now()->addDays(10),
             ]
         );
     }

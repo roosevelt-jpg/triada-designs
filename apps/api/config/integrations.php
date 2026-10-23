@@ -40,4 +40,27 @@ return [
         'redirect_uri' => env('SHOPIFY_REDIRECT_URI'),
         'api_version' => env('SHOPIFY_API_VERSION', '2025-01'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Meta (Facebook Messenger, Instagram Messaging, WhatsApp Cloud API)
+    |--------------------------------------------------------------------------
+    |
+    | Leave empty for local simulator mode. INTEGRATION_MODE=live plus tokens
+    | are required before health can report "healthy". Never fake live health.
+    |
+    */
+    'meta' => [
+        'app_id' => env('META_APP_ID'),
+        'app_secret' => env('META_APP_SECRET'),
+        'verify_token' => env('META_VERIFY_TOKEN', 'triada-local-verify'),
+        'webhook_secret' => env('META_WEBHOOK_SECRET'),
+        'page_access_token' => env('META_PAGE_ACCESS_TOKEN'),
+        'graph_version' => env('META_GRAPH_VERSION', 'v21.0'),
+        'graph_base' => env('META_GRAPH_BASE', 'https://graph.facebook.com'),
+        'whatsapp_phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'whatsapp_business_account_id' => env('WHATSAPP_BUSINESS_ACCOUNT_ID'),
+        'whatsapp_access_token' => env('WHATSAPP_ACCESS_TOKEN'),
+        'timeout' => (int) env('META_TIMEOUT', 15),
+    ],
 ];

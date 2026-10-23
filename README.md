@@ -1,6 +1,6 @@
 # Triada Designs — AI Sales & Marketing Operations Platform
 
-Monorepo for the Triada Designs **admin / ops subdomain**: Next.js (JavaScript) staff dashboard with admin login, Laravel REST API, MySQL/Redis-ready infrastructure, and first-class **WordPress** + **Zoho CRM** integration modules.
+Monorepo for the Triada Designs **admin / ops subdomain**: Next.js (JavaScript) staff dashboard with admin login, Laravel REST API, MySQL/Redis-ready infrastructure, first-class **WordPress** + **Zoho CRM** modules, and a **Meta messaging control plane** (Facebook / Instagram / WhatsApp) operable from the dashboard with a local simulator until credentials exist.
 
 | Domain | Role |
 |---|---|
@@ -115,19 +115,41 @@ ZOHO_WEBHOOK_SECRET=long-random-secret
 
 Health endpoint (authenticated): `GET /api/v1/integrations/health`
 
+## Meta messaging (local simulator by default)
+
+Day-to-day Facebook Messenger, Instagram Messaging, and WhatsApp Cloud API ops are managed from **Integrations → Meta messaging** (`/integrations/meta`). Creating a Meta Developer App / App Review may still require Meta once; after that Triada owns connect, webhooks, health, messaging, templates eligibility, automations, pause/resume, and logs.
+
+```bash
+# Optional — leave empty for local simulator (never reports live healthy without tokens)
+META_APP_ID=
+META_APP_SECRET=
+META_VERIFY_TOKEN=triada-local-verify
+META_WEBHOOK_SECRET=
+META_PAGE_ACCESS_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_ACCESS_TOKEN=
+INTEGRATION_MODE=local   # set live only with real tokens
+```
+
+- Webhooks: `GET|POST /api/webhooks/meta`, `GET|POST /api/webhooks/whatsapp`
+- Simulate inbound: UI simulator or `POST /api/v1/integrations/meta/simulate-inbound`
+- Emergency pauses: Settings → outbound / automations
+
 ## Milestone status
 
-This repository ships a **usable foundation slice** (not full E2E of the implementation spec):
+This repository ships a **usable production-oriented slice** (not full E2E of the implementation spec):
 
 - Auth (Sanctum), workspace/roles seed via `TriadaWorkspaceSeeder`
 - Dashboard overview with persisted metrics
-- Unified inbox + human takeover
-- Contacts, leads, products, services, content approval
+- Unified inbox + human takeover + Meta channel filters
+- Contacts, leads, opportunities, products, services, content approval
 - WordPress + Zoho modules with local seed / live modes
-- Automation runtime + JS builder
+- Meta messaging control plane + local simulator (credentials later)
+- Automation runtime + Meta-aware workflows + JS builder
+- Working shells: agents, knowledge, calendar, campaigns, analytics, team, audit logs, settings
 - Brand design system (ivory/sand/brown, Cormorant + DM Sans)
 
-Later milestones: live Meta/WhatsApp channels, Shopify sync, full Content Studio publishing, AI orchestration, AWS production hardening.
+Later milestones: live Meta App Review + tokens, Shopify sync, full Content Studio publishing adapters, AI orchestration, AWS production hardening.
 
 ## Docs
 

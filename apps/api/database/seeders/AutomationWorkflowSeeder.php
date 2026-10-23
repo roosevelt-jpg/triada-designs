@@ -140,6 +140,108 @@ class AutomationWorkflowSeeder extends Seeder
                 ],
             ],
             [
+                'name' => 'Meta incoming message reply',
+                'description' => 'When a Facebook, Instagram, or WhatsApp message arrives, draft and send an eligible reply unless human takeover or outbound pause applies.',
+                'trigger_type' => 'incoming_meta_message',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_meta',
+                    'nodes' => [
+                        'trigger_meta' => [
+                            'type' => 'trigger',
+                            'label' => 'Incoming Meta message',
+                            'config' => ['trigger_type' => 'incoming_meta_message'],
+                            'next' => 'cond_channel',
+                        ],
+                        'cond_channel' => [
+                            'type' => 'condition',
+                            'label' => 'Meta channel?',
+                            'config' => [
+                                'field' => 'channel',
+                                'operator' => 'in',
+                                'value' => ['facebook', 'instagram', 'whatsapp'],
+                            ],
+                            'next_true' => 'act_draft',
+                            'next_false' => 'end_ok',
+                        ],
+                        'act_draft' => [
+                            'type' => 'action',
+                            'label' => 'Draft Meta reply',
+                            'config' => [
+                                'action_type' => 'draft_reply',
+                                'template' => 'Thank you for messaging Triada Designs. A specialist can help with products, shipping, and consultations.',
+                            ],
+                            'next' => 'act_send',
+                        ],
+                        'act_send' => [
+                            'type' => 'action',
+                            'label' => 'Send eligible Meta reply',
+                            'config' => [
+                                'action_type' => 'send_eligible_reply',
+                                'purpose' => 'transactional',
+                            ],
+                            'next' => 'act_notify',
+                        ],
+                        'act_notify' => [
+                            'type' => 'action',
+                            'label' => 'Notify inbox team',
+                            'config' => [
+                                'action_type' => 'notify_team',
+                                'message' => 'Meta channel message processed.',
+                            ],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => [
+                            'type' => 'end',
+                            'label' => 'Done',
+                            'config' => [],
+                        ],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'WhatsApp template needed',
+                'description' => 'When the WhatsApp customer service window is closed, create a task to send an approved template — never force a free-form marketing send.',
+                'trigger_type' => 'whatsapp_template_needed',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_wa_template',
+                    'nodes' => [
+                        'trigger_wa_template' => [
+                            'type' => 'trigger',
+                            'label' => 'WhatsApp template needed',
+                            'config' => ['trigger_type' => 'whatsapp_template_needed'],
+                            'next' => 'act_task',
+                        ],
+                        'act_task' => [
+                            'type' => 'action',
+                            'label' => 'Create template follow-up',
+                            'config' => [
+                                'action_type' => 'create_task',
+                                'type' => 'follow_up',
+                                'title' => 'Send approved WhatsApp template',
+                                'description' => 'Customer service window closed. Choose an approved template from Triada; do not send free-form outside the window.',
+                            ],
+                            'next' => 'act_notify',
+                        ],
+                        'act_notify' => [
+                            'type' => 'action',
+                            'label' => 'Notify ops',
+                            'config' => [
+                                'action_type' => 'notify_team',
+                                'message' => 'WhatsApp template required before outbound.',
+                            ],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => [
+                            'type' => 'end',
+                            'label' => 'Done',
+                            'config' => [],
+                        ],
+                    ],
+                ],
+            ],
+            [
                 'name' => 'Lead qualified → Zoho sync',
                 'description' => 'When a lead is qualified, sync to Zoho (seeded local or live) and open an owner task.',
                 'trigger_type' => 'lead_qualified',

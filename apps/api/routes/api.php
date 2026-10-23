@@ -8,6 +8,11 @@ use App\Http\Controllers\Api\V1\ConversationController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\IntegrationController;
 use App\Http\Controllers\Api\V1\LeadController;
+use App\Http\Controllers\Api\V1\MetaIntegrationController;
+use App\Http\Controllers\Api\V1\OpsDataController;
+use App\Http\Controllers\Api\V1\SettingsController;
+use App\Http\Controllers\Webhooks\MetaWebhookController;
+use App\Http\Controllers\Webhooks\WhatsAppWebhookController;
 use App\Http\Controllers\Webhooks\WordPressWebhookController;
 use App\Http\Controllers\Webhooks\ZohoWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -24,6 +29,11 @@ Route::get('/health', function () {
 Route::prefix('webhooks')->group(function () {
     Route::post('/wordpress', WordPressWebhookController::class);
     Route::post('/zoho', ZohoWebhookController::class);
+
+    Route::get('/meta', [MetaWebhookController::class, 'verify']);
+    Route::post('/meta', [MetaWebhookController::class, 'ingest']);
+    Route::get('/whatsapp', [WhatsAppWebhookController::class, 'verify']);
+    Route::post('/whatsapp', [WhatsAppWebhookController::class, 'ingest']);
 });
 
 Route::prefix('v1')->group(function () {
@@ -57,6 +67,29 @@ Route::prefix('v1')->group(function () {
         Route::get('/integrations/health', [IntegrationController::class, 'health']);
         Route::get('/integrations/wordpress/posts', [IntegrationController::class, 'wordpressPosts']);
         Route::post('/integrations/wordpress/drafts', [IntegrationController::class, 'createWordpressDraft']);
+
+        Route::get('/integrations/meta/status', [MetaIntegrationController::class, 'status']);
+        Route::post('/integrations/meta/connect', [MetaIntegrationController::class, 'connect']);
+        Route::post('/integrations/meta/disconnect', [MetaIntegrationController::class, 'disconnect']);
+        Route::get('/integrations/meta/accounts', [MetaIntegrationController::class, 'accounts']);
+        Route::get('/integrations/meta/webhook', [MetaIntegrationController::class, 'webhook']);
+        Route::post('/integrations/meta/webhook/subscribe', [MetaIntegrationController::class, 'subscribeWebhook']);
+        Route::post('/integrations/meta/verify-token/rotate', [MetaIntegrationController::class, 'rotateVerifyToken']);
+        Route::post('/integrations/meta/test-send', [MetaIntegrationController::class, 'testSend']);
+        Route::post('/integrations/meta/simulate-inbound', [MetaIntegrationController::class, 'simulateInbound']);
+
+        Route::get('/settings', [SettingsController::class, 'show']);
+        Route::patch('/settings', [SettingsController::class, 'update']);
+
+        Route::get('/agents', [OpsDataController::class, 'agents']);
+        Route::patch('/agents/{agentId}', [OpsDataController::class, 'updateAgent']);
+        Route::get('/knowledge', [OpsDataController::class, 'knowledge']);
+        Route::get('/calendar', [OpsDataController::class, 'calendar']);
+        Route::get('/campaigns', [OpsDataController::class, 'campaigns']);
+        Route::get('/analytics', [OpsDataController::class, 'analytics']);
+        Route::get('/team', [OpsDataController::class, 'team']);
+        Route::get('/audit-logs', [OpsDataController::class, 'auditLogs']);
+        Route::get('/opportunities', [OpsDataController::class, 'opportunities']);
 
         Route::get('/automations', [AutomationController::class, 'index']);
         Route::post('/automations', [AutomationController::class, 'store']);

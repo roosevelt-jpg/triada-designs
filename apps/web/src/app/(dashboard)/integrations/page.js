@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
 
 export default function IntegrationsPage() {
@@ -60,7 +61,12 @@ export default function IntegrationsPage() {
   return (
     <DashboardShell
       title="Integrations"
-      description="WordPress and Zoho CRM are first-class. Local seed mode runs without credentials; switch INTEGRATION_MODE=live when ready. Disconnected providers stay disconnected."
+      description="WordPress, Zoho, and Meta messaging. Local seed/simulator mode runs without credentials; switch INTEGRATION_MODE=live when ready. Never shown as healthy without tokens."
+      actions={
+        <Link href="/integrations/meta">
+          <Button>Meta messaging hub</Button>
+        </Link>
+      }
     >
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -78,6 +84,46 @@ export default function IntegrationsPage() {
               Re-check health
             </Button>
           </div>
+
+          {health?.meta ? (
+            <section className="surface-card p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-2xl">Meta messaging</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    Facebook, Instagram, and WhatsApp managed from Triada after one-time Meta Developer setup.
+                  </p>
+                </div>
+                <Link href="/integrations/meta">
+                  <Button variant="secondary">Open Meta hub</Button>
+                </Link>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {["facebook", "instagram", "whatsapp"].map((key) => {
+                  const ch = health.meta.channels?.[key];
+                  return (
+                    <div key={key} className="rounded-md border border-line px-3 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium capitalize">{key}</p>
+                        <Badge
+                          tone={
+                            ch?.health?.status === "healthy"
+                              ? "success"
+                              : ch?.health?.status === "error"
+                                ? "danger"
+                                : "neutral"
+                          }
+                        >
+                          {ch?.status || ch?.health?.status || "—"}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs text-muted">{ch?.health?.message}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>

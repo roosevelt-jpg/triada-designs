@@ -110,8 +110,23 @@ export default function ConversationDetailPage() {
           <section className="surface-card flex min-h-[28rem] flex-col">
             <div className="flex items-center justify-between border-b border-line px-5 py-4">
               <div>
-                <p className="font-medium capitalize">{conversation.channel}</p>
-                <p className="text-sm text-muted">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge
+                    tone={
+                      conversation.channel === "whatsapp"
+                        ? "success"
+                        : conversation.channel === "instagram"
+                          ? "brand"
+                          : conversation.channel === "facebook"
+                            ? "info"
+                            : "neutral"
+                    }
+                  >
+                    {conversation.channel}
+                  </Badge>
+                  <p className="font-medium">Thread</p>
+                </div>
+                <p className="mt-1 text-sm text-muted">
                   Last activity {formatDateTime(conversation.last_message_at)}
                 </p>
               </div>

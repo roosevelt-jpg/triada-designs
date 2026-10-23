@@ -21,12 +21,15 @@ class ContentItem extends Model
         'approval_version',
         'body',
         'channel',
+        'scheduled_for',
+        'campaign_key',
     ];
 
     protected function casts(): array
     {
         return [
             'approved_at' => 'datetime',
+            'scheduled_for' => 'datetime',
         ];
     }
 }

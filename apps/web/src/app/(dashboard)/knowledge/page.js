@@ -1,16 +1,62 @@
-import { DashboardShell } from "@/components/layout/DashboardShell";
-import { EmptyState } from "@/components/ui/EmptyState";
+"use client";
 
-export default function Page() {
+import { useCallback, useEffect, useState } from "react";
+import { DashboardShell } from "@/components/layout/DashboardShell";
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { apiFetch } from "@/lib/api-client";
+
+export default function KnowledgePage() {
+  const [sources, setSources] = useState([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await apiFetch("/v1/knowledge");
+      setSources(data.data || []);
+    } catch (err) {
+      setError(err.message || "Failed to load knowledge");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
   return (
     <DashboardShell
       title="Knowledge"
-      description="Foundation screen for Milestone 1. Deeper workflows land in later milestones per the implementation plan."
+      description="Approved FAQs and policies used for AI answers. WordPress remains a separate CMS source under Integrations."
     >
-      <EmptyState
-        title="Foundation ready"
-        description="Navigation, auth, and design system are in place. Feature depth expands after CRM, inbox, and WordPress/Zoho paths."
-      />
+      {loading ? <Skeleton className="h-32" /> : null}
+      {error ? <ErrorState message={error} onRetry={load} /> : null}
+      {!loading && !error && sources.length === 0 ? (
+        <EmptyState title="No knowledge sources" description="Seed FAQs or import approved policy text." />
+      ) : null}
+      {!loading && sources.length > 0 ? (
+        <div className="divide-y divide-line surface-card overflow-hidden">
+          {sources.map((source) => (
+            <article key={source.id} className="px-5 py-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-medium">{source.title}</h2>
+                <Badge tone="brand">{source.source_type}</Badge>
+                <Badge tone="neutral">{source.status}</Badge>
+              </div>
+              <p className="mt-2 text-sm text-muted">{source.body}</p>
+              {(source.tags || []).length > 0 ? (
+                <p className="mt-2 text-xs text-muted">Tags: {source.tags.join(", ")}</p>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
     </DashboardShell>
   );
 }

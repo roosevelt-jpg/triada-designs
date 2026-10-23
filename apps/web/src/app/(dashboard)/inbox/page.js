@@ -10,8 +10,24 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/formatters";
 
+const CHANNEL_FILTERS = [
+  { value: "", label: "All channels" },
+  { value: "webchat", label: "Webchat" },
+  { value: "facebook", label: "Facebook" },
+  { value: "instagram", label: "Instagram" },
+  { value: "whatsapp", label: "WhatsApp" },
+];
+
+function channelTone(channel) {
+  if (channel === "facebook") return "info";
+  if (channel === "instagram") return "brand";
+  if (channel === "whatsapp") return "success";
+  return "neutral";
+}
+
 export default function InboxPage() {
   const [items, setItems] = useState([]);
+  const [channel, setChannel] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -19,14 +35,15 @@ export default function InboxPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await apiFetch("/v1/conversations");
+      const query = channel ? `?channel=${encodeURIComponent(channel)}` : "";
+      const response = await apiFetch(`/v1/conversations${query}`);
       setItems(response.data || []);
     } catch (err) {
       setError(err.message || "Failed to load inbox");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [channel]);
 
   useEffect(() => {
     load();
@@ -35,8 +52,25 @@ export default function InboxPage() {
   return (
     <DashboardShell
       title="Unified inbox"
-      description="Normalized conversations across channels. Human takeover suppresses automatic replies."
+      description="Normalized conversations across webchat and Meta channels. Human takeover suppresses automatic replies."
     >
+      <div className="mb-4 flex flex-wrap gap-2">
+        {CHANNEL_FILTERS.map((filter) => (
+          <button
+            key={filter.value || "all"}
+            type="button"
+            onClick={() => setChannel(filter.value)}
+            className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+              channel === filter.value
+                ? "border-brown bg-sand text-brown-dark"
+                : "border-line bg-white text-muted hover:bg-stone/60"
+            }`}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -48,7 +82,7 @@ export default function InboxPage() {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No conversations yet"
-          description="When a channel delivers a message, it will appear here."
+          description="Simulate a Meta inbound from Integrations → Meta, or wait for a connected channel."
         />
       ) : null}
       {!loading && !error && items.length > 0 ? (
@@ -64,10 +98,13 @@ export default function InboxPage() {
                   {conversation.contact?.name || "Unknown contact"}
                 </p>
                 <p className="text-sm text-muted">
-                  {conversation.channel} · {formatDateTime(conversation.last_message_at)}
+                  {formatDateTime(conversation.last_message_at)}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Badge tone={channelTone(conversation.channel)}>
+                  {conversation.channel}
+                </Badge>
                 <Badge tone={conversation.automation_mode === "human" ? "warning" : "brand"}>
                   {conversation.automation_mode === "human" ? "Human mode" : "AI mode"}
                 </Badge>

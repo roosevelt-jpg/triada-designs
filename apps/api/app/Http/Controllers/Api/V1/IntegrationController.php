@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Integration;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Services\CRM\Zoho\ZohoCrmClient;
+use App\Services\Messaging\Meta\MetaControlPlane;
 use App\Services\WordPress\WordPressClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,15 +29,25 @@ class IntegrationController extends Controller
     public function health(
         Request $request,
         WordPressClient $wordpress,
-        ZohoCrmClient $zoho
+        ZohoCrmClient $zoho,
+        MetaControlPlane $meta,
     ): JsonResponse {
         $workspaceId = $this->workspaceId($request);
+        $workspace = Workspace::query()->findOrFail($workspaceId);
 
         $wpHealth = $wordpress->healthCheck();
         $zohoHealth = $zoho->healthCheck();
+        $metaStatus = $meta->status($workspace);
 
         $this->touchHealth($workspaceId, 'wordpress', $wpHealth);
         $this->touchHealth($workspaceId, 'zoho', $zohoHealth);
+
+        foreach ($metaStatus['channels'] as $channel => $info) {
+            $this->touchHealth($workspaceId, $channel, [
+                'status' => $info['health']['status'] ?? 'awaiting_credentials',
+                'message' => $info['health']['message'] ?? null,
+            ]);
+        }
 
         $mode = (string) config('integrations.mode', 'local');
         if ($mode === 'mock') {
@@ -46,6 +58,7 @@ class IntegrationController extends Controller
             'mode' => $mode,
             'wordpress' => $wpHealth,
             'zoho' => $zohoHealth,
+            'meta' => $metaStatus,
             'wordpress_posts' => $wordpress->listPosts(5),
             'zoho_leads' => $zoho->listRecentLeads(5),
         ]);
@@ -86,7 +99,8 @@ class IntegrationController extends Controller
 
         $status = match ($health['status']) {
             'healthy' => 'connected',
-            'seeded', 'local', 'mock' => 'seeded',
+            'seeded', 'local', 'mock' => 'local',
+            'awaiting_credentials' => 'awaiting_credentials',
             default => 'error',
         };
 

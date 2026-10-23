@@ -5,15 +5,22 @@ namespace App\Services\Automations;
 use App\Models\ContentItem;
 use App\Models\Conversation;
 use App\Models\Lead;
+use App\Models\Message;
 use App\Models\Task;
 use App\Models\Workspace;
 use App\Services\CRM\Zoho\ZohoCrmClient;
+use App\Services\Messaging\DTOs\OutboundMessage;
+use App\Services\Messaging\Meta\MetaChannelRegistry;
+use App\Services\Messaging\Meta\OutboundEligibility;
 use Illuminate\Support\Str;
 
 class ActionExecutor
 {
-    public function __construct(protected ZohoCrmClient $zoho)
-    {
+    public function __construct(
+        protected ZohoCrmClient $zoho,
+        protected MetaChannelRegistry $metaChannels,
+        protected OutboundEligibility $eligibility,
+    ) {
     }
 
     /**
@@ -188,16 +195,33 @@ class ActionExecutor
 
     protected function sendEligibleReply(Workspace $workspace, array $config, array &$context, bool $dryRun): array
     {
-        if ($workspace->outbound_paused) {
-            return ['ok' => true, 'skipped' => true, 'result' => ['reason' => 'outbound_paused']];
+        $channel = (string) ($context['channel'] ?? $config['channel'] ?? 'webchat');
+        $purpose = (string) ($config['purpose'] ?? 'transactional');
+        $templateName = $config['template_name'] ?? $context['template_name'] ?? null;
+
+        $conversation = null;
+        if (! empty($context['conversation_id'])) {
+            $conversation = Conversation::query()
+                ->where('workspace_id', $workspace->id)
+                ->find($context['conversation_id']);
         }
 
-        if (($context['automation_mode'] ?? 'ai') === 'human') {
-            return ['ok' => true, 'skipped' => true, 'result' => ['reason' => 'human_takeover']];
-        }
+        $check = $this->eligibility->check(
+            $workspace,
+            $conversation,
+            $channel,
+            $purpose,
+            $templateName,
+            [
+                'automation_mode' => $context['automation_mode'] ?? $conversation?->automation_mode ?? 'ai',
+                'marketing_opt_out' => $context['marketing_opt_out'] ?? false,
+                'consent' => $context['consent'] ?? true,
+                'sender_type' => 'ai',
+            ]
+        );
 
-        if (($context['marketing_opt_out'] ?? false) === true && ($config['purpose'] ?? 'transactional') === 'marketing') {
-            return ['ok' => true, 'skipped' => true, 'result' => ['reason' => 'marketing_opt_out']];
+        if (! $check['eligible']) {
+            return ['ok' => true, 'skipped' => true, 'result' => $check];
         }
 
         $body = $context['draft_reply']['body']
@@ -207,17 +231,72 @@ class ActionExecutor
             return ['ok' => true, 'dry_run' => true, 'result' => [
                 'would_send' => true,
                 'body' => $body,
-                'channel' => $context['channel'] ?? null,
+                'channel' => $channel,
+                'eligibility' => $check,
             ]];
         }
 
-        $context['sent_reply'] = [
+        $sent = [
             'body' => $body,
             'sent_at' => now()->toIso8601String(),
-            'channel' => $context['channel'] ?? 'webchat',
+            'channel' => $channel,
+            'eligibility' => $check,
+            'mode' => 'local_record',
         ];
 
-        return ['ok' => true, 'result' => $context['sent_reply']];
+        if (in_array($channel, ['facebook', 'instagram', 'whatsapp'], true) && $conversation) {
+            $recipient = (string) (
+                $context['external_user_id']
+                ?? data_get($conversation, 'external_conversation_id')
+            );
+            if (str_contains($recipient, ':')) {
+                $recipient = explode(':', $recipient)[1] ?? $recipient;
+            }
+
+            $adapter = $this->metaChannels->get($channel);
+            $result = $adapter->sendMessage(new OutboundMessage(
+                channel: $channel,
+                recipientExternalId: $recipient ?: 'unknown',
+                body: $body,
+                pageOrAccountId: $context['page_or_account_id'] ?? null,
+                templateName: $templateName,
+                purpose: $purpose,
+            ));
+
+            $message = Message::query()->create([
+                'workspace_id' => $workspace->id,
+                'conversation_id' => $conversation->id,
+                'provider_message_id' => $result->providerMessageId,
+                'direction' => 'outbound',
+                'sender_type' => 'ai',
+                'message_type' => 'text',
+                'body' => $body,
+                'delivery_status' => $result->ok ? 'sent' : 'failed',
+                'provider_timestamp' => now(),
+                'metadata' => [
+                    'mode' => $result->mode,
+                    'eligibility' => $check,
+                    'send_result' => $result->toArray(),
+                ],
+            ]);
+
+            $conversation->forceFill(['last_message_at' => now()])->save();
+
+            $sent = array_merge($sent, [
+                'mode' => $result->mode,
+                'message_id' => $message->id,
+                'provider_message_id' => $result->providerMessageId,
+                'ok' => $result->ok,
+            ]);
+
+            if (! $result->ok) {
+                return ['ok' => false, 'error' => $result->errorMessage ?: 'Meta send failed', 'result' => $sent];
+            }
+        }
+
+        $context['sent_reply'] = $sent;
+
+        return ['ok' => true, 'result' => $sent];
     }
 
     protected function createContentDraft(Workspace $workspace, array $config, array &$context, bool $dryRun): array
