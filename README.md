@@ -60,6 +60,17 @@ npm run dev
 
 Open [http://127.0.0.1:43127](http://127.0.0.1:43127) — redirects to admin login.
 
+### Open from your laptop browser (Cloud Agent)
+
+`127.0.0.1` in chat is the **agent VM**, not your Mac/PC. To use your machine’s browser:
+
+1. Keep this agent’s web server running on port **43127** (bound to `0.0.0.0`).
+2. In Cursor Desktop **Agents Window**, open **Forwarded Ports** (plug icon).
+3. Forward port **43127** (API is proxied through Next.js at `/api`, so you do not need 8088).
+4. On your laptop open [http://localhost:43127/login](http://localhost:43127/login).
+
+Demo login: `admin@triada-designs.com` / `triada-demo`.
+
 ### Docker Compose (MySQL + Redis + services)
 
 ```bash

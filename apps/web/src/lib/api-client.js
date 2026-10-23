@@ -1,7 +1,14 @@
 const TOKEN_KEY = "triada_api_token";
 
+/**
+ * Prefer same-origin `/api` so laptop browsers through Cursor port-forward
+ * do not need a second forwarded API port.
+ */
 export function getApiBase() {
-  return process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8088/api";
+  if (typeof window !== "undefined") {
+    return process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
+  }
+  return process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
 }
 
 export function getStoredToken() {
