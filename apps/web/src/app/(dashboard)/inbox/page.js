@@ -52,19 +52,16 @@ export default function InboxPage() {
   return (
     <DashboardShell
       title="Unified inbox"
-      description="Normalized conversations across webchat and Meta channels. Human takeover suppresses automatic replies."
+      description="Conversations across webchat and Meta. Human takeover suppresses automatic replies."
     >
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap gap-2" role="toolbar" aria-label="Channel filters">
         {CHANNEL_FILTERS.map((filter) => (
           <button
             key={filter.value || "all"}
             type="button"
+            aria-pressed={channel === filter.value}
             onClick={() => setChannel(filter.value)}
-            className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
-              channel === filter.value
-                ? "border-brown bg-sand text-brown-dark"
-                : "border-line bg-white text-muted hover:bg-stone/60"
-            }`}
+            className={`ops-filter-chip ${channel === filter.value ? "is-active" : ""}`}
           >
             {filter.label}
           </button>
@@ -72,9 +69,9 @@ export default function InboxPage() {
       </div>
 
       {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-20" />
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-[68px]" />
           ))}
         </div>
       ) : null}
@@ -91,17 +88,17 @@ export default function InboxPage() {
             <Link
               key={conversation.id}
               href={`/inbox/${conversation.id}`}
-              className="flex flex-col gap-2 px-5 py-4 transition-colors hover:bg-stone/60 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-2 px-4 py-3.5 transition-colors duration-150 hover:bg-stone/50 sm:flex-row sm:items-center sm:justify-between sm:px-5"
             >
-              <div>
-                <p className="font-medium">
+              <div className="min-w-0">
+                <p className="truncate font-medium text-ink">
                   {conversation.contact?.name || "Unknown contact"}
                 </p>
-                <p className="text-sm text-muted">
+                <p className="text-sm tabular-nums text-muted">
                   {formatDateTime(conversation.last_message_at)}
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 <Badge tone={channelTone(conversation.channel)}>
                   {conversation.channel}
                 </Badge>

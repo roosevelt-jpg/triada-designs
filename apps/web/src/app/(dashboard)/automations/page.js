@@ -58,8 +58,8 @@ export default function AutomationsPage() {
 
   return (
     <DashboardShell
-      title="Automations"
-      description="Validated workflows with dry-run, enable/disable, and execution history. Outbound and workspace emergency pauses are enforced at runtime."
+      title="Workflows"
+      description="Visual workflow builder with validate, dry-run, enable/disable, and execution history. Emergency pauses are enforced at runtime."
     >
       {loading ? <Skeleton className="h-64" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -70,27 +70,27 @@ export default function AutomationsPage() {
         />
       ) : null}
       {!loading && !error && items.length > 0 ? (
-        <div className="space-y-4 fade-rise">
+        <div className="space-y-3">
           {items.map((workflow) => (
             <article
               key={workflow.id}
-              className="surface-card flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between"
+              className="surface-card flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:p-5"
             >
-              <div className="min-w-0 space-y-2">
+              <div className="min-w-0 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-display text-2xl text-ink">{workflow.name}</h3>
+                  <h3 className="ops-section-title">{workflow.name}</h3>
                   <Badge tone={statusTone(workflow.status)}>{workflow.status}</Badge>
                 </div>
                 <p className="text-sm text-muted">
                   {workflow.description || "No description"}
                 </p>
-                <p className="text-xs uppercase tracking-wide text-muted">
+                <p className="text-xs text-muted">
                   Trigger · {workflow.trigger_type?.replaceAll("_", " ")} · v
                   {workflow.version} · {workflow.run_count ?? 0} live runs ·{" "}
                   {workflow.node_summary?.length ?? 0} nodes
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
                 <Button
                   variant="secondary"
                   size="sm"
@@ -105,7 +105,7 @@ export default function AutomationsPage() {
                 </Button>
                 <Link
                   href={`/automations/${workflow.id}`}
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-stone"
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-line bg-white px-3 text-sm font-medium text-ink transition-colors duration-150 hover:bg-stone"
                 >
                   Open builder
                 </Link>

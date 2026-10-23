@@ -4,12 +4,24 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { DryRunContextForm } from "@/components/workflow-builder/DryRunContextForm";
+import { NodeConfigPanel } from "@/components/workflow-builder/NodeConfigPanel";
+import { WorkflowCanvas } from "@/components/workflow-builder/WorkflowCanvas";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import {
+  addNode,
+  cloneDefinition,
+  defaultContextFor,
+  normalizeDefinition,
+  removeNode,
+  setEntry,
+  updateNode,
+} from "@/lib/workflow-definition";
 
 const NODE_TONES = {
   trigger: "brand",
@@ -29,44 +41,16 @@ function statusTone(status) {
   return "neutral";
 }
 
-function defaultContextFor(triggerType) {
-  if (triggerType === "incoming_message") {
-    return {
-      intent: "product_inquiry",
-      channel: "webchat",
-      automation_mode: "ai",
-    };
-  }
-  if (triggerType === "incoming_meta_message") {
-    return {
-      intent: "product_inquiry",
-      channel: "instagram",
-      automation_mode: "ai",
-    };
-  }
-  if (triggerType === "whatsapp_template_needed") {
-    return {
-      channel: "whatsapp",
-      requires_whatsapp_template: true,
-      automation_mode: "ai",
-    };
-  }
-  if (triggerType === "content_approved") {
-    return { content_title: "Warm neutrals for spring rituals" };
-  }
-  if (triggerType === "lead_qualified") {
-    return { lead_score: 82 };
-  }
-  return {};
-}
-
 export default function AutomationBuilderPage() {
   const params = useParams();
   const workflowId = params?.id;
 
   const [workflow, setWorkflow] = useState(null);
-  const [definitionText, setDefinitionText] = useState("");
-  const [contextText, setContextText] = useState("{}");
+  const [definition, setDefinition] = useState({ entry: "", nodes: {} });
+  const [savedSnapshot, setSavedSnapshot] = useState("");
+  const [context, setContext] = useState({});
+  const [selectedKey, setSelectedKey] = useState(null);
+  const [connectMode, setConnectMode] = useState(null);
   const [validation, setValidation] = useState(null);
   const [runs, setRuns] = useState([]);
   const [selectedRun, setSelectedRun] = useState(null);
@@ -74,6 +58,10 @@ export default function AutomationBuilderPage() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
+
+  const dirty = useMemo(() => {
+    return JSON.stringify(definition) !== savedSnapshot;
+  }, [definition, savedSnapshot]);
 
   const load = useCallback(async () => {
     if (!workflowId) return;
@@ -84,12 +72,13 @@ export default function AutomationBuilderPage() {
         apiFetch(`/v1/automations/${workflowId}`),
         apiFetch(`/v1/automations/${workflowId}/runs`),
       ]);
+      const def = normalizeDefinition(detail.workflow.definition || {});
       setWorkflow(detail.workflow);
-      setDefinitionText(JSON.stringify(detail.workflow.definition || {}, null, 2));
-      setContextText(
-        JSON.stringify(defaultContextFor(detail.workflow.trigger_type), null, 2)
-      );
+      setDefinition(def);
+      setSavedSnapshot(JSON.stringify(def));
+      setContext(defaultContextFor(detail.workflow.trigger_type));
       setRuns(runList.data || []);
+      setSelectedKey(def.entry || Object.keys(def.nodes)[0] || null);
     } catch (err) {
       setError(err.message || "Failed to load workflow");
     } finally {
@@ -101,42 +90,81 @@ export default function AutomationBuilderPage() {
     load();
   }, [load]);
 
-  const nodes = useMemo(() => {
-    try {
-      const def = JSON.parse(definitionText || "{}");
-      const map = def.nodes || {};
-      const entry = def.entry;
-      return Object.entries(map).map(([key, node]) => ({
-        key,
-        type: node.type || "unknown",
-        label: node.label || key,
-        isEntry: key === entry,
-        next: node.next || null,
-        next_true: node.next_true || null,
-        next_false: node.next_false || null,
-        config: node.config || {},
-      }));
-    } catch {
-      return [];
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape" && connectMode) {
+        setConnectMode(null);
+      }
     }
-  }, [definitionText]);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [connectMode]);
+
+  const selectedNode = selectedKey ? definition.nodes[selectedKey] : null;
+  const nodeKeys = Object.keys(definition.nodes || {});
+
+  function patchDefinition(next) {
+    setDefinition(normalizeDefinition(next));
+    setNotice("");
+  }
+
+  function handleAddNode(type) {
+    const { definition: next, key } = addNode(definition, { type });
+    patchDefinition(next);
+    setSelectedKey(key);
+  }
+
+  function handleNodeChange(patch) {
+    if (!selectedKey) return;
+    patchDefinition(updateNode(definition, selectedKey, patch));
+  }
+
+  function handleRemove() {
+    if (!selectedKey) return;
+    const next = removeNode(definition, selectedKey);
+    patchDefinition(next);
+    setSelectedKey(next.entry || Object.keys(next.nodes)[0] || null);
+  }
+
+  function handleSetEntry() {
+    if (!selectedKey) return;
+    patchDefinition(setEntry(definition, selectedKey));
+  }
+
+  function handleStartConnect(kind) {
+    if (!selectedKey) return;
+    setConnectMode({ from: selectedKey, kind });
+  }
+
+  function handleConnectTarget(toKey) {
+    if (!connectMode) return;
+    if (toKey === connectMode.from) {
+      setConnectMode(null);
+      return;
+    }
+    const patch = { [connectMode.kind]: toKey };
+    patchDefinition(updateNode(definition, connectMode.from, patch));
+    setConnectMode(null);
+    setSelectedKey(connectMode.from);
+  }
 
   async function saveDefinition() {
     setBusy("save");
     setError("");
     setNotice("");
     try {
-      const definition = JSON.parse(definitionText);
       const result = await apiFetch(`/v1/automations/${workflowId}`, {
         method: "PUT",
-        body: { definition },
+        body: { definition: cloneDefinition(definition) },
       });
+      const def = normalizeDefinition(result.workflow.definition || {});
       setWorkflow(result.workflow);
-      setDefinitionText(JSON.stringify(result.workflow.definition || {}, null, 2));
+      setDefinition(def);
+      setSavedSnapshot(JSON.stringify(def));
       setValidation(result.validation);
       setNotice(
         result.workflow.status === "draft"
-          ? "Saved. Active workflows revert to draft after definition edits — re-activate when ready."
+          ? "Saved. Active workflows revert to draft after edits — re-activate when ready."
           : "Saved."
       );
     } catch (err) {
@@ -152,16 +180,15 @@ export default function AutomationBuilderPage() {
     setError("");
     setNotice("");
     try {
-      const definition = JSON.parse(definitionText);
       const result = await apiFetch("/v1/automations/validate", {
         method: "POST",
-        body: { definition },
+        body: { definition: cloneDefinition(definition) },
       });
       setValidation(result.validation);
       setNotice(
         result.validation.valid
-          ? "Definition is valid."
-          : "Definition has validation errors."
+          ? "Workflow is valid."
+          : "Workflow has validation errors."
       );
     } catch (err) {
       setError(err.message || "Validation failed");
@@ -175,10 +202,19 @@ export default function AutomationBuilderPage() {
     setError("");
     setNotice("");
     try {
+      if (dirty) {
+        await apiFetch(`/v1/automations/${workflowId}`, {
+          method: "PUT",
+          body: { definition: cloneDefinition(definition) },
+        });
+      }
       const result = await apiFetch(`/v1/automations/${workflowId}/activate`, {
         method: "POST",
       });
+      const def = normalizeDefinition(result.workflow.definition || definition);
       setWorkflow(result.workflow);
+      setDefinition(def);
+      setSavedSnapshot(JSON.stringify(def));
       setValidation(result.validation);
       setNotice("Workflow activated.");
     } catch (err) {
@@ -211,7 +247,16 @@ export default function AutomationBuilderPage() {
     setError("");
     setNotice("");
     try {
-      const context = JSON.parse(contextText || "{}");
+      if (dirty) {
+        const saved = await apiFetch(`/v1/automations/${workflowId}`, {
+          method: "PUT",
+          body: { definition: cloneDefinition(definition) },
+        });
+        const def = normalizeDefinition(saved.workflow.definition || definition);
+        setWorkflow(saved.workflow);
+        setDefinition(def);
+        setSavedSnapshot(JSON.stringify(def));
+      }
       const result = await apiFetch(`/v1/automations/${workflowId}/dry-run`, {
         method: "POST",
         body: {
@@ -249,12 +294,44 @@ export default function AutomationBuilderPage() {
 
   return (
     <DashboardShell
-      title={workflow?.name || "Automation"}
-      description="Edit the validated definition, dry-run safely, then activate for live execution."
+      title={workflow?.name || "Workflow builder"}
+      description="Edit steps visually, validate, dry-run, then activate. Definitions stay as internal JSON — never the editing surface."
+      actions={
+        workflow ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {dirty ? (
+              <span className="rounded-sm bg-sand px-2.5 py-1 text-xs font-medium text-brown-dark">
+                Unsaved changes
+              </span>
+            ) : null}
+            <Button size="sm" variant="secondary" disabled={!!busy} onClick={runValidate}>
+              {busy === "validate" ? "Validating…" : "Validate"}
+            </Button>
+            <Button size="sm" variant="secondary" disabled={!!busy} onClick={saveDefinition}>
+              {busy === "save" ? "Saving…" : "Save"}
+            </Button>
+            {workflow.status === "active" ? (
+              <Button size="sm" variant="ghost" disabled={!!busy} onClick={deactivate}>
+                {busy === "deactivate" ? "Disabling…" : "Disable"}
+              </Button>
+            ) : (
+              <Button size="sm" disabled={!!busy} onClick={activate}>
+                {busy === "activate" ? "Activating…" : "Activate"}
+              </Button>
+            )}
+            <Button size="sm" disabled={!!busy} onClick={dryRun}>
+              {busy === "dry-run" ? "Running…" : "Dry-run"}
+            </Button>
+          </div>
+        ) : null
+      }
     >
       <div className="mb-4">
-        <Link href="/automations" className="text-sm text-brown hover:underline">
-          ← All automations
+        <Link
+          href="/automations"
+          className="text-sm text-brown-dark transition-colors duration-150 hover:text-ink"
+        >
+          ← All workflows
         </Link>
       </div>
 
@@ -266,48 +343,32 @@ export default function AutomationBuilderPage() {
       ) : null}
 
       {!loading && workflow ? (
-        <div className="space-y-6 fade-rise">
-          <section className="surface-card flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-5">
+          <section className="surface-card flex flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone={statusTone(workflow.status)}>{workflow.status}</Badge>
                 <Badge tone="neutral">v{workflow.version}</Badge>
-                <Badge tone="brand">{workflow.trigger_type?.replaceAll("_", " ")}</Badge>
+                <Badge tone="brand">
+                  {workflow.trigger_type?.replaceAll("_", " ")}
+                </Badge>
               </div>
-              <p className="text-sm text-muted max-w-2xl">
+              <p className="max-w-2xl text-sm text-muted">
                 {workflow.description || "No description"}
               </p>
-              <p className="text-xs uppercase tracking-wide text-muted">
+              <p className="text-xs text-muted">
                 {workflow.run_count ?? 0} live runs
-                {workflow.last_run_at ? ` · last ${new Date(workflow.last_run_at).toLocaleString()}` : ""}
+                {workflow.last_run_at
+                  ? ` · last ${new Date(workflow.last_run_at).toLocaleString()}`
+                  : ""}
               </p>
               {notice ? <p className="text-sm text-brown-dark">{notice}</p> : null}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" disabled={!!busy} onClick={runValidate}>
-                {busy === "validate" ? "Validating…" : "Validate"}
-              </Button>
-              <Button size="sm" variant="secondary" disabled={!!busy} onClick={saveDefinition}>
-                {busy === "save" ? "Saving…" : "Save definition"}
-              </Button>
-              {workflow.status === "active" ? (
-                <Button size="sm" variant="ghost" disabled={!!busy} onClick={deactivate}>
-                  {busy === "deactivate" ? "Disabling…" : "Disable"}
-                </Button>
-              ) : (
-                <Button size="sm" disabled={!!busy} onClick={activate}>
-                  {busy === "activate" ? "Activating…" : "Activate"}
-                </Button>
-              )}
-              <Button size="sm" disabled={!!busy} onClick={dryRun}>
-                {busy === "dry-run" ? "Running…" : "Dry-run"}
-              </Button>
             </div>
           </section>
 
           {validation ? (
-            <section className="surface-card p-5">
-              <h3 className="font-display text-xl">Validation</h3>
+            <section className="surface-card p-4">
+              <h3 className="text-sm font-medium text-ink">Validation</h3>
               <p className="mt-1 text-sm text-muted">
                 {validation.valid ? "Ready to activate." : "Fix errors before activation."}
               </p>
@@ -328,78 +389,56 @@ export default function AutomationBuilderPage() {
             </section>
           ) : null}
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <section className="surface-card p-5">
-              <h3 className="font-display text-xl">Node canvas</h3>
-              <p className="mt-1 text-sm text-muted">
-                Ordered graph from the definition. Entry node is marked.
-              </p>
-              {nodes.length === 0 ? (
-                <p className="mt-4 text-sm text-danger">Definition JSON is not parseable.</p>
-              ) : (
-                <ol className="mt-4 space-y-3">
-                  {nodes.map((node, index) => (
-                    <li
-                      key={node.key}
-                      className={`rounded-md border border-line bg-white p-3 transition-colors ${
-                        node.isEntry ? "border-brown ring-1 ring-brown/30" : ""
-                      }`}
-                      style={{ animationDelay: `${index * 40}ms` }}
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge tone={NODE_TONES[node.type] || "neutral"}>{node.type}</Badge>
-                        {node.isEntry ? <Badge tone="brand">entry</Badge> : null}
-                        <span className="font-medium text-ink">{node.label}</span>
-                        <span className="text-xs text-muted">{node.key}</span>
-                      </div>
-                      <p className="mt-2 text-xs text-muted">
-                        {node.next
-                          ? `next → ${node.next}`
-                          : node.next_true
-                            ? `true → ${node.next_true} · false → ${node.next_false}`
-                            : "terminal"}
-                      </p>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
-
-            <section className="surface-card p-5 space-y-4">
-              <div>
-                <h3 className="font-display text-xl">Definition JSON</h3>
-                <p className="mt-1 text-sm text-muted">
-                  Edit nodes, then validate and save. Saving an active workflow returns it to draft.
-                </p>
-                <textarea
-                  className="mt-3 h-64 w-full rounded-sm border border-line bg-stone/40 p-3 font-mono text-xs text-ink focus:border-brown focus:outline-none"
-                  value={definitionText}
-                  onChange={(e) => setDefinitionText(e.target.value)}
-                  spellCheck={false}
+          <section className="overflow-hidden rounded-md border border-line bg-white shadow-card">
+            <div className="grid min-h-[520px] lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="min-h-[420px] border-b border-line lg:border-b-0 lg:border-r">
+                <WorkflowCanvas
+                  definition={definition}
+                  selectedKey={selectedKey}
+                  onSelect={(key) => {
+                    setConnectMode(null);
+                    setSelectedKey(key);
+                  }}
+                  connectMode={connectMode}
+                  onConnectTarget={handleConnectTarget}
                 />
               </div>
-              <div>
-                <h3 className="font-display text-lg">Dry-run context</h3>
-                <p className="mt-1 text-sm text-muted">
-                  Sample payload passed into conditions and actions. No live writes on dry-run.
-                </p>
-                <textarea
-                  className="mt-3 h-36 w-full rounded-sm border border-line bg-stone/40 p-3 font-mono text-xs text-ink focus:border-brown focus:outline-none"
-                  value={contextText}
-                  onChange={(e) => setContextText(e.target.value)}
-                  spellCheck={false}
+              <div className="min-h-[320px] bg-ivory/50">
+                <NodeConfigPanel
+                  nodeKey={selectedKey}
+                  node={selectedNode}
+                  isEntry={definition.entry === selectedKey}
+                  nodeKeys={nodeKeys}
+                  onChange={handleNodeChange}
+                  onSetEntry={handleSetEntry}
+                  onRemove={handleRemove}
+                  onStartConnect={handleStartConnect}
+                  onAddNode={handleAddNode}
                 />
               </div>
-            </section>
-          </div>
+            </div>
+          </section>
 
-          <section className="surface-card p-5">
-            <h3 className="font-display text-xl">Execution history</h3>
+          <section className="surface-card p-4">
+            <h3 className="font-display text-xl text-ink">Dry-run context</h3>
+            <div className="mt-3 max-w-lg">
+              <DryRunContextForm
+                context={context}
+                onChange={setContext}
+                triggerType={workflow.trigger_type}
+              />
+            </div>
+          </section>
+
+          <section className="surface-card p-4">
+            <h3 className="font-display text-xl text-ink">Execution history</h3>
             <p className="mt-1 text-sm text-muted">
               Recent dry-run and live runs with per-step results.
             </p>
             {runs.length === 0 ? (
-              <p className="mt-4 text-sm text-muted">No runs yet. Use Dry-run to create the first.</p>
+              <p className="mt-4 text-sm text-muted">
+                No runs yet. Use Dry-run to create the first.
+              </p>
             ) : (
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 <ul className="space-y-2">
@@ -408,15 +447,13 @@ export default function AutomationBuilderPage() {
                       <button
                         type="button"
                         onClick={() => openRun(run.id)}
-                        className="flex w-full items-center justify-between gap-3 rounded-md border border-line bg-white px-3 py-2 text-left text-sm hover:bg-stone"
+                        className="flex w-full items-center justify-between gap-3 rounded-md border border-line bg-white px-3 py-2.5 text-left text-sm transition-colors duration-150 hover:bg-stone"
                       >
-                        <span className="truncate">
-                          <Badge tone={statusTone(run.mode)} className="mr-2">
-                            {run.mode}
-                          </Badge>
+                        <span className="flex flex-wrap items-center gap-2 truncate">
+                          <Badge tone={statusTone(run.mode)}>{run.mode}</Badge>
                           <Badge tone={statusTone(run.status)}>{run.status}</Badge>
                         </span>
-                        <span className="shrink-0 text-xs text-muted">
+                        <span className="shrink-0 text-xs tabular-nums text-muted">
                           {run.created_at
                             ? new Date(run.created_at).toLocaleString()
                             : "—"}
@@ -431,7 +468,9 @@ export default function AutomationBuilderPage() {
                   ) : (
                     <div className="space-y-3">
                       <div className="flex flex-wrap gap-2">
-                        <Badge tone={statusTone(selectedRun.mode)}>{selectedRun.mode}</Badge>
+                        <Badge tone={statusTone(selectedRun.mode)}>
+                          {selectedRun.mode}
+                        </Badge>
                         <Badge tone={statusTone(selectedRun.status)}>
                           {selectedRun.status}
                         </Badge>
@@ -455,9 +494,19 @@ export default function AutomationBuilderPage() {
                             {step.error_message ? (
                               <p className="mt-2 text-danger">{step.error_message}</p>
                             ) : null}
-                            <pre className="mt-2 max-h-40 overflow-auto rounded bg-stone/50 p-2 text-[11px] text-muted">
-                              {JSON.stringify(step.output_summary || {}, null, 2)}
-                            </pre>
+                            {step.output_summary &&
+                            Object.keys(step.output_summary).length > 0 ? (
+                              <dl className="mt-2 space-y-1 text-xs text-muted">
+                                {Object.entries(step.output_summary).map(([k, v]) => (
+                                  <div key={k} className="flex gap-2">
+                                    <dt className="shrink-0 font-medium text-ink">{k}</dt>
+                                    <dd className="truncate">
+                                      {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                                    </dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            ) : null}
                           </li>
                         ))}
                       </ol>

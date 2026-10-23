@@ -150,12 +150,12 @@ export default function AgentsPage() {
                   setSelected(agent);
                   setPrompt(agent.config?.system_prompt || "");
                 }}
-                className={`surface-card w-full p-5 text-left transition ${
-                  selected?.id === agent.id ? "ring-1 ring-brown" : ""
+                className={`surface-card w-full p-4 text-left transition-colors duration-150 md:p-5 ${
+                  selected?.id === agent.id ? "border-brown ring-1 ring-brown/30" : "hover:bg-stone/30"
                 }`}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-display text-2xl">{agent.name}</h2>
+                  <h2 className="ops-section-title">{agent.name}</h2>
                   <Badge tone={agent.status === "active" ? "success" : "warning"}>{agent.status}</Badge>
                   <Badge tone="neutral">{agent.role}</Badge>
                 </div>
@@ -183,16 +183,16 @@ export default function AgentsPage() {
           <div className="space-y-4">
             {selected ? (
               <div className="surface-card space-y-4 p-5">
-                <h3 className="font-display text-2xl">{selected.name} config</h3>
+                <h3 className="ops-section-title">{selected.name} config</h3>
                 <label className="block text-sm">
-                  <span className="mb-1 block text-muted">System prompt</span>
+                  <span className="mb-1.5 block text-[13px] font-medium text-ink">System prompt</span>
                   <textarea
-                    className="min-h-[120px] w-full rounded-md border border-line bg-white px-3 py-2 text-sm"
+                    className="min-h-[120px] w-full rounded-sm border border-line bg-white px-3 py-2 text-sm transition-colors duration-150 focus:border-brown focus:outline-none"
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                   />
                 </label>
-                <Button disabled={busy === "prompt"} onClick={savePrompt}>
+                <Button size="sm" disabled={busy === "prompt"} onClick={savePrompt}>
                   Save prompt
                 </Button>
                 <Input
@@ -200,19 +200,26 @@ export default function AgentsPage() {
                   value={testMessage}
                   onChange={(e) => setTestMessage(e.target.value)}
                 />
-                <Button variant="secondary" disabled={busy === "test"} onClick={runTest}>
+                <Button size="sm" variant="secondary" disabled={busy === "test"} onClick={runTest}>
                   {busy === "test" ? "Running…" : "Test run (dry)"}
                 </Button>
                 {testResult ? (
-                  <pre className="overflow-auto rounded-md bg-stone/60 p-3 text-xs">
-                    {JSON.stringify(testResult, null, 2)}
-                  </pre>
+                  <dl className="space-y-1.5 rounded-md border border-line bg-stone/40 p-3 text-xs">
+                    {Object.entries(testResult).map(([k, v]) => (
+                      <div key={k} className="flex gap-2">
+                        <dt className="shrink-0 font-medium text-ink">{k}</dt>
+                        <dd className="min-w-0 break-words text-muted">
+                          {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
                 ) : null}
               </div>
             ) : null}
 
             <div className="surface-card p-5">
-              <h3 className="font-display text-2xl">Activity</h3>
+              <h3 className="ops-section-title">Activity</h3>
               <p className="mt-1 text-sm text-muted">
                 Runs: {activity.metrics?.total_runs ?? 0} · Failed: {activity.metrics?.failed_runs ?? 0} ·
                 Tokens: {(activity.metrics?.prompt_tokens ?? 0) + (activity.metrics?.completion_tokens ?? 0)}

@@ -107,7 +107,7 @@ export default function ContentPage() {
           {items.map((item) => (
             <article key={item.id} className="surface-card p-5">
               <div className="flex items-start justify-between gap-3">
-                <h3 className="font-display text-2xl">{item.title}</h3>
+                <h3 className="ops-section-title">{item.title}</h3>
                 <Badge
                   tone={
                     item.status === "published"
@@ -179,7 +179,7 @@ export default function ContentPage() {
 
       {!loading ? (
         <div className="mt-8 surface-card p-5">
-          <h2 className="font-display text-2xl">Publication logs</h2>
+          <h2 className="ops-section-title">Publication logs</h2>
           <div className="mt-3 divide-y divide-line">
             {publications.length === 0 ? (
               <p className="text-sm text-muted">No publications yet.</p>

@@ -51,16 +51,58 @@
     padding-inline: clamp(1rem, 3vw, 2rem);
   }
 
+  .ops-section-title {
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
+
+  .ops-filter-chip {
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-default);
+    background: var(--color-white);
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+  }
+
+  .ops-filter-chip[aria-pressed="true"],
+  .ops-filter-chip.is-active {
+    border-color: var(--color-brand-champagne);
+    background: var(--color-brand-sand);
+    color: var(--color-brand-brown-dark);
+  }
+
+  .ops-filter-chip:hover {
+    background: var(--color-stone);
+    color: var(--text-primary);
+  }
+
+  .workflow-canvas {
+    background: var(--color-stone);
+  }
+
   .fade-rise {
-    animation: fade-rise 420ms ease both;
+    animation: fade-rise 280ms ease both;
   }
 
   .fade-rise-delay {
-    animation: fade-rise 520ms ease 80ms both;
+    animation: fade-rise 320ms ease 60ms both;
   }
 
   .soft-pan {
     animation: soft-pan 18s ease-in-out infinite alternate;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-rise,
+  .fade-rise-delay,
+  .soft-pan {
+    animation: none !important;
   }
 }
 
