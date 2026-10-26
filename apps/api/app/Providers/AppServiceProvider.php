@@ -9,6 +9,7 @@ use App\Services\AI\HttpLlmAdapter;
 use App\Services\AI\LlmCredentialStore;
 use App\Services\AI\LocalHeuristicLlmAdapter;
 use App\Services\CRM\Zoho\ZohoCredentialStore;
+use Illuminate\Routing\UrlGenerator;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -67,9 +68,11 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(): void
+    public function boot(UrlGenerator $url): void
     {
-        //
+        if ($this->app->environment('production')) {
+            $url->forceScheme('https');
+        }
     }
 
     protected function normalizeProvider(string $provider): string

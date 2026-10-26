@@ -14,7 +14,8 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: 'api',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->statefulApi();
+        // Bearer-token API (dashboard stores Sanctum personal access tokens).
+        // Do not enable statefulApi()/CSRF — Origin from the Vercel rewrite would 419 login.
         $middleware->alias([
             'cron.secret' => \App\Http\Middleware\VerifyCronSecret::class,
         ]);
