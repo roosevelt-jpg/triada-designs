@@ -21,6 +21,11 @@ export default function IntegrationsPage() {
   const [anthropicKey, setAnthropicKey] = useState("");
   const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4-20250514");
   const [anthropicStatus, setAnthropicStatus] = useState("");
+  const [zohoClientId, setZohoClientId] = useState("");
+  const [zohoClientSecret, setZohoClientSecret] = useState("");
+  const [zohoRefreshToken, setZohoRefreshToken] = useState("");
+  const [zohoOrgId, setZohoOrgId] = useState("");
+  const [zohoStatus, setZohoStatus] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,6 +100,47 @@ export default function IntegrationsPage() {
       load();
     } catch (err) {
       setAnthropicStatus(err.message);
+    }
+  }
+
+  async function saveZoho(event) {
+    event.preventDefault();
+    setZohoStatus("");
+    try {
+      const result = await apiFetch("/v1/integrations/zoho", {
+        method: "POST",
+        body: {
+          client_id: zohoClientId || undefined,
+          client_secret: zohoClientSecret || undefined,
+          refresh_token: zohoRefreshToken || undefined,
+          organization_id: zohoOrgId || undefined,
+        },
+      });
+      setZohoClientId("");
+      setZohoClientSecret("");
+      setZohoRefreshToken("");
+      setZohoStatus(
+        result.zoho?.has_credentials
+          ? result.zoho?.has_books_org
+            ? "Zoho OAuth + Books organization saved. CRM sync + invoice/PDF path ready when INTEGRATION_MODE=live."
+            : "Zoho OAuth saved. Add Books organization ID for invoice PDF / UAE e-invoice. local_sim until live."
+          : result.zoho?.honesty || "Saved."
+      );
+      load();
+    } catch (err) {
+      setZohoStatus(err.message);
+    }
+  }
+
+  async function clearZoho() {
+    setZohoStatus("");
+    try {
+      await apiFetch("/v1/integrations/zoho/clear", { method: "POST" });
+      setZohoOrgId("");
+      setZohoStatus("Cleared Integrations-stored Zoho credentials (env ZOHO_* unaffected).");
+      load();
+    } catch (err) {
+      setZohoStatus(err.message);
     }
   }
 
@@ -325,16 +371,19 @@ export default function IntegrationsPage() {
             <Card>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="ops-section-title">Zoho CRM</h2>
+                  <h2 className="ops-section-title">Zoho CRM + Books</h2>
                   <p className="mt-1 text-sm text-muted">
-                    Contact and lead upsert with OAuth refresh-token support.
+                    CRM for contacts/leads. Zoho Books (not CRM alone) for invoice PDF and UAE
+                    e-invoice. local_sim until keyed.
                   </p>
                 </div>
                 <Badge
                   tone={
                     health?.zoho?.status === "healthy"
                       ? "success"
-                      : health?.zoho?.status === "seeded" || health?.zoho?.status === "local"
+                      : health?.zoho?.status === "seeded" ||
+                          health?.zoho?.status === "local" ||
+                          health?.zoho?.status === "awaiting_credentials"
                         ? "neutral"
                         : "danger"
                   }
@@ -343,6 +392,54 @@ export default function IntegrationsPage() {
                 </Badge>
               </div>
               <p className="mt-3 text-sm text-muted">{health?.zoho?.message}</p>
+              <p className="mt-1 text-xs text-muted">
+                Books: {health?.zoho_books?.message || health?.zoho?.books?.message || "—"}
+              </p>
+              <form className="mt-4 grid gap-3" onSubmit={saveZoho}>
+                <Input
+                  label="Client ID"
+                  name="zoho_client_id"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={health?.zoho?.credentials?.has_credentials ? "•••• stored — paste to replace" : "Zoho API console client ID"}
+                  value={zohoClientId}
+                  onChange={(e) => setZohoClientId(e.target.value)}
+                />
+                <Input
+                  label="Client secret"
+                  name="zoho_client_secret"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="Client secret"
+                  value={zohoClientSecret}
+                  onChange={(e) => setZohoClientSecret(e.target.value)}
+                />
+                <Input
+                  label="Refresh token"
+                  name="zoho_refresh_token"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="OAuth refresh token (CRM + Books scopes)"
+                  value={zohoRefreshToken}
+                  onChange={(e) => setZohoRefreshToken(e.target.value)}
+                />
+                <Input
+                  label="Books organization ID"
+                  name="zoho_organization_id"
+                  placeholder="Required for invoice PDF / UAE e-invoice"
+                  value={zohoOrgId}
+                  onChange={(e) => setZohoOrgId(e.target.value)}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button type="submit" size="sm">
+                    Save Zoho
+                  </Button>
+                  <Button type="button" size="sm" variant="secondary" onClick={clearZoho}>
+                    Clear
+                  </Button>
+                </div>
+                {zohoStatus ? <p className="text-sm text-muted">{zohoStatus}</p> : null}
+              </form>
               <ul className="mt-4 space-y-2">
                 {(health?.zoho_leads || []).map((lead) => (
                   <li

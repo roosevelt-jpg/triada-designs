@@ -8,6 +8,7 @@ use App\Services\AI\GeminiHttpAdapter;
 use App\Services\AI\HttpLlmAdapter;
 use App\Services\AI\LlmCredentialStore;
 use App\Services\AI\LocalHeuristicLlmAdapter;
+use App\Services\CRM\Zoho\ZohoCredentialStore;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -22,6 +23,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(GeminiHttpAdapter::class);
         $this->app->singleton(AnthropicHttpAdapter::class);
         $this->app->singleton(LlmCredentialStore::class);
+        $this->app->singleton(ZohoCredentialStore::class);
 
         $this->app->bind(LlmAdapterInterface::class, function ($app) {
             $provider = $this->normalizeProvider((string) config('integrations.llm.provider', 'anthropic'));

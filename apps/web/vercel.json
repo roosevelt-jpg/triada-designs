@@ -5,6 +5,16 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "regions": ["iad1"],
+  "crons": [
+    {
+      "path": "/api/cron/abandonment",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/after-sale",
+      "schedule": "30 * * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

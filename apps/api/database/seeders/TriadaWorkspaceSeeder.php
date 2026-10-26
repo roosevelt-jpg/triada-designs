@@ -73,8 +73,18 @@ class TriadaWorkspaceSeeder extends Seeder
 
         foreach ([
             ['provider' => 'wordpress', 'display_name' => 'WordPress CMS', 'status' => 'seeded', 'capabilities' => ['posts.read', 'posts.draft', 'webhooks']],
-            ['provider' => 'zoho', 'display_name' => 'Zoho CRM', 'status' => 'seeded', 'capabilities' => ['contacts.upsert', 'leads.upsert', 'webhooks']],
-            ['provider' => 'shopify', 'display_name' => 'Shopify', 'status' => 'disconnected', 'capabilities' => ['products.read', 'orders.read']],
+            [
+                'provider' => 'zoho',
+                'display_name' => 'Zoho CRM + Books',
+                'status' => 'awaiting_credentials',
+                'capabilities' => ['contacts.upsert', 'leads.upsert', 'invoices.create', 'einvoice.uae', 'webhooks'],
+                'metadata' => [
+                    'products' => [
+                        'crm' => 'Zoho CRM — contacts/leads',
+                        'books' => 'Zoho Books — invoice PDF / UAE e-invoice',
+                    ],
+                ],
+            ],
             ['provider' => 'webchat', 'display_name' => 'Website Live Chat', 'status' => 'seeded', 'capabilities' => ['messages.send', 'messages.receive']],
             ['provider' => 'facebook', 'display_name' => 'Facebook Messenger', 'status' => 'awaiting_credentials', 'capabilities' => ['messages.send', 'messages.receive', 'webhooks', 'pages']],
             ['provider' => 'instagram', 'display_name' => 'Instagram Messaging', 'status' => 'awaiting_credentials', 'capabilities' => ['messages.send', 'messages.receive', 'webhooks']],
@@ -92,11 +102,51 @@ class TriadaWorkspaceSeeder extends Seeder
                     'capabilities' => $row['capabilities'],
                     'granted_scopes' => [],
                     'last_health_check_at' => now(),
-                    'metadata' => in_array($row['provider'], ['facebook', 'instagram', 'whatsapp'], true)
+                    'metadata' => $row['metadata'] ?? (in_array($row['provider'], ['facebook', 'instagram', 'whatsapp'], true)
                         ? ['webhook_subscribed' => false, 'connected_via' => 'triada_dashboard']
-                        : null,
+                        : null),
                 ]
             );
+        }
+
+        // Shopify: wire Triada store domain; Admin API token remains awaiting (local_sim).
+        $shopify = Integration::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('provider', 'shopify')
+            ->first();
+
+        if ($shopify) {
+            $shopify->forceFill([
+                'external_account_id' => 'jwtjzw-nu.myshopify.com',
+                'display_name' => 'Shopify',
+                'status' => 'awaiting_credentials',
+                'capabilities' => ['products.read', 'orders.read', 'webhooks'],
+                'granted_scopes' => [],
+                'last_health_check_at' => now(),
+                'metadata' => [
+                    'shop_domain' => 'jwtjzw-nu.myshopify.com',
+                    'shop_url' => 'https://jwtjzw-nu.myshopify.com/',
+                    'token_status' => 'awaiting',
+                    'mode_hint' => 'Shop domain wired; local_sim until Admin API access token + INTEGRATION_MODE=live.',
+                ],
+            ])->save();
+        } else {
+            Integration::query()->create([
+                'workspace_id' => $workspace->id,
+                'provider' => 'shopify',
+                'external_account_id' => 'jwtjzw-nu.myshopify.com',
+                'display_name' => 'Shopify',
+                'status' => 'awaiting_credentials',
+                'capabilities' => ['products.read', 'orders.read', 'webhooks'],
+                'granted_scopes' => [],
+                'last_health_check_at' => now(),
+                'metadata' => [
+                    'shop_domain' => 'jwtjzw-nu.myshopify.com',
+                    'shop_url' => 'https://jwtjzw-nu.myshopify.com/',
+                    'token_status' => 'awaiting',
+                    'mode_hint' => 'Shop domain wired; local_sim until Admin API access token + INTEGRATION_MODE=live.',
+                ],
+            ]);
         }
 
         $workspace->forceFill([

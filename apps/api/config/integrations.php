@@ -13,6 +13,17 @@ return [
     */
     'mode' => env('INTEGRATION_MODE', 'local'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Cron secret (Vercel Cron Jobs → Next API → Laravel process workers)
+    |--------------------------------------------------------------------------
+    |
+    | Same value on apps/web (Vercel CRON_SECRET) and apps/api. Vercel Cron
+    | sends Authorization: Bearer <CRON_SECRET> to scheduled paths.
+    |
+    */
+    'cron_secret' => env('CRON_SECRET'),
+
     'wordpress' => [
         'base_url' => rtrim((string) env('WORDPRESS_BASE_URL', ''), '/'),
         'username' => env('WORDPRESS_USERNAME'),
@@ -26,6 +37,8 @@ return [
         'client_secret' => env('ZOHO_CLIENT_SECRET'),
         'refresh_token' => env('ZOHO_REFRESH_TOKEN'),
         'access_token' => env('ZOHO_ACCESS_TOKEN'),
+        // Zoho Books organization ID — required for invoice PDF / UAE e-invoice path
+        'organization_id' => env('ZOHO_ORGANIZATION_ID'),
         'api_domain' => rtrim((string) env('ZOHO_API_DOMAIN', 'https://www.zohoapis.com'), '/'),
         'accounts_url' => rtrim((string) env('ZOHO_ACCOUNTS_URL', 'https://accounts.zoho.com'), '/'),
         'module_leads' => env('ZOHO_MODULE_LEADS', 'Leads'),
@@ -39,7 +52,8 @@ return [
         'client_secret' => env('SHOPIFY_CLIENT_SECRET'),
         'redirect_uri' => env('SHOPIFY_REDIRECT_URI'),
         'api_version' => env('SHOPIFY_API_VERSION', '2025-01'),
-        'shop_domain' => env('SHOPIFY_SHOP_DOMAIN'),
+        // Triada store: jwtjzw-nu.myshopify.com (Admin API token still awaiting)
+        'shop_domain' => env('SHOPIFY_SHOP_DOMAIN', 'jwtjzw-nu.myshopify.com'),
         'access_token' => env('SHOPIFY_ACCESS_TOKEN'),
         'webhook_secret' => env('SHOPIFY_WEBHOOK_SECRET'),
         'scopes' => env('SHOPIFY_SCOPES', 'read_products,read_orders,read_inventory'),

@@ -8,6 +8,8 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AI\AiOrchestrator;
 use App\Services\AI\LlmCredentialStore;
+use App\Services\CRM\Zoho\ZohoBooksClient;
+use App\Services\CRM\Zoho\ZohoCredentialStore;
 use App\Services\CRM\Zoho\ZohoCrmClient;
 use App\Services\Messaging\Meta\MetaControlPlane;
 use App\Services\WordPress\WordPressClient;
@@ -32,6 +34,8 @@ class IntegrationController extends Controller
         Request $request,
         WordPressClient $wordpress,
         ZohoCrmClient $zoho,
+        ZohoBooksClient $books,
+        ZohoCredentialStore $zohoCreds,
         MetaControlPlane $meta,
         LlmCredentialStore $llmCreds,
         AiOrchestrator $orchestrator,
@@ -41,6 +45,8 @@ class IntegrationController extends Controller
 
         $wpHealth = $wordpress->healthCheck();
         $zohoHealth = $zoho->healthCheck();
+        $booksHealth = $books->healthCheck($workspace);
+        $zohoStatus = $zohoCreds->status($workspace);
         $metaStatus = $meta->status($workspace);
         $anthropic = $llmCreds->status($workspace);
         $llm = $orchestrator->llmStatus();
@@ -67,7 +73,11 @@ class IntegrationController extends Controller
         return response()->json([
             'mode' => $mode,
             'wordpress' => $wpHealth,
-            'zoho' => $zohoHealth,
+            'zoho' => array_merge($zohoHealth, [
+                'credentials' => $zohoStatus,
+                'books' => $booksHealth,
+            ]),
+            'zoho_books' => $booksHealth,
             'meta' => $metaStatus,
             'anthropic' => $anthropic,
             // Active LLM (Anthropic / Gemini / local) — not Anthropic-only.
@@ -107,6 +117,47 @@ class IntegrationController extends Controller
         return response()->json([
             'ok' => true,
             'anthropic' => $llmCreds->clearAnthropic($workspace),
+        ]);
+    }
+
+    public function zohoStatus(Request $request, ZohoCredentialStore $zohoCreds, ZohoBooksClient $books): JsonResponse
+    {
+        $workspace = Workspace::query()->findOrFail($this->workspaceId($request));
+
+        return response()->json([
+            'zoho' => $zohoCreds->status($workspace),
+            'books' => $books->healthCheck($workspace),
+        ]);
+    }
+
+    public function saveZoho(Request $request, ZohoCredentialStore $zohoCreds, ZohoBooksClient $books): JsonResponse
+    {
+        $data = $request->validate([
+            'client_id' => ['nullable', 'string', 'max:255'],
+            'client_secret' => ['nullable', 'string', 'max:255'],
+            'refresh_token' => ['nullable', 'string', 'max:2000'],
+            'access_token' => ['nullable', 'string', 'max:2000'],
+            'organization_id' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $workspace = Workspace::query()->findOrFail($this->workspaceId($request));
+        $status = $zohoCreds->save($workspace, $data);
+
+        return response()->json([
+            'ok' => true,
+            'zoho' => $status,
+            'books' => $books->healthCheck($workspace),
+        ]);
+    }
+
+    public function clearZoho(Request $request, ZohoCredentialStore $zohoCreds, ZohoBooksClient $books): JsonResponse
+    {
+        $workspace = Workspace::query()->findOrFail($this->workspaceId($request));
+
+        return response()->json([
+            'ok' => true,
+            'zoho' => $zohoCreds->clear($workspace),
+            'books' => $books->healthCheck($workspace),
         ]);
     }
 

@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\ContentPublishController;
 use App\Http\Controllers\Api\V1\ConversationController;
 use App\Http\Controllers\Api\V1\CreativeMediaController;
+use App\Http\Controllers\Api\V1\CronWorkerController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\IntegrationController;
 use App\Http\Controllers\Api\V1\JewelleryOpsController;
@@ -57,6 +58,12 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/webchat/messages', [WebchatPublicController::class, 'send']);
 
+    // Vercel Cron Jobs → Next /api/cron/* → these process-on-demand workers
+    Route::middleware('cron.secret')->prefix('cron')->group(function () {
+        Route::match(['get', 'post'], '/abandonment/process', [CronWorkerController::class, 'processAbandonment']);
+        Route::match(['get', 'post'], '/after-sale/process', [CronWorkerController::class, 'processAfterSale']);
+    });
+
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -99,6 +106,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/integrations/anthropic/status', [IntegrationController::class, 'anthropicStatus']);
         Route::post('/integrations/anthropic', [IntegrationController::class, 'saveAnthropic']);
         Route::post('/integrations/anthropic/clear', [IntegrationController::class, 'clearAnthropic']);
+        Route::get('/integrations/zoho/status', [IntegrationController::class, 'zohoStatus']);
+        Route::post('/integrations/zoho', [IntegrationController::class, 'saveZoho']);
+        Route::post('/integrations/zoho/clear', [IntegrationController::class, 'clearZoho']);
 
         Route::get('/integrations/meta/status', [MetaIntegrationController::class, 'status']);
         Route::post('/integrations/meta/connect', [MetaIntegrationController::class, 'connect']);

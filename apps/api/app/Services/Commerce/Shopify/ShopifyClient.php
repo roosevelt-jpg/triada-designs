@@ -30,11 +30,18 @@ class ShopifyClient
     public function healthCheck(): array
     {
         if ($this->usesLocalFallback()) {
+            $domain = (string) config('integrations.shopify.shop_domain', '');
+            $hasDomain = filled($domain);
+            $hasClient = filled(config('integrations.shopify.client_id'));
+
             return [
                 'ok' => true,
-                'status' => filled(config('integrations.shopify.client_id')) ? 'awaiting_credentials' : 'disconnected',
+                'status' => ($hasDomain || $hasClient) ? 'awaiting_credentials' : 'disconnected',
                 'mode' => 'local',
-                'message' => 'Shopify Admin API not live. Use Connect + Sync simulator until OAuth tokens exist.',
+                'shop_domain' => $hasDomain ? $domain : null,
+                'message' => $hasDomain
+                    ? "Shopify shop domain set ({$domain}). local_sim until Admin API access token + INTEGRATION_MODE=live."
+                    : 'Shopify Admin API not live. Use Connect + Sync simulator until OAuth tokens exist.',
             ];
         }
 

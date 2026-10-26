@@ -5,11 +5,14 @@ namespace App\Services\JewelleryOps;
 use App\Models\CommerceOrder;
 use App\Models\Invoice;
 use App\Models\Workspace;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
+use App\Services\CRM\Zoho\ZohoBooksClient;
 
 class InvoiceService
 {
+    public function __construct(protected ZohoBooksClient $books)
+    {
+    }
+
     /**
      * @param  array<string, mixed>  $options
      * @return array<string, mixed>
@@ -31,64 +34,50 @@ class InvoiceService
                 'status' => 'issued',
                 'currency' => $order->currency,
                 'amount' => $order->total,
-                'accounting_ref' => 'local-acct-'.Str::lower(Str::random(6)),
+                'accounting_ref' => null,
                 'einvoice_provider' => $type === 'b2b' ? 'uae_einvoice' : null,
                 'einvoice_status' => $type === 'b2b' ? 'local_sim' : null,
                 'line_items' => $order->line_items,
                 'issued_at' => now(),
                 'metadata' => [
-                    'accounting' => 'local_sim',
-                    'note' => $type === 'b2b'
-                        ? 'B2B path routed through UAE e-invoicing provider adapter (local_sim until credentials).'
-                        : 'B2C invoice recorded in accounting adapter (local_sim) and PDF generated.',
+                    'accounting' => 'zoho_books',
+                    'note' => 'Routing through Zoho Books adapter (local_sim until OAuth + organization_id + live mode).',
                 ],
             ]
         );
 
-        $pdf = $this->renderPdf($workspace, $invoice, $order);
+        $issued = $this->books->issueInvoice($workspace, $invoice, $order, $options);
+
         $invoice->forceFill([
-            'pdf_path' => $pdf['path'],
-            'pdf_mode' => $pdf['mode'],
+            'accounting_ref' => $issued['accounting_ref'] ?? $invoice->accounting_ref,
+            'einvoice_provider' => $issued['einvoice_provider'] ?? $invoice->einvoice_provider,
+            'einvoice_status' => $issued['einvoice_status'] ?? $invoice->einvoice_status,
+            'pdf_path' => $issued['pdf']['path'] ?? $invoice->pdf_path,
+            'pdf_mode' => $issued['pdf']['mode'] ?? 'local_sim',
             'status' => 'sent',
             'sent_at' => now(),
+            'metadata' => array_merge($invoice->metadata ?? [], [
+                'accounting' => $issued['provider'] ?? 'zoho_books',
+                'accounting_mode' => $issued['mode'] ?? 'local_sim',
+                'note' => $issued['note'] ?? ($invoice->metadata['note'] ?? null),
+                'books_error' => $issued['error'] ?? null,
+            ]),
         ])->save();
 
         return [
             'ok' => true,
             'invoice' => $invoice->fresh(),
-            'pdf' => $pdf,
+            'pdf' => $issued['pdf'] ?? null,
+            'books' => [
+                'mode' => $issued['mode'] ?? 'local_sim',
+                'provider' => $issued['provider'] ?? 'zoho_books',
+                'accounting_ref' => $issued['accounting_ref'] ?? null,
+            ],
             'customer_delivery' => [
                 'channel' => $order->customer_email ? 'email' : 'local_sim',
                 'to' => $order->customer_email,
                 'mode' => 'local_sim',
             ],
-        ];
-    }
-
-    /**
-     * @return array{path:string,mode:string,url:?string}
-     */
-    protected function renderPdf(Workspace $workspace, Invoice $invoice, CommerceOrder $order): array
-    {
-        $lines = [
-            'TRIADA DESIGNS — INVOICE',
-            'Invoice: '.$invoice->invoice_number,
-            'Order: '.$order->order_number,
-            'Type: '.$invoice->type,
-            'Amount: '.$invoice->amount.' '.$invoice->currency,
-            'Issued: '.now()->toDateString(),
-            $invoice->type === 'b2b' ? 'UAE e-invoicing: local_sim pending provider credentials' : 'B2C PDF',
-            'Line items: '.json_encode($order->line_items ?? []),
-        ];
-        $body = implode("\n", $lines);
-        $path = 'invoices/'.$workspace->id.'/'.$invoice->invoice_number.'.txt';
-        Storage::disk('local')->put($path, $body);
-
-        return [
-            'path' => $path,
-            'mode' => 'local_sim',
-            'url' => null,
-            'bytes' => strlen($body),
         ];
     }
 }

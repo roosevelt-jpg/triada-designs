@@ -96,16 +96,19 @@ WORDPRESS_WEBHOOK_SECRET=long-random-secret
 
 3. Point webhooks to `POST /api/webhooks/wordpress` with header `X-Triada-Webhook-Secret`.
 
-### Connect Zoho CRM (live)
+### Connect Zoho CRM + Books (live)
 
-1. Create a Zoho API console client and generate a refresh token with CRM scopes.
-2. Set:
+Prefer **Zoho Books** for invoice PDF / UAE e-invoice (CRM alone is not enough for accounting PDFs). Use CRM for customer/lead sync.
+
+1. Create a Zoho API console client with CRM + Books scopes; generate a refresh token.
+2. Paste on **Integrations → Zoho CRM + Books** (Client ID / Secret / Refresh token / Books organization ID), or set env:
 
 ```bash
 INTEGRATION_MODE=live
 ZOHO_CLIENT_ID=...
 ZOHO_CLIENT_SECRET=...
 ZOHO_REFRESH_TOKEN=...
+ZOHO_ORGANIZATION_ID=...   # Books org — required for invoices / UAE e-invoice
 ZOHO_API_DOMAIN=https://www.zohoapis.com
 ZOHO_ACCOUNTS_URL=https://accounts.zoho.com
 ZOHO_WEBHOOK_SECRET=long-random-secret
@@ -114,6 +117,21 @@ ZOHO_WEBHOOK_SECRET=long-random-secret
 3. Point Zoho webhooks to `POST /api/webhooks/zoho` with header `X-Triada-Webhook-Secret`.
 
 Health endpoint (authenticated): `GET /api/v1/integrations/health`
+
+### Vercel Cron Jobs (abandonment + after-sale)
+
+Abandonment and after-sale workers are **process-on-demand** (not always-on). Production uses **Vercel Cron Jobs** in `apps/web/vercel.json`:
+
+| Cron path | Schedule | Laravel worker |
+|---|---|---|
+| `/api/cron/abandonment` | `0 * * * *` (hourly) | `POST /api/v1/cron/abandonment/process` |
+| `/api/cron/after-sale` | `30 * * * *` | `POST /api/v1/cron/after-sale/process` |
+
+Set the same `CRON_SECRET` on Vercel (web) and the API host. Set `API_ORIGIN` on Vercel to the Laravel base URL. Vercel sends `Authorization: Bearer <CRON_SECRET>` to cron paths.
+
+### Shopify store
+
+Default shop domain: `jwtjzw-nu.myshopify.com` (`SHOPIFY_SHOP_DOMAIN`). Paste Admin API access token on Integrations → Shopify when ready; stays `awaiting_credentials` / `local_sim` until token + `INTEGRATION_MODE=live`.
 
 ## Meta messaging (local simulator by default)
 

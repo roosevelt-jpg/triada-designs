@@ -15,6 +15,10 @@ use RuntimeException;
  */
 class ZohoCrmClient implements CrmClientInterface
 {
+    public function __construct(protected ZohoCredentialStore $credentials)
+    {
+    }
+
     public function provider(): string
     {
         return 'zoho';
@@ -29,11 +33,7 @@ class ZohoCrmClient implements CrmClientInterface
 
     public function isConfigured(): bool
     {
-        $cfg = config('integrations.zoho');
-
-        return filled($cfg['client_id'])
-            && filled($cfg['client_secret'])
-            && (filled($cfg['refresh_token']) || filled($cfg['access_token']));
+        return $this->credentials->isConfigured();
     }
 
     public function usesLocalFallback(): bool
@@ -47,11 +47,11 @@ class ZohoCrmClient implements CrmClientInterface
             $awaiting = ! $this->isConfigured();
 
             return [
-                'status' => 'seeded',
+                'status' => $awaiting ? 'awaiting_credentials' : 'seeded',
                 'mode' => 'local',
                 'configured' => $this->isConfigured(),
                 'message' => $awaiting
-                    ? 'Zoho CRM awaiting credentials. Using local seeded leads until ZOHO_* is set and INTEGRATION_MODE=live.'
+                    ? 'Zoho CRM awaiting credentials. Paste Client ID/Secret/Refresh token on Integrations (or ZOHO_* env). local_sim until keyed + INTEGRATION_MODE=live. Use Zoho Books for invoice PDF / UAE e-invoice.'
                     : 'Zoho CRM running in local seed mode. Set INTEGRATION_MODE=live to call the API.',
             ];
         }
@@ -232,17 +232,17 @@ class ZohoCrmClient implements CrmClientInterface
 
     protected function accessToken(): string
     {
-        $configured = config('integrations.zoho.access_token');
-        if (filled($configured)) {
-            return (string) $configured;
+        $configured = $this->credentials->accessToken();
+        if ($configured !== '') {
+            return $configured;
         }
 
         $response = Http::asForm()
             ->timeout((int) config('integrations.zoho.timeout'))
             ->post(config('integrations.zoho.accounts_url').'/oauth/v2/token', [
-                'refresh_token' => config('integrations.zoho.refresh_token'),
-                'client_id' => config('integrations.zoho.client_id'),
-                'client_secret' => config('integrations.zoho.client_secret'),
+                'refresh_token' => $this->credentials->refreshToken(),
+                'client_id' => $this->credentials->clientId(),
+                'client_secret' => $this->credentials->clientSecret(),
                 'grant_type' => 'refresh_token',
             ]);
 
