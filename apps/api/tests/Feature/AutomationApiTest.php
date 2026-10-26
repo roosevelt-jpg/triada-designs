@@ -20,7 +20,7 @@ class AutomationApiTest extends TestCase
         parent::setUp();
         $this->seed();
 
-        $user = User::query()->where('email', 'admin@triada-designs.com')->firstOrFail();
+        $user = User::query()->where('email', 'info@triada-designs.com')->firstOrFail();
         $this->token = $user->createToken('test')->plainTextToken;
     }
 

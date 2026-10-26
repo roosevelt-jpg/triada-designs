@@ -27,7 +27,7 @@ class FoundationApiTest extends TestCase
     public function test_seed_admin_login_and_dashboard(): void
     {
         $login = $this->postJson('/api/v1/auth/login', [
-            'email' => 'admin@triada-designs.com',
+            'email' => 'info@triada-designs.com',
             'password' => 'triada-local',
             'device_name' => 'test',
         ])->assertOk();
@@ -43,7 +43,7 @@ class FoundationApiTest extends TestCase
 
     public function test_integrations_health_local_seed_mode(): void
     {
-        $user = User::query()->where('email', 'admin@triada-designs.com')->firstOrFail();
+        $user = User::query()->where('email', 'info@triada-designs.com')->firstOrFail();
         $token = $user->createToken('test')->plainTextToken;
 
         $this->withToken($token)
@@ -56,7 +56,7 @@ class FoundationApiTest extends TestCase
 
     public function test_human_takeover_changes_mode(): void
     {
-        $user = User::query()->where('email', 'admin@triada-designs.com')->firstOrFail();
+        $user = User::query()->where('email', 'info@triada-designs.com')->firstOrFail();
         $token = $user->createToken('test')->plainTextToken;
 
         $list = $this->withToken($token)->getJson('/api/v1/conversations')->assertOk();

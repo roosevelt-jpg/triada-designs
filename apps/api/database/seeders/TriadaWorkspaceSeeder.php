@@ -34,11 +34,12 @@ class TriadaWorkspaceSeeder extends Seeder
             ['slug' => 'triada-designs'],
             [
                 'name' => 'Triada Designs',
-                'timezone' => 'America/Los_Angeles',
+                'timezone' => 'Asia/Dubai',
                 'default_language' => 'en',
                 'settings' => [
                     'brand' => 'Triada Designs',
                     'public_site' => 'https://triada-designs.com',
+                    'ops_region' => 'Dubai / UAE',
                 ],
             ]
         );
@@ -57,19 +58,50 @@ class TriadaWorkspaceSeeder extends Seeder
             ]
         );
 
-        $user = User::query()->updateOrCreate(
-            ['email' => 'admin@triada-designs.com'],
-            [
+        // Migrate legacy local admin email → primary ops contact.
+        $legacyAdmin = User::query()->where('email', 'admin@triada-designs.com')->first();
+        $existingInfo = User::query()->where('email', 'info@triada-designs.com')->first();
+
+        if ($legacyAdmin && ! $existingInfo) {
+            $legacyAdmin->forceFill([
+                'email' => 'info@triada-designs.com',
                 'name' => 'Triada Admin',
                 'password' => Hash::make('triada-local'),
                 'email_verified_at' => now(),
-            ]
-        );
+            ])->save();
+            $user = $legacyAdmin->fresh();
+        } elseif ($legacyAdmin && $existingInfo && $legacyAdmin->id !== $existingInfo->id) {
+            WorkspaceMembership::query()
+                ->where('user_id', $legacyAdmin->id)
+                ->update(['user_id' => $existingInfo->id]);
+            $legacyAdmin->delete();
+            $user = $existingInfo;
+            $user->forceFill([
+                'name' => 'Triada Admin',
+                'password' => Hash::make('triada-local'),
+                'email_verified_at' => now(),
+            ])->save();
+        } else {
+            $user = User::query()->updateOrCreate(
+                ['email' => 'info@triada-designs.com'],
+                [
+                    'name' => 'Triada Admin',
+                    'password' => Hash::make('triada-local'),
+                    'email_verified_at' => now(),
+                ]
+            );
+        }
 
         WorkspaceMembership::query()->updateOrCreate(
             ['workspace_id' => $workspace->id, 'user_id' => $user->id],
             ['role_id' => $ownerRole->id, 'status' => 'active']
         );
+
+        $telegramToken = filled(config('integrations.telegram.bot_token'));
+        $emailKey = filled(config('integrations.email.api_key'));
+        $geminiKey = filled(config('integrations.llm.gemini.api_key'));
+        $resendKey = filled(config('services.resend.key'));
+        $integrationMode = strtolower((string) config('integrations.mode', 'local'));
 
         foreach ([
             ['provider' => 'wordpress', 'display_name' => 'WordPress CMS', 'status' => 'seeded', 'capabilities' => ['posts.read', 'posts.draft', 'webhooks']],
@@ -85,7 +117,7 @@ class TriadaWorkspaceSeeder extends Seeder
                     ],
                 ],
             ],
-            ['provider' => 'webchat', 'display_name' => 'Website Live Chat', 'status' => 'seeded', 'capabilities' => ['messages.send', 'messages.receive']],
+            ['provider' => 'webchat', 'display_name' => 'Website Live Chat', 'status' => 'local', 'capabilities' => ['messages.send', 'messages.receive']],
             ['provider' => 'facebook', 'display_name' => 'Facebook Messenger', 'status' => 'awaiting_credentials', 'capabilities' => ['messages.send', 'messages.receive', 'webhooks', 'pages']],
             ['provider' => 'instagram', 'display_name' => 'Instagram Messaging', 'status' => 'awaiting_credentials', 'capabilities' => ['messages.send', 'messages.receive', 'webhooks']],
             ['provider' => 'whatsapp', 'display_name' => 'WhatsApp Cloud API', 'status' => 'awaiting_credentials', 'capabilities' => ['messages.send', 'messages.receive', 'templates', 'webhooks']],
@@ -160,13 +192,13 @@ class TriadaWorkspaceSeeder extends Seeder
         $amelia = Contact::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'email_normalized' => 'amelia@example.com',
+                'email_normalized' => 'layla.almansoori@example.com',
             ],
             [
-                'name' => 'Amelia Chen',
-                'email' => 'amelia@example.com',
-                'phone' => '+1 415 555 0142',
-                'phone_normalized' => '14155550142',
+                'name' => 'Layla Al Mansoori',
+                'email' => 'layla.almansoori@example.com',
+                'phone' => '+971 50 555 0142',
+                'phone_normalized' => '971505550142',
                 'preferred_language' => 'en',
                 'lifecycle_status' => 'qualified',
                 'source' => 'webchat',
@@ -176,13 +208,13 @@ class TriadaWorkspaceSeeder extends Seeder
         $noah = Contact::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'email_normalized' => 'noah@example.com',
+                'email_normalized' => 'omar.hassan@example.com',
             ],
             [
-                'name' => 'Noah Patel',
-                'email' => 'noah@example.com',
-                'phone' => '+1 628 555 0199',
-                'phone_normalized' => '16285550199',
+                'name' => 'Omar Hassan',
+                'email' => 'omar.hassan@example.com',
+                'phone' => '+971 55 555 0199',
+                'phone_normalized' => '971555550199',
                 'preferred_language' => 'en',
                 'lifecycle_status' => 'lead',
                 'source' => 'email',
@@ -214,7 +246,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'sender_type' => 'contact',
                 'sender_id' => $amelia->id,
                 'message_type' => 'text',
-                'body' => 'Hi — I’m looking for a calm skincare set for sensitive skin. What do you recommend?',
+                'body' => 'Hi — I’m looking for a sculptural ring for everyday wear in Dubai. Do you have the Priest Ring or something similar in gold plate?',
                 'detected_language' => 'en',
                 'delivery_status' => 'received',
                 'provider_timestamp' => now()->subMinutes(14),
@@ -225,7 +257,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'direction' => 'outbound',
                 'sender_type' => 'ai',
                 'message_type' => 'text',
-                'body' => 'I’m Triada Designs’ virtual assistant. I can help with products, services, and order questions. For sensitive skin, our gentle cleanser and barrier cream are the approved recommendations. Would you like product details or a service consultation?',
+                'body' => 'I’m Triada Designs’ virtual assistant. I can help with jewellery, custom pieces, and order questions. The Priest Ring is in our Salt & Spirit line (silver with gold plating; 14K/18K on request, ~7 days to make). Would you like sizing guidance or a private consultation in Dubai?',
                 'detected_language' => 'en',
                 'delivery_status' => 'sent',
                 'provider_timestamp' => now()->subMinutes(13),
@@ -237,7 +269,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'sender_type' => 'contact',
                 'sender_id' => $amelia->id,
                 'message_type' => 'text',
-                'body' => 'Product details please — and do you offer a consultation?',
+                'body' => 'Sizing please — and yes, I’d like a consultation if you offer video or in-person.',
                 'detected_language' => 'en',
                 'delivery_status' => 'received',
                 'provider_timestamp' => now()->subMinutes(12),
@@ -252,14 +284,15 @@ class TriadaWorkspaceSeeder extends Seeder
             [
                 'source_channel' => 'webchat',
                 'stage' => 'qualified',
-                'score' => 78,
-                'score_reasons' => ['purchase_intent', 'service_interest'],
+                'score' => 82,
+                'score_reasons' => ['purchase_intent', 'consultation_interest', 'dubai_ops'],
                 'assigned_user_id' => $user->id,
-                'estimated_value' => 180,
-                'currency' => 'USD',
+                'estimated_value' => 1450,
+                'currency' => 'AED',
                 'qualification_data' => [
-                    'interest' => 'sensitive skincare set + consultation',
+                    'interest' => 'Priest Ring + private jewellery consultation',
                     'timing' => 'this_month',
+                    'region' => 'Dubai',
                 ],
             ]
         );
@@ -272,44 +305,54 @@ class TriadaWorkspaceSeeder extends Seeder
             [
                 'source_channel' => 'email',
                 'stage' => 'contacted',
-                'score' => 42,
-                'score_reasons' => ['general_inquiry'],
+                'score' => 48,
+                'score_reasons' => ['gift_inquiry'],
                 'assigned_user_id' => $user->id,
-                'currency' => 'USD',
+                'currency' => 'AED',
+                'qualification_data' => [
+                    'interest' => 'Gift finder — pearl earrings anniversary',
+                    'region' => 'Abu Dhabi',
+                ],
             ]
         );
 
         Task::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'title' => 'Follow up with Amelia on consultation availability',
+                'title' => 'Follow up with Layla on ring size + Dubai consultation',
             ],
             [
                 'contact_id' => $amelia->id,
                 'conversation_id' => $conversation->id,
                 'assigned_user_id' => $user->id,
                 'type' => 'follow_up',
-                'description' => 'Confirm whether she prefers product links or a service inquiry form.',
+                'description' => 'Send size-guide link and confirm video vs in-person consultation slot.',
                 'due_at' => now()->addDay(),
                 'status' => 'open',
             ]
         );
 
-        // Jewellery catalog is seeded production-style in JewelleryOpsSeeder.
+        // Core catalogue pieces also expanded in JewelleryOpsSeeder.
         Product::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'sku' => 'TD-RING-AURA-01',
+                'sku' => 'TD-RING-PRIEST-01',
             ],
             [
-                'title' => 'Aura Signet Ring',
-                'description' => 'Gold-plated silver signet. Size confirmed against published guide. ~7 days to make.',
-                'product_url' => 'https://triada-designs.com/products/aura-signet-ring',
-                'price' => 890,
+                'title' => 'The Priest Ring',
+                'description' => 'Sculptural Salt & Spirit ring. Silver with gold plating; 14K/18K gold on request. ~7 days to make.',
+                'product_url' => 'https://triada-designs.com/',
+                'price' => 1450,
                 'currency' => 'AED',
                 'availability_status' => 'in_stock_snapshot',
                 'published_status' => 'published',
-                'approved_claims' => ['silver with gold plating', 'made to order ~7 days'],
+                'approved_claims' => ['silver with gold plating', 'made to order ~7 days', 'Salt & Spirit'],
+                'metadata' => [
+                    'photo_url' => '/brand/jewellery/priest-ring.jpg',
+                    'model_url' => '/brand/models/priest-ring-v2.glb',
+                    'category' => 'ring',
+                    'collection' => 'Salt & Spirit',
+                ],
                 'synced_at' => now(),
             ]
         );
@@ -323,7 +366,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'description' => 'Video or in-person consultation in Dubai for custom, engraving, or 14K/18K gold pieces. Quotes are human-approved.',
                 'price' => 0,
                 'currency' => 'AED',
-                'inquiry_url' => 'https://triada-designs.com/services/consultation',
+                'inquiry_url' => 'https://triada-designs.com/',
                 'status' => 'active',
                 'approved_claims' => ['consultation', 'custom quotes require human approval'],
             ]
@@ -332,21 +375,22 @@ class TriadaWorkspaceSeeder extends Seeder
         ContentItem::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'title' => 'Warm neutrals for spring rituals',
+                'title' => 'Salt & Spirit — Priest Ring detail',
             ],
             [
                 'content_type' => 'social_post',
                 'objective' => 'awareness',
                 'status' => 'in_review',
                 'created_by' => $user->id,
-                'body' => 'Soft light on brushed gold. A quiet pendant for everyday rituals — explore Triada Designs jewellery.',
+                'body' => 'Soft Gulf light on sculptural gold. The Priest Ring — a quiet everyday piece from Salt & Spirit. Explore Triada Designs.',
                 'channel' => 'instagram',
                 'scheduled_for' => now()->addDays(3),
-                'campaign_key' => 'spring-rituals',
+                'campaign_key' => 'salt-spirit-dubai',
                 'approval_version' => 0,
                 'product_context' => [
-                    'name' => 'Brushed gold pendant',
-                    'materials' => '18k gold vermeil, fine chain',
+                    'name' => 'The Priest Ring',
+                    'materials' => 'silver with gold plating; gold on request',
+                    'collection' => 'Salt & Spirit',
                 ],
             ]
         );
@@ -354,7 +398,7 @@ class TriadaWorkspaceSeeder extends Seeder
         ContentItem::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'title' => 'Evening stack — refined metals',
+                'title' => 'Tides Treasure — pearl studs',
             ],
             [
                 'content_type' => 'campaign',
@@ -363,14 +407,15 @@ class TriadaWorkspaceSeeder extends Seeder
                 'created_by' => $user->id,
                 'approved_by' => $user->id,
                 'approved_at' => now()->subDay(),
-                'body' => 'An evening stack of refined metals. Human-approved caption ready for scheduled publish.',
+                'body' => 'Irregular gold studs with flat freshwater pearls. Human-approved caption ready for scheduled publish.',
                 'channel' => 'facebook',
                 'scheduled_for' => now()->addDays(5),
-                'campaign_key' => 'spring-rituals',
+                'campaign_key' => 'salt-spirit-dubai',
                 'approval_version' => 1,
                 'product_context' => [
-                    'name' => 'Mixed-metal ring stack',
-                    'materials' => 'sterling silver, rose gold plate',
+                    'name' => 'Tides Treasure',
+                    'materials' => 'gold-plated silver, freshwater pearl',
+                    'collection' => 'Salt & Spirit',
                 ],
             ]
         );
@@ -391,11 +436,11 @@ class TriadaWorkspaceSeeder extends Seeder
         $sofia = Contact::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'email_normalized' => 'sofia.meta@example.com',
+                'email_normalized' => 'mira.ksa@example.com',
             ],
             [
-                'name' => 'Sofia Reyes',
-                'email' => 'sofia.meta@example.com',
+                'name' => 'Mira Al Saud',
+                'email' => 'mira.ksa@example.com',
                 'preferred_language' => 'en',
                 'lifecycle_status' => 'lead',
                 'source' => 'instagram',
@@ -405,7 +450,7 @@ class TriadaWorkspaceSeeder extends Seeder
         $igConversation = Conversation::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'external_conversation_id' => 'seed-ig-triada:seed-ig-user-sofia',
+                'external_conversation_id' => 'seed-ig-triada:seed-ig-user-mira',
             ],
             [
                 'contact_id' => $sofia->id,
@@ -428,7 +473,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'sender_type' => 'contact',
                 'sender_id' => $sofia->id,
                 'message_type' => 'text',
-                'body' => 'Do you ship the barrier cream internationally?',
+                'body' => 'Do you ship Footprints in the Sand to Riyadh? Looking at the tricolor pendant.',
                 'detected_language' => 'en',
                 'delivery_status' => 'received',
                 'provider_timestamp' => now()->subMinutes(25),
@@ -551,6 +596,16 @@ class TriadaWorkspaceSeeder extends Seeder
         );
 
         foreach (['telegram', 'tiktok', 'email', 'linkedin'] as $provider) {
+            $hasCred = match ($provider) {
+                'telegram' => $telegramToken,
+                'email' => $emailKey || $resendKey,
+                default => false,
+            };
+            // Honest status: credentials present stay local until INTEGRATION_MODE=live.
+            $status = $hasCred
+                ? ($integrationMode === 'live' ? 'connected' : 'local')
+                : 'awaiting_credentials';
+
             \App\Models\Integration::query()->updateOrCreate(
                 [
                     'workspace_id' => $workspace->id,
@@ -561,21 +616,52 @@ class TriadaWorkspaceSeeder extends Seeder
                     'display_name' => match ($provider) {
                         'telegram' => 'Telegram Bot',
                         'tiktok' => 'TikTok',
-                        'email' => 'Email',
+                        'email' => 'Email (Resend)',
                         'linkedin' => 'LinkedIn',
                         default => ucfirst($provider),
                     },
-                    'status' => 'awaiting_credentials',
+                    'status' => $status,
                     'capabilities' => match ($provider) {
                         'tiktok' => ['posts.publish', 'templates', 'webhooks'],
                         'linkedin' => ['posts.publish', 'templates', 'messaging'],
                         'email' => ['messages.send', 'messages.receive', 'templates'],
                         default => ['messages.send', 'messages.receive'],
                     },
-                    'metadata' => ['seeded' => true, 'vertical' => 'jewellery'],
+                    'metadata' => [
+                        'seeded' => true,
+                        'vertical' => 'jewellery',
+                        'has_env_credentials' => $hasCred,
+                        'mode_hint' => $hasCred
+                            ? ($integrationMode === 'live'
+                                ? 'Credentials present; INTEGRATION_MODE=live'
+                                : 'Credentials present in env; running local_sim until INTEGRATION_MODE=live')
+                            : 'Awaiting provider credentials',
+                    ],
                 ]
             );
         }
+
+        Integration::query()->updateOrCreate(
+            [
+                'workspace_id' => $workspace->id,
+                'provider' => 'gemini',
+                'external_account_id' => 'gemini-primary',
+            ],
+            [
+                'display_name' => 'Google Gemini',
+                'status' => $geminiKey
+                    ? ($integrationMode === 'live' ? 'connected' : 'local')
+                    : 'awaiting_credentials',
+                'capabilities' => ['llm.chat', 'agents', 'creative_prompts'],
+                'metadata' => [
+                    'has_api_key' => $geminiKey,
+                    'model' => config('integrations.llm.gemini.model'),
+                    'ui_hint' => $geminiKey
+                        ? 'GEMINI_API_KEY present — active when LLM_PROVIDER=gemini'
+                        : 'Set GEMINI_API_KEY or switch to Anthropic on Integrations',
+                ],
+            ]
+        );
 
         foreach ([
             [
@@ -615,14 +701,14 @@ class TriadaWorkspaceSeeder extends Seeder
         Opportunity::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'name' => 'Amelia — consultation + barrier set',
+                'name' => 'Layla — Priest Ring + Dubai consultation',
             ],
             [
                 'contact_id' => $amelia->id,
-                'name' => 'Amelia — consultation + barrier set',
+                'name' => 'Layla — Priest Ring + Dubai consultation',
                 'stage' => 'proposal',
-                'amount' => 180,
-                'currency' => 'USD',
+                'amount' => 1450,
+                'currency' => 'AED',
                 'source_channel' => 'webchat',
                 'owner_user_id' => $user->id,
                 'expected_close_at' => now()->addDays(10),

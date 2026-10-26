@@ -29,52 +29,127 @@ class JewelleryOpsSeeder extends Seeder
             ],
             [
                 'display_name' => 'Anthropic (Claude)',
-                'status' => 'awaiting_credentials',
+                'status' => filled(config('integrations.llm.anthropic.api_key'))
+                    ? (strtolower((string) config('integrations.mode', 'local')) === 'live' ? 'connected' : 'local')
+                    : 'awaiting_credentials',
                 'capabilities' => ['llm.chat', 'agents', 'creative_prompts'],
                 'metadata' => [
-                    'has_api_key' => false,
+                    'has_api_key' => filled(config('integrations.llm.anthropic.api_key')),
                     'model' => config('integrations.llm.anthropic.model'),
-                    'ui_hint' => 'Paste API key on Integrations',
+                    'ui_hint' => 'Paste API key on Integrations — primary LLM when keyed; Gemini active if LLM_PROVIDER=gemini',
                 ],
             ]
         );
 
+        // Catalog aligned to live Salt & Spirit pieces on triada-designs.com (+ official GLB/photo assets).
         $products = [
             [
-                'sku' => 'TD-RING-AURA-01',
-                'title' => 'Aura Signet Ring',
-                'description' => 'Gold-plated silver signet. Size confirmed against published guide. ~7 days to make.',
-                'product_url' => 'https://triada-designs.com/products/aura-signet-ring',
-                'price' => 890,
+                'sku' => 'TD-RING-PRIEST-01',
+                'title' => 'The Priest Ring',
+                'description' => 'Sculptural Salt & Spirit ring. Silver with gold plating; 14K/18K on request. ~7 days to make.',
+                'product_url' => 'https://triada-designs.com/',
+                'price' => 1450,
+                'approved_claims' => ['silver with gold plating', 'made to order ~7 days', 'Salt & Spirit'],
+                'metadata' => [
+                    'photo_url' => '/brand/jewellery/priest-ring.jpg',
+                    'model_url' => '/brand/models/priest-ring-v2.glb',
+                    'category' => 'ring',
+                    'collection' => 'Salt & Spirit',
+                ],
+            ],
+            [
+                'sku' => 'TD-RING-IMAGO-02',
+                'title' => 'Imago Dei Ring',
+                'description' => 'Statement ring from the Salt & Spirit collection. Confirm size against published guide.',
+                'product_url' => 'https://triada-designs.com/',
+                'price' => 1680,
                 'approved_claims' => ['silver with gold plating', 'made to order ~7 days'],
-                'metadata' => ['photo_url' => 'https://triada-designs.com/products/aura-signet-ring?view=image', 'category' => 'ring'],
+                'metadata' => [
+                    'photo_url' => '/brand/jewellery/imago-dei-ring.jpg',
+                    'model_url' => '/brand/models/imago-dei-ring-v1.glb',
+                    'category' => 'ring',
+                    'collection' => 'Salt & Spirit',
+                ],
             ],
             [
-                'sku' => 'TD-PEND-QUIET-02',
-                'title' => 'Quiet Pendant',
-                'description' => 'Calm everyday pendant on fine chain. 14K/18K gold on request.',
-                'product_url' => 'https://triada-designs.com/products/quiet-pendant',
+                'sku' => 'TD-RING-WAVES-03',
+                'title' => 'Open Waves',
+                'description' => 'Sculptural open band ring — spiral design. Everyday Salt & Spirit piece.',
+                'product_url' => 'https://triada-designs.com/',
+                'price' => 980,
+                'approved_claims' => ['silver with gold plating', 'made to order ~7 days'],
+                'metadata' => [
+                    'photo_url' => '/brand/jewellery/open-waves.png',
+                    'category' => 'ring',
+                    'collection' => 'Salt & Spirit',
+                ],
+            ],
+            [
+                'sku' => 'TD-EAR-TIDES-04',
+                'title' => 'Tides Treasure',
+                'description' => 'Irregular gold stud earrings with flat freshwater pearls.',
+                'product_url' => 'https://triada-designs.com/',
                 'price' => 720,
+                'approved_claims' => ['silver with gold plating', 'freshwater pearl'],
+                'metadata' => [
+                    'photo_url' => '/brand/jewellery/tides-treasure.jpg',
+                    'category' => 'earrings',
+                    'collection' => 'Salt & Spirit',
+                ],
+            ],
+            [
+                'sku' => 'TD-PEND-FOOT-05',
+                'title' => 'Footprints in the Sand',
+                'description' => 'Sculptural tricolor pendant — rose, white & yellow gold — on a delicate gold-plated silver chain.',
+                'product_url' => 'https://triada-designs.com/',
+                'price' => 1250,
+                'approved_claims' => ['gold-plated silver', 'tricolor', 'made to order ~7 days'],
+                'metadata' => [
+                    'photo_url' => '/brand/jewellery/footprints-sand.jpg',
+                    'category' => 'pendant',
+                    'collection' => 'Salt & Spirit',
+                ],
+            ],
+            [
+                'sku' => 'TD-RING-SHELL-06',
+                'title' => 'Shell Signet',
+                'description' => 'Signet ring with mother of pearl. Completes Salt & Spirit sets.',
+                'product_url' => 'https://triada-designs.com/',
+                'price' => 890,
+                'approved_claims' => ['silver with gold plating', 'mother of pearl'],
+                'metadata' => [
+                    'photo_url' => '/brand/jewellery/shell-signet.png',
+                    'category' => 'ring',
+                    'collection' => 'Salt & Spirit',
+                ],
+            ],
+            [
+                'sku' => 'TD-NECK-TRIADA-07',
+                'title' => 'The Triada Necklace',
+                'description' => 'Signature Triada necklace. 14K/18K gold on request; human quote for custom.',
+                'product_url' => 'https://triada-designs.com/',
+                'price' => 2100,
                 'approved_claims' => ['silver with gold plating', 'gold on request'],
-                'metadata' => ['photo_url' => 'https://triada-designs.com/products/quiet-pendant?view=image', 'category' => 'pendant'],
+                'metadata' => [
+                    'photo_url' => '/brand/jewellery/triada-necklace.jpg',
+                    'model_url' => '/brand/models/triada-necklace-v1.glb',
+                    'category' => 'necklace',
+                    'collection' => 'Salt & Spirit',
+                ],
             ],
             [
-                'sku' => 'TD-HOOP-SOFT-03',
-                'title' => 'Soft Hoop Earrings',
-                'description' => 'Lightweight hoops for everyday. Completes ring and pendant sets.',
-                'product_url' => 'https://triada-designs.com/products/soft-hoop-earrings',
-                'price' => 540,
-                'approved_claims' => ['silver with gold plating'],
-                'metadata' => ['photo_url' => 'https://triada-designs.com/products/soft-hoop-earrings?view=image', 'category' => 'earrings'],
-            ],
-            [
-                'sku' => 'TD-BAND-DUSK-04',
-                'title' => 'Dusk Stack Band',
-                'description' => 'Slim stack band. Engraving available on custom request (human quote).',
-                'product_url' => 'https://triada-designs.com/products/dusk-stack-band',
-                'price' => 480,
-                'approved_claims' => ['silver with gold plating', 'engraving on request'],
-                'metadata' => ['photo_url' => 'https://triada-designs.com/products/dusk-stack-band?view=image', 'category' => 'ring'],
+                'sku' => 'TD-EAR-CONV-08',
+                'title' => 'Convertible Earrings',
+                'description' => 'Convertible stone-pendant earrings — worn multiple ways.',
+                'product_url' => 'https://triada-designs.com/',
+                'price' => 1180,
+                'approved_claims' => ['silver with gold plating', 'convertible'],
+                'metadata' => [
+                    'photo_url' => '/brand/jewellery/convertible-earrings.jpg',
+                    'model_url' => '/brand/models/stone-pendant-earrings-v1.glb',
+                    'category' => 'earrings',
+                    'collection' => 'Salt & Spirit',
+                ],
             ],
         ];
 
@@ -148,21 +223,27 @@ class JewelleryOpsSeeder extends Seeder
                 'ends_on' => now()->addMonths(2)->addDays(3)->toDateString(),
                 'application_deadline' => now()->addDays(14)->toDateString(),
                 'fee_aed' => 3200,
-                'contact_email' => 'markets@example.com',
-                'contact_name' => 'Market desk',
+                'contact_email' => 'info@triada-designs.com',
+                'contact_name' => 'Triada markets',
                 'status' => 'watching',
-                'notes' => 'Good fit for quiet jewellery placement.',
+                'notes' => 'd3 placement for Salt & Spirit sculptural jewellery.',
             ]
         );
 
+        $telegramReady = filled(config('integrations.telegram.bot_token'));
         VipDropList::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'telegram_chat_id' => 'local-vip-1',
+                'telegram_chat_id' => 'triada-vip-dubai-1',
             ],
             [
                 'status' => 'active',
-                'metadata' => ['note' => 'Seed VIP Telegram list — live send needs bot token'],
+                'metadata' => [
+                    'note' => $telegramReady
+                        ? 'VIP Telegram list — bot token present; live send needs chat ID + INTEGRATION_MODE=live'
+                        : 'VIP Telegram list — awaiting TELEGRAM_BOT_TOKEN',
+                    'region' => 'Dubai',
+                ],
             ]
         );
 

@@ -46,7 +46,7 @@ php artisan serve --host=127.0.0.1 --port=8088
 
 Local seed admin:
 
-- Email: `admin@triada-designs.com`
+- Email: `info@triada-designs.com`
 - Password: `triada-local`
 
 ### 2. Web (Next.js)
@@ -69,7 +69,7 @@ Open [http://127.0.0.1:43127](http://127.0.0.1:43127) — redirects to admin log
 3. Forward port **43127** (API is proxied through Next.js at `/api`, so you do not need 8088).
 4. On your laptop open [http://localhost:43127/login](http://localhost:43127/login).
 
-Local seed admin: `admin@triada-designs.com` / `triada-local`.
+Local seed admin: `info@triada-designs.com` / `triada-local`.
 
 ### Docker Compose (MySQL + Redis + services)
 

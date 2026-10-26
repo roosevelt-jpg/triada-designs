@@ -22,7 +22,7 @@ class CronAndZohoIntegrationsTest extends TestCase
     {
         parent::setUp();
         $this->seed();
-        $this->user = User::query()->where('email', 'admin@triada-designs.com')->firstOrFail();
+        $this->user = User::query()->where('email', 'info@triada-designs.com')->firstOrFail();
         $this->workspace = Workspace::query()->where('slug', 'triada-designs')->firstOrFail();
         config(['integrations.cron_secret' => 'test-cron-secret']);
     }

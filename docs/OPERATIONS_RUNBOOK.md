@@ -7,7 +7,7 @@ cd apps/api
 php artisan migrate:fresh --seed
 ```
 
-Local seed admin: `admin@triada-designs.com` / `triada-local`.
+Local seed admin: `info@triada-designs.com` / `triada-local`.
 
 ## Emergency pauses (later)
 

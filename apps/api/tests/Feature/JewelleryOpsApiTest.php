@@ -20,7 +20,7 @@ class JewelleryOpsApiTest extends TestCase
     {
         parent::setUp();
         $this->seed();
-        $this->user = User::query()->where('email', 'admin@triada-designs.com')->firstOrFail();
+        $this->user = User::query()->where('email', 'info@triada-designs.com')->firstOrFail();
         $this->workspace = Workspace::query()->where('slug', 'triada-designs')->firstOrFail();
         Sanctum::actingAs($this->user);
         config([

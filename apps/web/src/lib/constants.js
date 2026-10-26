@@ -7,7 +7,7 @@ export const OPS_HOST =
   process.env.NEXT_PUBLIC_OPS_HOST || "ops.triada-designs.com";
 /** Local seed admin (documented in README; not shown as "demo" in the UI). */
 export const SEED_ADMIN = {
-  email: "admin@triada-designs.com",
+  email: "info@triada-designs.com",
   password: "triada-local",
 };
 

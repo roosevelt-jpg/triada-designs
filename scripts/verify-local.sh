@@ -14,7 +14,7 @@ echo "login HTTP $code"
 echo "==> Auth + meta status + shopify status + agents llm"
 TOKEN=$(curl -fsS -X POST "http://127.0.0.1:8088/api/v1/auth/login" \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -d '{"email":"admin@triada-designs.com","password":"triada-local","device_name":"verify"}' \
+  -d '{"email":"info@triada-designs.com","password":"triada-local","device_name":"verify"}' \
   | php -r 'echo json_decode(stream_get_contents(STDIN))->token;')
 
 auth() { curl -fsS -H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' "$@"; }

@@ -20,7 +20,7 @@ npm run build
 ## Manual smoke
 
 1. Open ops app root → redirects to admin login
-2. Sign in with local seed admin (`admin@triada-designs.com` / `triada-local`)
+2. Sign in with local seed admin (`info@triada-designs.com` / `triada-local`)
 3. Overview metrics load
 4. Open inbox conversation, takeover, reply
 5. Integrations page shows WordPress/Zoho **seeded** health (not live)

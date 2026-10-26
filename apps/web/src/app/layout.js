@@ -26,6 +26,14 @@ export const metadata = {
     index: false,
     follow: false,
   },
+  icons: {
+    icon: [
+      { url: "/brand/triada-favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/brand/triada-favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/brand/triada-favicon-180.png", sizes: "180x180" }],
+    shortcut: ["/brand/triada-favicon-32.png"],
+  },
 };
 
 export default function RootLayout({ children }) {

@@ -17,7 +17,7 @@ class ChannelTemplateSeeder extends Seeder
             return;
         }
 
-        $user = User::query()->where('email', 'admin@triada-designs.com')->first();
+        $user = User::query()->where('email', 'info@triada-designs.com')->first();
 
         $templates = [
             [
