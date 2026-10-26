@@ -23,20 +23,24 @@ class ImageGenerationService
      */
     public function status(): array
     {
-        $provider = $this->normalizeProvider((string) config('creative.image.provider', 'gemini'));
+        $provider = $this->normalizeProvider((string) config('creative.image.provider', 'anthropic'));
         $configured = $this->hasApiKey();
         $mode = strtolower((string) config('integrations.mode', 'local'));
 
-        if ($provider === 'local' || ! $configured) {
+        // Anthropic is the intelligence path (prompts/agents). Pixel generation stays local_sim
+        // unless a dedicated image provider (e.g. gemini/imagen) is selected with live mode.
+        if ($provider === 'anthropic' || $provider === 'local' || ! $configured) {
             return [
-                'status' => $configured ? 'local' : 'awaiting_credentials',
+                'status' => $configured || $provider === 'anthropic' ? 'local' : 'awaiting_credentials',
                 'mode' => 'local_sim',
                 'provider' => $provider,
                 'configured' => $configured,
-                'message' => $configured
-                    ? 'Image API key present but INTEGRATION_MODE is not live — using local jewellery SVG simulator.'
-                    : 'Add IMAGE_API_KEY or GEMINI_API_KEY for live image generation. Local jewellery simulator is operable.',
-                'engine_hint' => 'Set IMAGE_PROVIDER=gemini, IMAGE_API_KEY (or GEMINI_API_KEY), INTEGRATION_MODE=live.',
+                'message' => $provider === 'anthropic'
+                    ? 'Creative intelligence uses Anthropic when keyed; image pixels use local jewellery SVG simulator until a dedicated image provider is live.'
+                    : ($configured
+                        ? 'Image API key present but INTEGRATION_MODE is not live — using local jewellery SVG simulator.'
+                        : 'Add Anthropic on Integrations for agent/creative prompts. Image pixels stay local_sim without a dedicated IMAGE provider.'),
+                'engine_hint' => 'Paste Anthropic API key on Integrations. Optional IMAGE_PROVIDER=gemini + IMAGE_API_KEY for live pixels.',
             ];
         }
 
@@ -311,9 +315,10 @@ class ImageGenerationService
         $normalized = strtolower(str_replace('-', '_', trim($provider)));
 
         return match ($normalized) {
+            'claude', 'anthropic_claude' => 'anthropic',
             'gemini', 'google', 'imagen', 'google_imagen' => 'gemini',
             'local', 'sim', 'simulator' => 'local',
-            default => $normalized !== '' ? $normalized : 'gemini',
+            default => $normalized !== '' ? $normalized : 'anthropic',
         };
     }
 

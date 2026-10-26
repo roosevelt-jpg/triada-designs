@@ -76,22 +76,23 @@ class PlatformGapsApiTest extends TestCase
     public function test_ai_local_draft_and_activity(): void
     {
         config([
-            'integrations.llm.provider' => 'gemini',
-            'integrations.llm.gemini.api_key' => null,
+            'integrations.llm.provider' => 'anthropic',
+            'integrations.llm.anthropic.api_key' => null,
             'integrations.llm.api_key' => null,
+            'integrations.llm.gemini.api_key' => null,
         ]);
 
         $this->getJson('/api/v1/agents/llm/status')
             ->assertOk()
             ->assertJsonPath('live', false)
-            ->assertJsonPath('configured_provider', 'gemini')
+            ->assertJsonPath('configured_provider', 'anthropic')
             ->assertJsonPath('status', 'awaiting_credentials')
             ->assertJsonPath('provider', 'local_heuristic');
 
         $this->postJson('/api/v1/agents/test-run', [
             'agent_key' => 'support',
             'purpose' => 'draft_reply',
-            'message' => 'What is your shipping policy for barrier cream?',
+            'message' => 'What is your shipping policy for jewellery?',
             'dry_run' => true,
         ])->assertOk()
             ->assertJsonPath('ok', true)

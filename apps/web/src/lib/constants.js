@@ -26,6 +26,8 @@ export const DASHBOARD_NAV = [
     items: [
       { href: "/products", label: "Products" },
       { href: "/services", label: "Services" },
+      { href: "/orders", label: "Orders & invoices" },
+      { href: "/manufacturer", label: "Manufacturer" },
     ],
   },
   {
@@ -35,6 +37,9 @@ export const DASHBOARD_NAV = [
       { href: "/templates", label: "Channel templates" },
       { href: "/calendar", label: "Calendar" },
       { href: "/campaigns", label: "Campaigns" },
+      { href: "/ugc", label: "UGC & tags" },
+      { href: "/popups", label: "Pop-ups & markets" },
+      { href: "/outreach", label: "Outreach CRM" },
     ],
   },
   {
@@ -43,6 +48,7 @@ export const DASHBOARD_NAV = [
       { href: "/automations", label: "Workflows" },
       { href: "/agents", label: "AI agents" },
       { href: "/knowledge", label: "Knowledge" },
+      { href: "/jewellery-ops", label: "Jewellery ops" },
     ],
   },
   {

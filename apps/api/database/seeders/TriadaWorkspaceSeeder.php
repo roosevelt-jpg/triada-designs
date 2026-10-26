@@ -245,38 +245,21 @@ class TriadaWorkspaceSeeder extends Seeder
             ]
         );
 
+        // Jewellery catalog is seeded production-style in JewelleryOpsSeeder.
         Product::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'sku' => 'TD-CLEANSE-01',
+                'sku' => 'TD-RING-AURA-01',
             ],
             [
-                'title' => 'Gentle Daily Cleanser',
-                'description' => 'A mild cleanser formulated for sensitive skin. Approved claims only; inventory must be confirmed live before promising availability.',
-                'product_url' => 'https://triada-designs.com/products/gentle-daily-cleanser',
-                'price' => 38,
-                'currency' => 'USD',
+                'title' => 'Aura Signet Ring',
+                'description' => 'Gold-plated silver signet. Size confirmed against published guide. ~7 days to make.',
+                'product_url' => 'https://triada-designs.com/products/aura-signet-ring',
+                'price' => 890,
+                'currency' => 'AED',
                 'availability_status' => 'in_stock_snapshot',
                 'published_status' => 'published',
-                'approved_claims' => ['fragrance-conscious', 'suitable for sensitive skin'],
-                'synced_at' => now(),
-            ]
-        );
-
-        Product::query()->updateOrCreate(
-            [
-                'workspace_id' => $workspace->id,
-                'sku' => 'TD-BARRIER-02',
-            ],
-            [
-                'title' => 'Barrier Recovery Cream',
-                'description' => 'Rich cream for dryness and barrier support. Do not invent medical claims.',
-                'product_url' => 'https://triada-designs.com/products/barrier-recovery-cream',
-                'price' => 54,
-                'currency' => 'USD',
-                'availability_status' => 'in_stock_snapshot',
-                'published_status' => 'published',
-                'approved_claims' => ['rich texture', 'evening ritual'],
+                'approved_claims' => ['silver with gold plating', 'made to order ~7 days'],
                 'synced_at' => now(),
             ]
         );
@@ -284,15 +267,15 @@ class TriadaWorkspaceSeeder extends Seeder
         ServiceOffering::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
-                'name' => 'Personal care consultation',
+                'name' => 'Private jewellery consultation',
             ],
             [
-                'description' => 'A guided conversation to recommend products and routines based on customer needs. Booking is inquiry-based until a booking provider is connected.',
-                'price' => 75,
-                'currency' => 'USD',
+                'description' => 'Video or in-person consultation in Dubai for custom, engraving, or 14K/18K gold pieces. Quotes are human-approved.',
+                'price' => 0,
+                'currency' => 'AED',
                 'inquiry_url' => 'https://triada-designs.com/services/consultation',
                 'status' => 'active',
-                'approved_claims' => ['consultative', 'no unverified medical advice'],
+                'approved_claims' => ['consultation', 'custom quotes require human approval'],
             ]
         );
 
@@ -558,10 +541,10 @@ class TriadaWorkspaceSeeder extends Seeder
                 'tags' => ['returns', 'policy'],
             ],
             [
-                'title' => 'Sensitive skin recommendations',
+                'title' => 'Materials & make time',
                 'source_type' => 'faq',
-                'body' => 'Approved recommendations: Gentle Daily Cleanser and Barrier Recovery Cream. No medical claims.',
-                'tags' => ['skincare', 'faq'],
+                'body' => 'Silver with gold plating; 14K and 18K gold on request. About 7 days to make each piece. Never invent prices or delivery dates.',
+                'tags' => ['materials', 'jewellery', 'faq'],
             ],
         ] as $source) {
             KnowledgeSource::query()->updateOrCreate(

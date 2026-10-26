@@ -671,6 +671,299 @@ class AutomationWorkflowSeeder extends Seeder
                     ],
                 ],
             ],
+            [
+                'name' => 'Answer-bot jewellery FAQ',
+                'description' => 'Incoming message → answer-bot (sizes/materials/care/shipping/price/~7-day make) with human handoff when unsure. AI disclosure required.',
+                'trigger_type' => 'incoming_message',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_in',
+                    'nodes' => [
+                        'trigger_in' => [
+                            'type' => 'trigger',
+                            'label' => 'Incoming message',
+                            'config' => ['trigger_type' => 'incoming_message'],
+                            'next' => 'act_bot',
+                        ],
+                        'act_bot' => [
+                            'type' => 'action',
+                            'label' => 'Answer-bot',
+                            'config' => ['action_type' => 'answer_bot_reply'],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => ['type' => 'end', 'label' => 'Done', 'config' => []],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'Gift finder flow',
+                'description' => 'Manual/inbound gift intent → who/occasion/budget → 2–3 pieces with photo/link from approved catalog.',
+                'trigger_type' => 'manual',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_m',
+                    'nodes' => [
+                        'trigger_m' => [
+                            'type' => 'trigger',
+                            'label' => 'Manual / gift intent',
+                            'config' => ['trigger_type' => 'manual'],
+                            'next' => 'act_gift',
+                        ],
+                        'act_gift' => [
+                            'type' => 'action',
+                            'label' => 'Gift finder',
+                            'config' => ['action_type' => 'gift_finder_suggest'],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => ['type' => 'end', 'label' => 'Done', 'config' => []],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'Custom piece & consultation',
+                'description' => 'Collect custom/bespoke details + consultation booking; Telegram alert; human prices and approves quote.',
+                'trigger_type' => 'incoming_message',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_in',
+                    'nodes' => [
+                        'trigger_in' => [
+                            'type' => 'trigger',
+                            'label' => 'Custom enquiry',
+                            'config' => ['trigger_type' => 'incoming_message'],
+                            'next' => 'act_collect',
+                        ],
+                        'act_collect' => [
+                            'type' => 'action',
+                            'label' => 'Collect custom piece',
+                            'config' => ['action_type' => 'collect_custom_piece'],
+                            'next' => 'act_alert',
+                        ],
+                        'act_alert' => [
+                            'type' => 'action',
+                            'label' => 'Telegram custom alert',
+                            'config' => [
+                                'action_type' => 'telegram_priority_alert',
+                                'alert_type' => 'custom',
+                                'title' => 'Custom piece request',
+                            ],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => ['type' => 'end', 'label' => 'Done', 'config' => []],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'Order lifecycle + invoice + manufacturer',
+                'description' => 'Shopify/order update → lifecycle WhatsApp (opt-in), automatic invoice (B2B UAE e-invoice path), manufacturer push with cost/profit.',
+                'trigger_type' => 'shopify_order_created',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_order',
+                    'nodes' => [
+                        'trigger_order' => [
+                            'type' => 'trigger',
+                            'label' => 'Order created',
+                            'config' => ['trigger_type' => 'shopify_order_created'],
+                            'next' => 'act_life',
+                        ],
+                        'act_life' => [
+                            'type' => 'action',
+                            'label' => 'Order lifecycle',
+                            'config' => ['action_type' => 'order_lifecycle_message', 'lifecycle_status' => 'confirmed', 'paid' => true],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => ['type' => 'end', 'label' => 'Done', 'config' => []],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'Cart / sizing abandonment (1 day)',
+                'description' => 'One friendly reminder after a day for cart or sizing quiet. WhatsApp only if opted in.',
+                'trigger_type' => 'cart_abandoned',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_ab',
+                    'nodes' => [
+                        'trigger_ab' => [
+                            'type' => 'trigger',
+                            'label' => 'Cart abandoned',
+                            'config' => ['trigger_type' => 'cart_abandoned'],
+                            'next' => 'act_track',
+                        ],
+                        'act_track' => [
+                            'type' => 'action',
+                            'label' => 'Track / remind',
+                            'config' => ['action_type' => 'abandonment_remind', 'track_only' => true, 'event_type' => 'cart'],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => ['type' => 'end', 'label' => 'Done', 'config' => []],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'Sold-out waitlist & VIP drop',
+                'description' => 'Notify-me waitlist; VIP Telegram list gets first access to new drops.',
+                'trigger_type' => 'sold_out_waitlist',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_w',
+                    'nodes' => [
+                        'trigger_w' => [
+                            'type' => 'trigger',
+                            'label' => 'Waitlist / drop',
+                            'config' => ['trigger_type' => 'sold_out_waitlist'],
+                            'next' => 'act_w',
+                        ],
+                        'act_w' => [
+                            'type' => 'action',
+                            'label' => 'Waitlist join or notify',
+                            'config' => ['action_type' => 'waitlist_notify'],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => ['type' => 'end', 'label' => 'Done', 'config' => []],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'After-sale care / review / complete-the-set',
+                'description' => 'After delivery: care tips, review request, complete-the-set, UGC invite.',
+                'trigger_type' => 'order_lifecycle_changed',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_o',
+                    'nodes' => [
+                        'trigger_o' => [
+                            'type' => 'trigger',
+                            'label' => 'Order delivered',
+                            'config' => ['trigger_type' => 'order_lifecycle_changed'],
+                            'next' => 'act_as',
+                        ],
+                        'act_as' => [
+                            'type' => 'action',
+                            'label' => 'Process after-sale jobs',
+                            'config' => ['action_type' => 'after_sale_followup'],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => ['type' => 'end', 'label' => 'Done', 'config' => []],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'UGC tag alert & repost list',
+                'description' => 'When tagged, Telegram alert and add to repost-permission list.',
+                'trigger_type' => 'ugc_tagged',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_u',
+                    'nodes' => [
+                        'trigger_u' => [
+                            'type' => 'trigger',
+                            'label' => 'UGC tagged',
+                            'config' => ['trigger_type' => 'ugc_tagged'],
+                            'next' => 'act_u',
+                        ],
+                        'act_u' => [
+                            'type' => 'action',
+                            'label' => 'UGC tag alert',
+                            'config' => ['action_type' => 'ugc_tag_alert'],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => ['type' => 'end', 'label' => 'Done', 'config' => []],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'Outreach CRM first touch',
+                'description' => 'Draft email/IG/LinkedIn outreach — human must approve templates. No bulk WhatsApp.',
+                'trigger_type' => 'manual',
+                'status' => 'draft',
+                'definition' => [
+                    'entry' => 'trigger_m',
+                    'nodes' => [
+                        'trigger_m' => [
+                            'type' => 'trigger',
+                            'label' => 'Manual outreach',
+                            'config' => ['trigger_type' => 'manual'],
+                            'next' => 'act_o',
+                        ],
+                        'act_o' => [
+                            'type' => 'action',
+                            'label' => 'Draft outreach',
+                            'config' => ['action_type' => 'outreach_draft', 'channel' => 'email'],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => ['type' => 'end', 'label' => 'Done', 'config' => []],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'Pop-up market application draft',
+                'description' => 'When a Dubai/UAE market deadline approaches, alert and draft application email for human approve.',
+                'trigger_type' => 'popup_deadline_approaching',
+                'status' => 'active',
+                'definition' => [
+                    'entry' => 'trigger_p',
+                    'nodes' => [
+                        'trigger_p' => [
+                            'type' => 'trigger',
+                            'label' => 'Pop-up deadline',
+                            'config' => ['trigger_type' => 'popup_deadline_approaching'],
+                            'next' => 'act_alert',
+                        ],
+                        'act_alert' => [
+                            'type' => 'action',
+                            'label' => 'Telegram popup alert',
+                            'config' => [
+                                'action_type' => 'telegram_priority_alert',
+                                'alert_type' => 'popup',
+                                'title' => 'Pop-up opportunity',
+                            ],
+                            'next' => 'act_draft',
+                        ],
+                        'act_draft' => [
+                            'type' => 'action',
+                            'label' => 'Draft application',
+                            'config' => ['action_type' => 'popup_draft_application'],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => ['type' => 'end', 'label' => 'Done', 'config' => []],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'Cross-post reel + weekly summary',
+                'description' => 'Approved content → schedule cross-post IG/TikTok/FB/LinkedIn (approve before live) + weekly performance summary.',
+                'trigger_type' => 'content_approved',
+                'status' => 'draft',
+                'definition' => [
+                    'entry' => 'trigger_c',
+                    'nodes' => [
+                        'trigger_c' => [
+                            'type' => 'trigger',
+                            'label' => 'Content approved',
+                            'config' => ['trigger_type' => 'content_approved'],
+                            'next' => 'act_cross',
+                        ],
+                        'act_cross' => [
+                            'type' => 'action',
+                            'label' => 'Cross-post reel',
+                            'config' => [
+                                'action_type' => 'content_cross_post',
+                                'channels' => ['instagram', 'tiktok', 'facebook', 'linkedin'],
+                            ],
+                            'next' => 'act_sum',
+                        ],
+                        'act_sum' => [
+                            'type' => 'action',
+                            'label' => 'Weekly summary',
+                            'config' => ['action_type' => 'weekly_content_summary'],
+                            'next' => 'end_ok',
+                        ],
+                        'end_ok' => ['type' => 'end', 'label' => 'Done', 'config' => []],
+                    ],
+                ],
+            ],
         ];
 
         foreach ($workflows as $row) {

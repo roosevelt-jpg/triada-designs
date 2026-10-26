@@ -24,7 +24,9 @@ class AiOrchestrator
 
     public function llmStatus(): array
     {
-        $configured = $this->normalizeProvider((string) config('integrations.llm.provider', 'gemini'));
+        $store = app(LlmCredentialStore::class);
+        $configured = $this->normalizeProvider((string) config('integrations.llm.provider', 'anthropic'));
+        $anthropicKey = filled($store->anthropicApiKey());
         $geminiKey = filled(config('integrations.llm.gemini.api_key'))
             || ($configured === 'gemini' && filled(config('integrations.llm.api_key')));
         $openaiKey = filled(config('integrations.llm.api_key'));
@@ -32,6 +34,7 @@ class AiOrchestrator
 
         $status = match (true) {
             $live => 'live',
+            $configured === 'anthropic' && ! $anthropicKey => 'awaiting_credentials',
             $configured === 'gemini' && ! $geminiKey => 'awaiting_credentials',
             $configured === 'openai_compatible' && ! $openaiKey => 'awaiting_credentials',
             default => 'local',
@@ -39,25 +42,39 @@ class AiOrchestrator
 
         $honesty = match ($status) {
             'live' => 'Live LLM calls enabled via '.$this->llm->providerKey().'.',
-            'awaiting_credentials' => $configured === 'gemini'
-                ? 'Add GEMINI_API_KEY to enable live agents. Using local heuristic until credentials are present — never fake Gemini success.'
-                : 'Add LLM_API_KEY and set INTEGRATION_MODE=live for openai_compatible. Using local heuristic until credentials are present.',
+            'awaiting_credentials' => match ($configured) {
+                'anthropic' => 'Add Anthropic API key on Integrations (or ANTHROPIC_API_KEY). Using local heuristic until credentials are present — never fake Claude success.',
+                'gemini' => 'Add GEMINI_API_KEY to enable Gemini. Using local heuristic until credentials are present.',
+                default => 'Add LLM_API_KEY and set INTEGRATION_MODE=live for openai_compatible. Using local heuristic until credentials are present.',
+            },
             default => 'Using local heuristic adapter (LLM_PROVIDER=local or credentials not live).',
+        };
+
+        $hasCredentials = match ($configured) {
+            'anthropic' => $anthropicKey,
+            'gemini' => $geminiKey,
+            'local' => false,
+            default => $openaiKey,
+        };
+
+        $model = match ($configured) {
+            'anthropic' => $store->anthropicModel(),
+            'gemini' => (string) (config('integrations.llm.gemini.model') ?: $this->llm->model()),
+            default => $this->llm->model(),
         };
 
         return [
             'configured_provider' => $configured,
             'provider' => $this->llm->providerKey(),
-            'model' => $configured === 'gemini'
-                ? (string) (config('integrations.llm.gemini.model') ?: $this->llm->model())
-                : $this->llm->model(),
+            'model' => $model,
             'live' => $live,
             'status' => $status,
-            'has_credentials' => $configured === 'gemini' ? $geminiKey : ($configured === 'local' ? false : $openaiKey),
+            'has_credentials' => $hasCredentials,
             'honesty' => $honesty,
-            'env_hint' => $configured === 'gemini'
-                ? 'Set GEMINI_API_KEY (and optional GEMINI_MODEL=gemini-2.0-flash) in apps/api/.env, then restart the API.'
-                : 'Set LLM_PROVIDER, LLM_API_KEY, LLM_MODEL, and INTEGRATION_MODE=live as needed.',
+            'env_hint' => $configured === 'anthropic'
+                ? 'Paste Anthropic API key on Integrations, or set ANTHROPIC_API_KEY (optional ANTHROPIC_MODEL) in apps/api/.env, then restart the API.'
+                : 'Set LLM_PROVIDER, credentials, and INTEGRATION_MODE=live as needed.',
+            'integrations_path' => '/integrations',
         ];
     }
 
@@ -66,10 +83,11 @@ class AiOrchestrator
         $normalized = strtolower(str_replace('-', '_', trim($provider)));
 
         return match ($normalized) {
+            'claude', 'anthropic_claude' => 'anthropic',
             'openai', 'openai_compatible', 'http', 'http_llm' => 'openai_compatible',
             'gemini', 'google', 'google_gemini' => 'gemini',
             'local', 'heuristic', 'local_heuristic' => 'local',
-            default => $normalized !== '' ? $normalized : 'gemini',
+            default => $normalized !== '' ? $normalized : 'anthropic',
         };
     }
 
@@ -255,9 +273,14 @@ class AiOrchestrator
         $kb = collect($knowledge)->map(fn ($k) => "- {$k['title']}: {$k['excerpt']}")->implode("\n");
 
         return trim(<<<TXT
-You are {$name} ({$role}) for Triada Designs.
+You are {$name} ({$role}) for Triada Designs — a jewellery brand in Dubai.
 Purpose: {$purpose}.
-Never invent prices, stock, reviews, or medical claims. Prefer verified knowledge.
+Hard rules:
+- Disclose you are an AI assistant and that a person is available on request.
+- Never invent prices, stock, delivery promises, or custom quotes — use the approved price list and policies only; hand off for anything unsure.
+- Materials: silver with gold plating; 14K and 18K gold on request. Typical make time ~7 days per piece.
+- WhatsApp: business messages only (orders, products, support) to opted-in customers.
+- Posts, broadcasts, and custom quotes require human approval before sending.
 {$policy}
 Catalog: {$catalog}
 Approved knowledge:

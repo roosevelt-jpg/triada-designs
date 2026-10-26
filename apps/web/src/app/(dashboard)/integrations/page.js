@@ -18,6 +18,9 @@ export default function IntegrationsPage() {
   const [loading, setLoading] = useState(true);
   const [draftTitle, setDraftTitle] = useState("Quiet materials, considered care");
   const [draftStatus, setDraftStatus] = useState("");
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4-20250514");
+  const [anthropicStatus, setAnthropicStatus] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -29,6 +32,9 @@ export default function IntegrationsPage() {
       ]);
       setIntegrations(list.data || []);
       setHealth(healthData);
+      if (healthData?.anthropic?.model) {
+        setAnthropicModel(healthData.anthropic.model);
+      }
     } catch (err) {
       setError(err.message || "Failed to load integrations");
     } finally {
@@ -58,10 +64,44 @@ export default function IntegrationsPage() {
     }
   }
 
+  async function saveAnthropic(event) {
+    event.preventDefault();
+    setAnthropicStatus("");
+    try {
+      const result = await apiFetch("/v1/integrations/anthropic", {
+        method: "POST",
+        body: {
+          api_key: anthropicKey || undefined,
+          model: anthropicModel || undefined,
+        },
+      });
+      setAnthropicKey("");
+      setAnthropicStatus(
+        result.anthropic?.has_credentials
+          ? "Anthropic key stored. Agents use Claude; creative intelligence follows Anthropic path. local_sim until keyed was cleared."
+          : result.anthropic?.honesty || "Saved."
+      );
+      load();
+    } catch (err) {
+      setAnthropicStatus(err.message);
+    }
+  }
+
+  async function clearAnthropic() {
+    setAnthropicStatus("");
+    try {
+      await apiFetch("/v1/integrations/anthropic/clear", { method: "POST" });
+      setAnthropicStatus("Cleared Integrations-stored Anthropic key (env key unaffected).");
+      load();
+    } catch (err) {
+      setAnthropicStatus(err.message);
+    }
+  }
+
   return (
     <DashboardShell
       title="Integrations"
-      description="WordPress, Zoho, Meta, Shopify, and messaging channels. Local seed mode runs without credentials; never shown as healthy without tokens."
+      description="Anthropic (primary AI), WordPress, Zoho, Meta, Shopify, and messaging channels. Local seed / local_sim without credentials; never shown as healthy without tokens."
       actions={
         <div className="flex flex-wrap gap-2">
           <Link href="/integrations/meta">
@@ -101,6 +141,61 @@ export default function IntegrationsPage() {
               Re-check health
             </Button>
           </div>
+
+          <section className="surface-card overflow-hidden">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
+              <div>
+                <h2 className="ops-section-title">Anthropic (Claude) — primary AI</h2>
+                <p className="mt-1 text-sm text-muted">
+                  Paste your API key here for agents and creative intelligence. Without a key the stack stays on
+                  local_sim / local heuristic — never reports live Claude success.
+                </p>
+              </div>
+              <Badge
+                tone={
+                  health?.anthropic?.has_credentials
+                    ? "success"
+                    : health?.anthropic?.status === "awaiting_credentials"
+                      ? "neutral"
+                      : "neutral"
+                }
+              >
+                {health?.anthropic?.status || "awaiting_credentials"}
+              </Badge>
+            </div>
+            <div className="space-y-3 px-5 py-4">
+              <p className="text-sm text-muted">{health?.anthropic?.honesty}</p>
+              <p className="text-xs text-muted">
+                Model: {health?.anthropic?.model || anthropicModel} · Provider default: anthropic
+              </p>
+              <form className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-end" onSubmit={saveAnthropic}>
+                <Input
+                  label="Anthropic API key"
+                  name="anthropic_api_key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={health?.anthropic?.has_credentials ? "•••• stored — paste to replace" : "sk-ant-…"}
+                  value={anthropicKey}
+                  onChange={(e) => setAnthropicKey(e.target.value)}
+                />
+                <Input
+                  label="Model"
+                  name="anthropic_model"
+                  value={anthropicModel}
+                  onChange={(e) => setAnthropicModel(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button type="submit" size="sm">
+                    Save key
+                  </Button>
+                  <Button type="button" size="sm" variant="secondary" onClick={clearAnthropic}>
+                    Clear
+                  </Button>
+                </div>
+              </form>
+              {anthropicStatus ? <p className="text-sm text-muted">{anthropicStatus}</p> : null}
+            </div>
+          </section>
 
           {health?.meta ? (
             <section className="surface-card overflow-hidden">

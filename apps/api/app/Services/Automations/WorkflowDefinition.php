@@ -40,6 +40,12 @@ class WorkflowDefinition
         'content_created',
         'shopify_order_updated',
         'shopify_order_created',
+        'order_lifecycle_changed',
+        'cart_abandoned',
+        'sizing_abandoned',
+        'sold_out_waitlist',
+        'ugc_tagged',
+        'popup_deadline_approaching',
         'manual',
     ];
 
@@ -69,6 +75,22 @@ class WorkflowDefinition
         'generate_content_video',
         'generate_content_animation',
         'ensure_content_creative',
+        'answer_bot_reply',
+        'gift_finder_suggest',
+        'collect_custom_piece',
+        'order_lifecycle_message',
+        'create_invoice',
+        'telegram_priority_alert',
+        'abandonment_remind',
+        'waitlist_notify',
+        'vip_drop_announce',
+        'after_sale_followup',
+        'ugc_tag_alert',
+        'outreach_draft',
+        'popup_draft_application',
+        'manufacturer_push_order',
+        'content_cross_post',
+        'weekly_content_summary',
     ];
 
     /**

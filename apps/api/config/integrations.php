@@ -68,18 +68,25 @@ return [
     | LLM providers
     |--------------------------------------------------------------------------
     |
-    | LLM_PROVIDER=gemini|local|openai_compatible (openai-compatible alias ok)
-    | Gemini uses GEMINI_API_KEY + GEMINI_MODEL. Without a key the stack stays
-    | on LocalHeuristicLlmAdapter with status awaiting_credentials — never
-    | report live Gemini success without credentials.
+    | Primary: Anthropic (Claude). LLM_PROVIDER=anthropic|local|gemini|openai_compatible
+    | Anthropic uses ANTHROPIC_API_KEY + ANTHROPIC_MODEL, or a key pasted on the
+    | Integrations page (stored encrypted). Without a key the stack stays on
+    | LocalHeuristicLlmAdapter with status awaiting_credentials — never report
+    | live Anthropic success without credentials.
     |
     */
     'llm' => [
-        'provider' => env('LLM_PROVIDER', 'gemini'),
+        'provider' => env('LLM_PROVIDER', 'anthropic'),
         'api_key' => env('LLM_API_KEY'),
-        'model' => env('LLM_MODEL', 'gpt-4o-mini'),
-        'base_url' => env('LLM_BASE_URL', 'https://api.openai.com/v1'),
-        'timeout' => (int) env('LLM_TIMEOUT', 30),
+        'model' => env('LLM_MODEL', 'claude-sonnet-4-20250514'),
+        'base_url' => env('LLM_BASE_URL', 'https://api.anthropic.com'),
+        'timeout' => (int) env('LLM_TIMEOUT', 45),
+        'anthropic' => [
+            'api_key' => env('ANTHROPIC_API_KEY'),
+            'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514'),
+            'base_url' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
+            'version' => env('ANTHROPIC_VERSION', '2023-06-01'),
+        ],
         'gemini' => [
             'api_key' => env('GEMINI_API_KEY'),
             'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),

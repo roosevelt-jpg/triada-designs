@@ -63,6 +63,22 @@ class ActionExecutor
             'generate_content_video' => $this->generateContentCreative($workspace, 'video', $config, $context, $dryRun),
             'generate_content_animation' => $this->generateContentCreative($workspace, 'animation', $config, $context, $dryRun),
             'ensure_content_creative' => $this->generateContentCreative($workspace, 'pack', $config, $context, $dryRun),
+            'answer_bot_reply' => $this->jewelleryAnswerBot($workspace, $config, $context, $dryRun),
+            'gift_finder_suggest' => $this->jewelleryGiftFinder($workspace, $config, $context, $dryRun),
+            'collect_custom_piece' => $this->jewelleryCustomPiece($workspace, $config, $context, $dryRun),
+            'order_lifecycle_message' => $this->jewelleryOrderLifecycle($workspace, $config, $context, $dryRun),
+            'create_invoice' => $this->jewelleryCreateInvoice($workspace, $config, $context, $dryRun),
+            'telegram_priority_alert' => $this->jewelleryTelegramAlert($workspace, $config, $context, $dryRun),
+            'abandonment_remind' => $this->jewelleryAbandonment($workspace, $config, $context, $dryRun),
+            'waitlist_notify' => $this->jewelleryWaitlist($workspace, $config, $context, $dryRun),
+            'vip_drop_announce' => $this->jewelleryVipDrop($workspace, $config, $context, $dryRun),
+            'after_sale_followup' => $this->jewelleryAfterSale($workspace, $config, $context, $dryRun),
+            'ugc_tag_alert' => $this->jewelleryUgc($workspace, $config, $context, $dryRun),
+            'outreach_draft' => $this->jewelleryOutreach($workspace, $config, $context, $dryRun),
+            'popup_draft_application' => $this->jewelleryPopup($workspace, $config, $context, $dryRun),
+            'manufacturer_push_order' => $this->jewelleryManufacturer($workspace, $config, $context, $dryRun),
+            'content_cross_post' => $this->jewelleryCrossPost($workspace, $config, $context, $dryRun),
+            'weekly_content_summary' => $this->jewelleryWeeklySummary($workspace, $config, $context, $dryRun),
             default => ['ok' => false, 'error' => "Unsupported action: {$actionType}"],
         };
     }
@@ -812,5 +828,218 @@ class ActionExecutor
             'error' => $result['error'] ?? null,
         ];
     }
+
+    protected function jewelleryAnswerBot(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        $message = (string) ($context['message'] ?? $config['message'] ?? '');
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_answer' => $message]];
+        }
+        $result = app(\App\Services\JewelleryOps\AnswerBotService::class)->handle($workspace, $message, array_merge($context, $config));
+        $context['answer_bot'] = $result;
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryGiftFinder(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        $input = array_merge($context, $config);
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_suggest_gifts' => true]];
+        }
+        $result = app(\App\Services\JewelleryOps\GiftFinderService::class)->suggest($workspace, $input);
+        $context['gift_session_id'] = data_get($result, 'session.id');
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryCustomPiece(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_collect_custom_piece' => true]];
+        }
+        $result = app(\App\Services\JewelleryOps\CustomPieceService::class)->collect($workspace, array_merge($context, $config));
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryOrderLifecycle(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_update_order_lifecycle' => true]];
+        }
+        $result = app(\App\Services\JewelleryOps\OrderLifecycleService::class)->createOrUpdate($workspace, array_merge($context, $config));
+        $context['order_id'] = data_get($result, 'order.id');
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryCreateInvoice(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_create_invoice' => true]];
+        }
+        $orderId = $context['order_id'] ?? $config['order_id'] ?? null;
+        $order = $orderId
+            ? \App\Models\CommerceOrder::query()->where('workspace_id', $workspace->id)->where('id', $orderId)->first()
+            : null;
+        if (! $order) {
+            return ['ok' => false, 'error' => 'commerce_order required for invoice'];
+        }
+        $result = app(\App\Services\JewelleryOps\InvoiceService::class)->createForOrder($workspace, $order, $config);
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryTelegramAlert(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        $type = (string) ($config['alert_type'] ?? $context['alert_type'] ?? 'custom');
+        $title = (string) ($config['title'] ?? $context['title'] ?? 'Priority alert');
+        $body = (string) ($config['body'] ?? $context['message'] ?? '');
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_telegram_alert' => $type, 'title' => $title]];
+        }
+        $result = app(\App\Services\JewelleryOps\TelegramAlertService::class)->send($workspace, $type, $title, $body, $context);
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryAbandonment(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_process_abandonment' => true]];
+        }
+        if (! empty($config['track_only'])) {
+            $result = app(\App\Services\JewelleryOps\AbandonmentService::class)->track($workspace, array_merge($context, $config));
+        } else {
+            $result = app(\App\Services\JewelleryOps\AbandonmentService::class)->processDue($workspace);
+        }
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryWaitlist(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_waitlist' => true]];
+        }
+        $svc = app(\App\Services\JewelleryOps\WaitlistService::class);
+        if (! empty($config['notify'])) {
+            $result = $svc->notifyRestock($workspace, (string) ($config['sku'] ?? $context['sku'] ?? ''), $config['size'] ?? null);
+        } else {
+            $result = $svc->join($workspace, array_merge($context, $config));
+        }
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryVipDrop(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_vip_drop' => true]];
+        }
+        $result = app(\App\Services\JewelleryOps\WaitlistService::class)->announceVipDrop($workspace, array_merge($context, $config));
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryAfterSale(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_after_sale' => true]];
+        }
+        $result = app(\App\Services\JewelleryOps\AfterSaleService::class)->processDue($workspace);
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryUgc(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_ugc_alert' => true]];
+        }
+        $result = app(\App\Services\JewelleryOps\UgcService::class)->recordTag($workspace, array_merge($context, $config));
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryOutreach(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_draft_outreach' => true, 'note' => 'Human approval required; no bulk WA']];
+        }
+        $prospectId = (string) ($config['prospect_id'] ?? $context['prospect_id'] ?? '');
+        if ($prospectId === '') {
+            $created = app(\App\Services\JewelleryOps\OutreachCrmService::class)->upsertProspect($workspace, array_merge($context, $config));
+            $prospectId = (string) data_get($created, 'prospect.id');
+        }
+        $result = app(\App\Services\JewelleryOps\OutreachCrmService::class)->draftMessage($workspace, $prospectId, array_merge($context, $config));
+
+        return ['ok' => (bool) ($result['ok'] ?? false), 'result' => $result];
+    }
+
+    protected function jewelleryPopup(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_draft_popup_application' => true]];
+        }
+        $marketId = (string) ($config['market_id'] ?? $context['market_id'] ?? '');
+        if ($marketId === '' && ! empty($config['name'])) {
+            $created = app(\App\Services\JewelleryOps\PopupMarketService::class)->upsertMarket($workspace, array_merge($context, $config));
+            $marketId = (string) data_get($created, 'market.id');
+        }
+        $result = app(\App\Services\JewelleryOps\PopupMarketService::class)->draftApplication($workspace, $marketId);
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryManufacturer(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_push_manufacturer_order' => true]];
+        }
+        $orderId = $context['order_id'] ?? $config['order_id'] ?? null;
+        $order = $orderId
+            ? \App\Models\CommerceOrder::query()->where('workspace_id', $workspace->id)->where('id', $orderId)->first()
+            : null;
+        if (! $order) {
+            $created = app(\App\Services\JewelleryOps\OrderLifecycleService::class)->createOrUpdate($workspace, array_merge($context, $config));
+
+            return ['ok' => true, 'result' => $created];
+        }
+        $result = app(\App\Services\JewelleryOps\ManufacturerService::class)->pushOrder($workspace, $order);
+
+        return ['ok' => true, 'result' => $result];
+    }
+
+    protected function jewelleryCrossPost(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        $contentId = (string) ($config['content_id'] ?? $context['content_item_id'] ?? '');
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_cross_post' => $contentId, 'note' => 'Approve before live']];
+        }
+        if ($contentId === '') {
+            return ['ok' => false, 'error' => 'content_id required'];
+        }
+        $result = app(\App\Services\JewelleryOps\ContentScheduleService::class)->scheduleCrossPost(
+            $workspace,
+            $contentId,
+            $config['channels'] ?? ['instagram', 'tiktok', 'facebook', 'linkedin'],
+            $config['scheduled_for'] ?? null
+        );
+
+        return ['ok' => (bool) ($result['ok'] ?? false), 'result' => $result, 'error' => $result['error'] ?? null];
+    }
+
+    protected function jewelleryWeeklySummary(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if ($dryRun) {
+            return ['ok' => true, 'dry_run' => true, 'result' => ['would_weekly_summary' => true]];
+        }
+        $result = app(\App\Services\JewelleryOps\ContentScheduleService::class)->weeklyPerformanceSummary($workspace);
+
+        return ['ok' => true, 'result' => $result];
+    }
 }
+
 

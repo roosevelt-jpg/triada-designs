@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Integration;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\AI\LlmCredentialStore;
 use App\Services\CRM\Zoho\ZohoCrmClient;
 use App\Services\Messaging\Meta\MetaControlPlane;
 use App\Services\WordPress\WordPressClient;
@@ -31,6 +32,7 @@ class IntegrationController extends Controller
         WordPressClient $wordpress,
         ZohoCrmClient $zoho,
         MetaControlPlane $meta,
+        LlmCredentialStore $llmCreds,
     ): JsonResponse {
         $workspaceId = $this->workspaceId($request);
         $workspace = Workspace::query()->findOrFail($workspaceId);
@@ -38,9 +40,14 @@ class IntegrationController extends Controller
         $wpHealth = $wordpress->healthCheck();
         $zohoHealth = $zoho->healthCheck();
         $metaStatus = $meta->status($workspace);
+        $anthropic = $llmCreds->status($workspace);
 
         $this->touchHealth($workspaceId, 'wordpress', $wpHealth);
         $this->touchHealth($workspaceId, 'zoho', $zohoHealth);
+        $this->touchHealth($workspaceId, 'anthropic', [
+            'status' => $anthropic['has_credentials'] ? 'healthy' : 'awaiting_credentials',
+            'message' => $anthropic['honesty'] ?? null,
+        ]);
 
         foreach ($metaStatus['channels'] as $channel => $info) {
             $this->touchHealth($workspaceId, $channel, [
@@ -59,8 +66,43 @@ class IntegrationController extends Controller
             'wordpress' => $wpHealth,
             'zoho' => $zohoHealth,
             'meta' => $metaStatus,
+            'anthropic' => $anthropic,
+            'llm' => $anthropic,
             'wordpress_posts' => $wordpress->listPosts(5),
             'zoho_leads' => $zoho->listRecentLeads(5),
+        ]);
+    }
+
+    public function anthropicStatus(Request $request, LlmCredentialStore $llmCreds): JsonResponse
+    {
+        $workspace = Workspace::query()->findOrFail($this->workspaceId($request));
+
+        return response()->json($llmCreds->status($workspace));
+    }
+
+    public function saveAnthropic(Request $request, LlmCredentialStore $llmCreds): JsonResponse
+    {
+        $data = $request->validate([
+            'api_key' => ['nullable', 'string', 'max:500'],
+            'model' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $workspace = Workspace::query()->findOrFail($this->workspaceId($request));
+        $status = $llmCreds->saveAnthropic($workspace, $data);
+
+        return response()->json([
+            'ok' => true,
+            'anthropic' => $status,
+        ]);
+    }
+
+    public function clearAnthropic(Request $request, LlmCredentialStore $llmCreds): JsonResponse
+    {
+        $workspace = Workspace::query()->findOrFail($this->workspaceId($request));
+
+        return response()->json([
+            'ok' => true,
+            'anthropic' => $llmCreds->clearAnthropic($workspace),
         ]);
     }
 

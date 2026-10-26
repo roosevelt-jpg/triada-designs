@@ -140,13 +140,15 @@ export default function SettingsPage() {
           </section>
 
           <section className="surface-card space-y-4 p-5">
-            <h2 className="font-display text-2xl">AI agents (Gemini)</h2>
+            <h2 className="font-display text-2xl">AI agents (Anthropic)</h2>
             <p className="max-w-2xl text-sm text-muted">
-              Add a Gemini API key to enable live agents. Set{" "}
-              <code className="text-ink">LLM_PROVIDER=gemini</code> and{" "}
-              <code className="text-ink">GEMINI_API_KEY</code> in <code className="text-ink">apps/api/.env</code>,
-              optionally <code className="text-ink">GEMINI_MODEL=gemini-2.0-flash</code>, then restart the API.
-              Without a key, agents stay on the local heuristic with status awaiting credentials.
+              Paste your Anthropic API key on{" "}
+              <Link href="/integrations" className="text-brown-dark underline">
+                Integrations
+              </Link>{" "}
+              (or set <code className="text-ink">ANTHROPIC_API_KEY</code> in{" "}
+              <code className="text-ink">apps/api/.env</code>). Without a key, agents stay on the local heuristic
+              with status awaiting credentials — never fake live Claude success.
             </p>
             <Link href="/agents">
               <Button variant="secondary">Open agents</Button>

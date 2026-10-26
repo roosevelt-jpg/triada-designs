@@ -119,7 +119,7 @@ export default function AgentsPage() {
   return (
     <DashboardShell
       title="AI agents"
-      description="Support, sales, marketing, content, lead qualification, and sales ops. Add Gemini API key to enable live agents."
+      description="Support, sales, marketing, content, lead qualification, and sales ops. Add Anthropic API key on Integrations to enable live agents."
     >
       {loading ? (
         <div className="space-y-3">
@@ -139,20 +139,23 @@ export default function AgentsPage() {
             </span>
           </div>
           <p className="max-w-3xl text-sm text-muted">{llm.honesty}</p>
-          {llm.status === "awaiting_credentials" || providerLabel === "gemini" ? (
+          {llm.status === "awaiting_credentials" || providerLabel === "anthropic" || providerLabel === "gemini" ? (
             <div className="surface-card max-w-3xl space-y-2 p-4 text-sm">
-              <p className="font-medium text-ink">Add Gemini API key to enable live agents</p>
+              <p className="font-medium text-ink">Add Anthropic API key to enable live agents</p>
               <p className="text-muted">
-                Keys are stored in API environment variables (not pasted into the browser). In{" "}
-                <code className="text-ink">apps/api/.env</code>:
+                Prefer pasting the key on{" "}
+                <a className="text-brown-dark underline" href="/integrations">
+                  Integrations
+                </a>
+                . Or set env in <code className="text-ink">apps/api/.env</code>:
               </p>
               <pre className="overflow-x-auto rounded-md border border-line bg-stone/50 p-3 text-xs text-ink">
-{`LLM_PROVIDER=gemini
-GEMINI_API_KEY=your-key-here
-GEMINI_MODEL=gemini-2.0-flash`}
+{`LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your-key-here
+ANTHROPIC_MODEL=claude-sonnet-4-20250514`}
               </pre>
               <p className="text-muted">
-                Restart the API after saving. Test run uses Gemini when the key is present; otherwise the
+                Restart the API after env changes. Test run uses Claude when the key is present; otherwise the
                 local heuristic runs and status stays <code className="text-ink">awaiting_credentials</code>.
               </p>
               {llm.env_hint ? <p className="text-xs text-muted">{llm.env_hint}</p> : null}
@@ -227,8 +230,8 @@ GEMINI_MODEL=gemini-2.0-flash`}
                   onChange={(e) => setTestMessage(e.target.value)}
                   hint={
                     llm?.live
-                      ? "Test run will call Gemini with your configured model."
-                      : "No Gemini key — test run uses the local heuristic adapter."
+                      ? "Test run will call Anthropic (Claude) with your configured model."
+                      : "No Anthropic key — test run uses the local heuristic adapter."
                   }
                 />
                 <Button size="sm" variant="secondary" disabled={busy === "test"} onClick={runTest}>

@@ -6,18 +6,20 @@ return [
     | Image generation
     |--------------------------------------------------------------------------
     |
-    | IMAGE_PROVIDER=gemini|local  IMAGE_API_KEY (falls back to GEMINI_API_KEY)
+    | IMAGE_PROVIDER=anthropic|gemini|local
+    | IMAGE_API_KEY falls back to ANTHROPIC_API_KEY (primary) then GEMINI_API_KEY.
+    | Creative intelligence (prompts / agent tools) goes through Anthropic.
     | Without a key the stack uses the local jewellery SVG simulator and reports
     | mode local_sim / awaiting_credentials — never fake live-healthy image APIs.
     |
     */
     'image' => [
-        'provider' => env('IMAGE_PROVIDER', env('LLM_PROVIDER', 'gemini')),
-        'api_key' => env('IMAGE_API_KEY', env('GEMINI_API_KEY')),
-        'model' => env('IMAGE_MODEL', 'imagen-3.0-generate-002'),
+        'provider' => env('IMAGE_PROVIDER', env('LLM_PROVIDER', 'anthropic')),
+        'api_key' => env('IMAGE_API_KEY', env('ANTHROPIC_API_KEY', env('GEMINI_API_KEY'))),
+        'model' => env('IMAGE_MODEL', 'claude-sonnet-4-20250514'),
         'base_url' => env(
             'IMAGE_BASE_URL',
-            env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta')
+            env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com')
         ),
         'timeout' => (int) env('IMAGE_TIMEOUT', 60),
         'default_width' => 1080,
