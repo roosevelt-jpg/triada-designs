@@ -8,11 +8,11 @@
   "crons": [
     {
       "path": "/api/cron/abandonment",
-      "schedule": "0 * * * *"
+      "schedule": "0 8 * * *"
     },
     {
       "path": "/api/cron/after-sale",
-      "schedule": "30 * * * *"
+      "schedule": "0 9 * * *"
     }
   ],
   "headers": [
