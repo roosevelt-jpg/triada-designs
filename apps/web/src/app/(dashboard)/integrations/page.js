@@ -142,6 +142,38 @@ export default function IntegrationsPage() {
             </Button>
           </div>
 
+          {health?.llm ? (
+            <section className="surface-card overflow-hidden">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
+                <div>
+                  <h2 className="ops-section-title">Active LLM</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    Runtime provider from LLM_PROVIDER / credentials. Gemini is env-only (
+                    <code className="text-ink">GEMINI_API_KEY</code>); Anthropic can also be pasted below.
+                  </p>
+                </div>
+                <Badge
+                  tone={
+                    health.llm.status === "live" || health.llm.has_credentials
+                      ? "success"
+                      : health.llm.status === "awaiting_credentials"
+                        ? "warning"
+                        : "neutral"
+                  }
+                >
+                  {health.llm.status || "local"}
+                </Badge>
+              </div>
+              <div className="space-y-1 px-5 py-4 text-sm text-muted">
+                <p>
+                  configured={health.llm.configured_provider} · active={health.llm.provider} ·{" "}
+                  {health.llm.model}
+                </p>
+                <p>{health.llm.honesty}</p>
+              </div>
+            </section>
+          ) : null}
+
           <section className="surface-card overflow-hidden">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
               <div>

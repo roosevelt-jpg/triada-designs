@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Integration;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\AI\AiOrchestrator;
 use App\Services\AI\LlmCredentialStore;
 use App\Services\CRM\Zoho\ZohoCrmClient;
 use App\Services\Messaging\Meta\MetaControlPlane;
@@ -33,6 +34,7 @@ class IntegrationController extends Controller
         ZohoCrmClient $zoho,
         MetaControlPlane $meta,
         LlmCredentialStore $llmCreds,
+        AiOrchestrator $orchestrator,
     ): JsonResponse {
         $workspaceId = $this->workspaceId($request);
         $workspace = Workspace::query()->findOrFail($workspaceId);
@@ -41,6 +43,7 @@ class IntegrationController extends Controller
         $zohoHealth = $zoho->healthCheck();
         $metaStatus = $meta->status($workspace);
         $anthropic = $llmCreds->status($workspace);
+        $llm = $orchestrator->llmStatus();
 
         $this->touchHealth($workspaceId, 'wordpress', $wpHealth);
         $this->touchHealth($workspaceId, 'zoho', $zohoHealth);
@@ -67,7 +70,8 @@ class IntegrationController extends Controller
             'zoho' => $zohoHealth,
             'meta' => $metaStatus,
             'anthropic' => $anthropic,
-            'llm' => $anthropic,
+            // Active LLM (Anthropic / Gemini / local) — not Anthropic-only.
+            'llm' => $llm,
             'wordpress_posts' => $wordpress->listPosts(5),
             'zoho_leads' => $zoho->listRecentLeads(5),
         ]);

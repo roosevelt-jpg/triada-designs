@@ -139,24 +139,32 @@ export default function AgentsPage() {
             </span>
           </div>
           <p className="max-w-3xl text-sm text-muted">{llm.honesty}</p>
-          {llm.status === "awaiting_credentials" || providerLabel === "anthropic" || providerLabel === "gemini" ? (
+          {llm.status === "awaiting_credentials" ? (
             <div className="surface-card max-w-3xl space-y-2 p-4 text-sm">
-              <p className="font-medium text-ink">Add Anthropic API key to enable live agents</p>
+              <p className="font-medium text-ink">
+                {providerLabel === "gemini"
+                  ? "Add GEMINI_API_KEY to enable live agents"
+                  : "Add Anthropic API key to enable live agents"}
+              </p>
               <p className="text-muted">
-                Prefer pasting the key on{" "}
+                Prefer pasting Anthropic on{" "}
                 <a className="text-brown-dark underline" href="/integrations">
                   Integrations
                 </a>
-                . Or set env in <code className="text-ink">apps/api/.env</code>:
+                , or set env in <code className="text-ink">apps/api/.env</code>:
               </p>
               <pre className="overflow-x-auto rounded-md border border-line bg-stone/50 p-3 text-xs text-ink">
-{`LLM_PROVIDER=anthropic
+{providerLabel === "gemini"
+  ? `LLM_PROVIDER=gemini
+GEMINI_API_KEY=your-key-here
+GEMINI_MODEL=gemini-2.0-flash`
+  : `LLM_PROVIDER=anthropic
 ANTHROPIC_API_KEY=your-key-here
 ANTHROPIC_MODEL=claude-sonnet-4-20250514`}
               </pre>
               <p className="text-muted">
-                Restart the API after env changes. Test run uses Claude when the key is present; otherwise the
-                local heuristic runs and status stays <code className="text-ink">awaiting_credentials</code>.
+                Restart the API after env changes. Without credentials status stays{" "}
+                <code className="text-ink">awaiting_credentials</code>.
               </p>
               {llm.env_hint ? <p className="text-xs text-muted">{llm.env_hint}</p> : null}
             </div>
