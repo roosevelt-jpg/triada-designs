@@ -70,6 +70,21 @@ class IntegrationController extends Controller
             $mode = 'local';
         }
 
+        $wordpressPosts = [];
+        try {
+            $wordpressPosts = $wordpress->listPosts(5);
+        } catch (\Throwable $e) {
+            $wordpressPosts = ['error' => $e->getMessage()];
+        }
+
+        $zohoLeads = [];
+        try {
+            $zohoLeads = $zoho->listRecentLeads(5);
+        } catch (\Throwable $e) {
+            // Live mode with invalid OAuth must not 500 the health card.
+            $zohoLeads = ['error' => $e->getMessage()];
+        }
+
         return response()->json([
             'mode' => $mode,
             'wordpress' => $wpHealth,
@@ -82,8 +97,8 @@ class IntegrationController extends Controller
             'anthropic' => $anthropic,
             // Active LLM (Anthropic / Gemini / local) — not Anthropic-only.
             'llm' => $llm,
-            'wordpress_posts' => $wordpress->listPosts(5),
-            'zoho_leads' => $zoho->listRecentLeads(5),
+            'wordpress_posts' => $wordpressPosts,
+            'zoho_leads' => $zohoLeads,
         ]);
     }
 

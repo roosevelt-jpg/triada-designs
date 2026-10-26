@@ -28,15 +28,16 @@ class ShopifySyncService
 
         $publicStatus = match (true) {
             ($health['status'] ?? '') === 'healthy' && $hasToken => 'healthy',
-            $hasToken && ($health['mode'] ?? '') === 'local' => 'awaiting_credentials',
+            $hasToken && ($health['mode'] ?? '') === 'live' => ($health['status'] ?? 'connected') === 'error' ? 'error' : 'connected',
+            $hasToken && ($health['mode'] ?? '') === 'local' => 'local',
             ($integration?->status === 'connected') && ! $hasToken => 'awaiting_credentials',
-            default => $integration?->status ?: 'disconnected',
+            default => $integration?->status ?: 'awaiting_credentials',
         };
 
         // Never report healthy without live mode + token proof from health check.
         if (($health['mode'] ?? 'local') !== 'live' || ($health['status'] ?? '') !== 'healthy') {
             if ($publicStatus === 'healthy') {
-                $publicStatus = 'awaiting_credentials';
+                $publicStatus = $hasToken ? 'local' : 'awaiting_credentials';
             }
         }
 

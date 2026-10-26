@@ -32,5 +32,16 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!-- Keep feature tests on local_sim regardless of host apps/api/.env -->
+        <env name="INTEGRATION_MODE" value="local"/>
+        <env name="EMAIL_CHANNEL_WEBHOOK_SECRET" value=""/>
+        <env name="TELEGRAM_WEBHOOK_SECRET" value=""/>
+        <env name="SHOPIFY_ACCESS_TOKEN" value=""/>
+        <env name="ZOHO_CLIENT_ID" value=""/>
+        <env name="ZOHO_CLIENT_SECRET" value=""/>
+        <env name="ZOHO_REFRESH_TOKEN" value=""/>
+        <env name="ZOHO_ACCESS_TOKEN" value=""/>
+        <env name="META_PAGE_ACCESS_TOKEN" value=""/>
+        <env name="META_WA_ACCESS_TOKEN" value=""/>
     </php>
 </phpunit>

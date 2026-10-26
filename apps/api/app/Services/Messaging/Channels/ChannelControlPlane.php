@@ -40,24 +40,21 @@ class ChannelControlPlane
             $hasSecret = $this->hasCredential($integration, $channel);
             $status = $integration?->status ?: 'disconnected';
 
-            if ($status === 'connected' && ! $hasSecret && $channel !== 'webchat') {
-                $status = 'awaiting_credentials';
-            }
-
-            // Never report healthy without live mode + credentials.
+            // Never report healthy/connected without live mode + credentials.
             $mode = strtolower((string) config('integrations.mode', 'local'));
-            $live = $mode === 'live' && ($hasSecret || $channel === 'webchat');
-            if (in_array($status, ['healthy', 'connected'], true) && ! $live && $channel !== 'webchat') {
-                // Connected with pasted token still stays local until INTEGRATION_MODE=live.
-                if ($hasSecret) {
-                    $status = 'local';
-                } elseif ($status === 'healthy') {
-                    $status = 'awaiting_credentials';
-                }
-            }
-            if ($status === 'seeded' && $channel === 'webchat') {
+            $isLiveMode = $mode === 'live';
+            $live = $isLiveMode && ($hasSecret || $channel === 'webchat');
+
+            if ($channel === 'webchat' && in_array($status, ['seeded', 'disconnected', ''], true)) {
                 // Website chat can operate on seed widget tokens locally.
-                $status = 'local';
+                $status = $live ? 'connected' : 'local';
+            } elseif ($hasSecret) {
+                // Env or encrypted secrets present: connected when live, otherwise local_sim.
+                $status = $live ? 'connected' : 'local';
+            } elseif (in_array($status, ['healthy', 'connected', 'local', 'seeded'], true)) {
+                $status = 'awaiting_credentials';
+            } elseif ($status === 'disconnected' || $status === '') {
+                $status = 'awaiting_credentials';
             }
 
             $channels[$channel] = [
@@ -130,7 +127,7 @@ class ChannelControlPlane
             $secretType = match ($channel) {
                 'telegram' => 'bot_token',
                 'email' => 'api_key',
-                'shopify' => 'admin_access_token',
+                'shopify' => 'access_token',
                 default => 'access_token',
             };
             $this->storeSecret($integration, $secretType, $token);
@@ -246,8 +243,12 @@ class ChannelControlPlane
             'telegram' => filled($cfg['bot_token'] ?? null),
             'tiktok' => filled($cfg['access_token'] ?? null),
             'linkedin' => filled($cfg['access_token'] ?? null),
-            'email' => filled($cfg['api_key'] ?? null) || filled(config('mail.mailers.smtp.username')),
-            'facebook', 'instagram', 'whatsapp' => filled(config('integrations.meta.access_token')),
+            'email' => filled($cfg['api_key'] ?? null)
+                || filled(config('services.resend.key'))
+                || filled(config('mail.mailers.smtp.username')),
+            'facebook', 'instagram' => filled(config('integrations.meta.page_access_token')),
+            'whatsapp' => filled(config('integrations.meta.whatsapp_access_token'))
+                || filled(config('integrations.meta.page_access_token')),
             'shopify' => filled(config('integrations.shopify.access_token')),
             'webchat' => true,
             default => false,

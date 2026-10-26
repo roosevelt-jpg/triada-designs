@@ -51,7 +51,8 @@ class FoundationApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('mode', 'local')
             ->assertJsonPath('wordpress.status', 'seeded')
-            ->assertJsonPath('zoho.status', 'seeded');
+            // Zoho stays awaiting until ZOHO_* / Integrations OAuth are present.
+            ->assertJsonPath('zoho.status', 'awaiting_credentials');
     }
 
     public function test_human_takeover_changes_mode(): void
