@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local Meta webhook mock store (no Supabase credentials)
+.triada-local/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

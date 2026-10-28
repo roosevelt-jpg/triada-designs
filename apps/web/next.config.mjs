@@ -21,7 +21,7 @@ function assertPublicApiOrigin(origin) {
   ) {
     throw new Error(
       `API_ORIGIN must be a public host on Vercel (refusing loopback ${host}). ` +
-        "Set API_ORIGIN to the Laravel API base URL, e.g. https://triada-api.onrender.com",
+        "Set API_ORIGIN to the Laravel API base URL, e.g. https://api.triada-designs.com",
     );
   }
 }
@@ -29,8 +29,9 @@ function assertPublicApiOrigin(origin) {
 if (onVercel) {
   if (!rawApiOrigin) {
     throw new Error(
-      "API_ORIGIN is required on Vercel. Set it in Project → Settings → Environment Variables " +
-        "(Production) to the public Laravel API base URL with no trailing slash.",
+      "API_ORIGIN is required on Vercel during dual-run. Set it in Project → Settings → Environment Variables " +
+        "(Production) to the public Laravel API base URL with no trailing slash. " +
+        "Meta webhooks (/api/webhooks/meta) are handled by Next Route Handlers and do not use this rewrite.",
     );
   }
   assertPublicApiOrigin(rawApiOrigin);
@@ -43,18 +44,22 @@ const nextConfig = {
   poweredByHeader: false,
   transpilePackages: ["three", "@react-three/fiber", "@react-three/drei"],
   async rewrites() {
-    // Browser calls same-origin /api/* and /storage/*; Next proxies to Laravel.
-    // Local default: 127.0.0.1:8088. On Vercel: API_ORIGIN must be a public URL.
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${resolvedApiOrigin}/api/:path*`,
-      },
-      {
-        source: "/storage/:path*",
-        destination: `${resolvedApiOrigin}/storage/:path*`,
-      },
-    ];
+    // Dual-mode (Next.js + Supabase migration Slice 1):
+    // - Filesystem Route Handlers always win: /api/webhooks/meta, /api/health, /api/cron/*
+    // - Laravel proxy lives in `fallback` so Meta hits Next directly.
+    // - Other /api/* (including remaining /api/webhooks/*) still proxy to API_ORIGIN.
+    return {
+      fallback: [
+        {
+          source: "/api/:path*",
+          destination: `${resolvedApiOrigin}/api/:path*`,
+        },
+        {
+          source: "/storage/:path*",
+          destination: `${resolvedApiOrigin}/storage/:path*`,
+        },
+      ],
+    };
   },
 };
 

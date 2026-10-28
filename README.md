@@ -1,11 +1,12 @@
 # Triada Designs — AI Sales & Marketing Operations Platform
 
-Monorepo for the Triada Designs **admin / ops subdomain**: Next.js (JavaScript) staff dashboard with admin login, Laravel REST API, MySQL/Redis-ready infrastructure, first-class **WordPress** + **Zoho CRM** modules, and a **Meta messaging control plane** (Facebook / Instagram / WhatsApp) operable from the dashboard with a local simulator until credentials exist.
+Monorepo for the Triada Designs **admin / ops subdomain**: Next.js (JavaScript) staff dashboard with admin login, migrating toward **Next.js-only + Supabase** while dual-running Laravel for remaining `/api/v1` routes. First-class **WordPress** + **Zoho CRM** modules and a **Meta messaging control plane** (Facebook / Instagram / WhatsApp) stay operable from the dashboard with a local simulator until credentials exist.
 
 | Domain | Role |
 |---|---|
 | [triada-designs.com](https://triada-designs.com) | Public marketing / commerce |
-| `ops.triada-designs.com` (this app) | Admin login + AI Sales OS |
+| `dashboard.triada-designs.com` / ops host (this app) | Admin login + AI Sales OS (Vercel) |
+| `api.triada-designs.com` (dual-run) | Laravel until retired; may rewrite to Vercel later |
 
 Visiting `/` redirects to **Admin sign in**.
 
@@ -13,19 +14,22 @@ Visiting `/` redirects to **Admin sign in**.
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js App Router, React, JavaScript only, Tailwind |
-| Backend | Laravel 13 REST API, Sanctum auth |
-| Database | MySQL (Docker) or SQLite for local API development |
-| Queue/cache | Redis (Docker) / database driver locally |
-| Commerce | Shopify adapter scaffolding (disconnected until OAuth) |
-| CMS | WordPress REST client (local seed / live) |
-| CRM | Zoho CRM client (local seed / live) |
+| Frontend | Next.js App Router, React, **JavaScript only**, Tailwind |
+| Target backend | **Supabase** (Auth + Postgres) + Next Route Handlers |
+| Dual-run backend | Laravel 13 REST `/api/v1` + Sanctum (kept until slices finish) |
+| Database (target) | Supabase Postgres (`supabase/migrations`) |
+| Database (legacy) | MySQL (Docker) or SQLite for local Laravel |
+| Cron | Existing **Vercel Cron** (`apps/web/vercel.json`) |
+| Commerce / CMS / CRM | Shopify, WordPress, Zoho adapters (local seed / live) |
+
+Migration plan: durable doc in the project store — `docs/next-supabase-migration.md` (Context). Repo mirror notes also under `docs/` as slices land.
 
 ## Repository layout
 
 ```text
-apps/web          Next.js admin/ops dashboard (login-first subdomain app)
-apps/api          Laravel API, migrations, WP/Zoho services
+apps/web          Next.js admin/ops dashboard (login-first; owns Meta webhook)
+apps/api          Laravel API (kept; not required for /api/webhooks/meta)
+supabase/         Postgres migrations for Supabase
 infrastructure/   Docker Compose + Dockerfiles
 docs/             Architecture and integration docs
 packages/         Shared contracts (OpenAPI placeholder)
@@ -133,6 +137,45 @@ Set the same `CRON_SECRET` on Vercel (web) and the API host. Set `API_ORIGIN` on
 
 Default shop domain: `jwtjzw-nu.myshopify.com` (`SHOPIFY_SHOP_DOMAIN`). Paste Admin API access token on Integrations → Shopify when ready; stays `awaiting_credentials` / `local_sim` until token + `INTEGRATION_MODE=live`.
 
+## Next.js + Supabase (dual-run) — required env
+
+Set on **Vercel** (Production) and in `apps/web/.env.local` for local work:
+
+| Variable | Required for | Notes |
+|---|---|---|
+| `SUPABASE_URL` | Live DB / Auth | Project URL |
+| `SUPABASE_ANON_KEY` | Browser / RLS client | Safe with RLS |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server webhook ingest | **Never** `NEXT_PUBLIC_` |
+| `META_VERIFY_TOKEN` | Meta hub challenge | Must match Meta App webhook verify token |
+| `API_ORIGIN` | Dual-run `/api/v1` rewrite | Still required on Vercel until Laravel is retired |
+| `CRON_SECRET` | Vercel Cron → workers | Existing |
+
+Optional browser mirrors: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+
+Without Supabase credentials, Meta webhook **POST** ingest writes to a local mock store (`.triada-local/`) — status stays `local` / awaiting credentials, never fake live-healthy.
+
+### Auth dual-run (login move)
+
+- **Now:** Admin login still uses Laravel Sanctum (`POST /api/v1/auth/login`) for `info@triada-designs.com` / `triada-local` (local seed).
+- **Next:** Supabase Auth for the same email; feature-flag cutover; then retire Sanctum.
+- Do not switch the login form until the dedicated auth slice is proven.
+
+### Meta Callback URL (Vercel-hosted)
+
+Point Meta App → Webhooks **Callback URL** at Next (not Laravel):
+
+```text
+https://dashboard.triada-designs.com/api/webhooks/meta
+```
+
+If `api.triada-designs.com` is rewritten to the same Vercel deployment:
+
+```text
+https://api.triada-designs.com/api/webhooks/meta
+```
+
+Verify token = `META_VERIFY_TOKEN`. `GET` returns `hub.challenge`; `POST` stores to Supabase (or local mock). Other `/api/webhooks/*` still proxy to Laravel during dual-run.
+
 ## Meta messaging (local simulator by default)
 
 Day-to-day Facebook Messenger, Instagram Messaging, and WhatsApp Cloud API ops are managed from **Integrations → Meta messaging** (`/integrations/meta`). Creating a Meta Developer App / App Review may still require Meta once; after that Triada owns connect, webhooks, health, messaging, templates eligibility, automations, pause/resume, and logs.
@@ -149,7 +192,8 @@ WHATSAPP_ACCESS_TOKEN=
 INTEGRATION_MODE=local   # set live only with real tokens
 ```
 
-- Webhooks: `GET|POST /api/webhooks/meta`, `GET|POST /api/webhooks/whatsapp`
+- Webhooks (Next): `GET|POST /api/webhooks/meta` — primary Callback URL above
+- WhatsApp (Laravel dual-run for now): `GET|POST /api/webhooks/whatsapp`
 - Simulate inbound: UI simulator or `POST /api/v1/integrations/meta/simulate-inbound`
 - Emergency pauses: Settings → outbound / automations
 
