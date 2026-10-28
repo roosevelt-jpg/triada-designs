@@ -6,7 +6,7 @@
 
 import { buildContent } from "@/lib/api/seed-data";
 
-/** @typedef {{ id: string, status: string, scheduled_for?: string|null, approval_version?: number, approved_by?: string|null, approved_at?: string|null, title?: string, body?: string, channel?: string, creative_brief?: object, publish_metadata?: object, published_at?: string|null, updated_at?: string }} ContentRow */
+/** @typedef {{ id: string, status: string, scheduled_for?: string|null, proposed_scheduled_for?: string|null, approval_version?: number, approved_by?: string|null, approved_at?: string|null, title?: string, body?: string, channel?: string, creative_brief?: object, publish_metadata?: object, published_at?: string|null, updated_at?: string }} ContentRow */
 
 /** @type {ContentRow[]|null} */
 let contentItems = null;

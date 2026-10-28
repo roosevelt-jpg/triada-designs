@@ -90,6 +90,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/content/review', [CatalogController::class, 'contentReview']);
         Route::post('/content/{contentId}/approve', [CatalogController::class, 'approveContent']);
         Route::post('/content/{contentId}/schedule', [ContentPublishController::class, 'schedule']);
+        Route::post('/content/{contentId}/cancel-schedule', [ContentPublishController::class, 'cancelSchedule']);
+        Route::post('/content/{contentId}/propose-schedule', [ContentPublishController::class, 'proposeSchedule']);
         Route::post('/content/{contentId}/publish', [ContentPublishController::class, 'publish']);
         Route::get('/publications', [ContentPublishController::class, 'publications']);
 

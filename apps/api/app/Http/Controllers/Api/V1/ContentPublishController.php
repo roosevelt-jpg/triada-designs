@@ -47,6 +47,43 @@ class ContentPublishController extends Controller
         return response()->json($result, ($result['ok'] ?? false) ? 200 : 422);
     }
 
+    public function cancelSchedule(Request $request, string $contentId, ContentPublishService $publisher): JsonResponse
+    {
+        $workspace = $this->workspace($request);
+        $item = ContentItem::query()
+            ->where('workspace_id', $workspace->id)
+            ->findOrFail($contentId);
+
+        $result = $publisher->cancelSchedule(
+            $workspace,
+            $item,
+            (string) $request->user()->id
+        );
+
+        return response()->json($result, ($result['ok'] ?? false) ? 200 : 422);
+    }
+
+    public function proposeSchedule(Request $request, string $contentId, ContentPublishService $publisher): JsonResponse
+    {
+        $data = $request->validate([
+            'proposed_scheduled_for' => ['required', 'date'],
+        ]);
+
+        $workspace = $this->workspace($request);
+        $item = ContentItem::query()
+            ->where('workspace_id', $workspace->id)
+            ->findOrFail($contentId);
+
+        $result = $publisher->proposeSchedule(
+            $workspace,
+            $item,
+            $data['proposed_scheduled_for'],
+            (string) ($request->user()->id ?? 'ai')
+        );
+
+        return response()->json($result, ($result['ok'] ?? false) ? 200 : 422);
+    }
+
     public function publish(Request $request, string $contentId, ContentPublishService $publisher): JsonResponse
     {
         $data = $request->validate([

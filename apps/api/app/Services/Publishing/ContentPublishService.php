@@ -146,6 +146,8 @@ class ContentPublishService
     }
 
     /**
+     * Human admin sets or overrides the go-live datetime. AI proposals never call this.
+     *
      * @return array<string, mixed>
      */
     public function schedule(Workspace $workspace, ContentItem $item, string $scheduledFor, ?string $actorId = null): array
@@ -166,23 +168,151 @@ class ContentPublishService
             ];
         }
 
+        $wasScheduled = $item->status === 'scheduled';
+        $previous = optional($item->scheduled_for)?->toIso8601String();
+        $meta = is_array($item->publish_metadata) ? $item->publish_metadata : [];
+        unset($meta['proposed_scheduled_for']);
+        $meta['schedule_source'] = 'human';
+        $meta['scheduled_by'] = $actorId ?? 'admin';
+        $meta['scheduled_at'] = now()->toIso8601String();
+
         $item->forceFill([
             'status' => 'scheduled',
             'scheduled_for' => $scheduledFor,
+            'proposed_scheduled_for' => null,
+            'publish_metadata' => $meta,
         ])->save();
 
         AuditLog::query()->create([
             'workspace_id' => $workspace->id,
             'actor_type' => 'user',
             'actor_id' => $actorId ?? 'system',
-            'action' => 'content.schedule',
+            'action' => $wasScheduled ? 'content.reschedule' : 'content.schedule',
             'target_type' => 'content_item',
             'target_id' => $item->id,
             'created_at' => now(),
-            'metadata' => ['scheduled_for' => $scheduledFor],
+            'metadata' => [
+                'scheduled_for' => $scheduledFor,
+                'previous_scheduled_for' => $previous,
+                'schedule_source' => 'human',
+            ],
         ]);
 
         return ['ok' => true, 'content' => $item->fresh()];
+    }
+
+    /**
+     * Human admin cancels a scheduled go-live. Reverts to approved; cron will not publish.
+     *
+     * @return array<string, mixed>
+     */
+    public function cancelSchedule(Workspace $workspace, ContentItem $item, ?string $actorId = null): array
+    {
+        if ($item->workspace_id !== $workspace->id) {
+            throw new InvalidArgumentException('Content item workspace mismatch.');
+        }
+
+        if ($item->status !== 'scheduled' && empty($item->scheduled_for)) {
+            return [
+                'ok' => false,
+                'error' => 'Content is not scheduled.',
+                'gate' => 'not_scheduled',
+            ];
+        }
+
+        if ($item->status === 'published') {
+            return [
+                'ok' => false,
+                'error' => 'Published content cannot be unscheduled.',
+                'gate' => 'already_published',
+            ];
+        }
+
+        $previous = optional($item->scheduled_for)?->toIso8601String();
+        $meta = is_array($item->publish_metadata) ? $item->publish_metadata : [];
+        $meta['schedule_source'] = 'human_cancelled';
+        $meta['schedule_cancelled_by'] = $actorId ?? 'admin';
+        $meta['schedule_cancelled_at'] = now()->toIso8601String();
+        unset($meta['scheduled_by'], $meta['scheduled_at']);
+
+        $item->forceFill([
+            'status' => 'approved',
+            'scheduled_for' => null,
+            'publish_metadata' => $meta,
+        ])->save();
+
+        Publication::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('content_item_id', $item->id)
+            ->where('status', 'scheduled')
+            ->update([
+                'status' => 'cancelled',
+                'updated_at' => now(),
+            ]);
+
+        AuditLog::query()->create([
+            'workspace_id' => $workspace->id,
+            'actor_type' => 'user',
+            'actor_id' => $actorId ?? 'system',
+            'action' => 'content.schedule_cancelled',
+            'target_type' => 'content_item',
+            'target_id' => $item->id,
+            'created_at' => now(),
+            'metadata' => [
+                'previous_scheduled_for' => $previous,
+                'schedule_source' => 'human',
+            ],
+        ]);
+
+        return ['ok' => true, 'content' => $item->fresh()];
+    }
+
+    /**
+     * AI / automation may propose a slot only — never sets status=scheduled.
+     *
+     * @return array<string, mixed>
+     */
+    public function proposeSchedule(Workspace $workspace, ContentItem $item, string $proposedFor, ?string $actorId = null): array
+    {
+        if ($item->workspace_id !== $workspace->id) {
+            throw new InvalidArgumentException('Content item workspace mismatch.');
+        }
+
+        if (in_array($item->status, ['published'], true)) {
+            return [
+                'ok' => false,
+                'error' => 'Published content cannot receive schedule proposals.',
+                'gate' => 'already_published',
+            ];
+        }
+
+        $meta = is_array($item->publish_metadata) ? $item->publish_metadata : [];
+        $meta['proposed_scheduled_for'] = $proposedFor;
+        $meta['proposal_source'] = 'ai';
+        $meta['proposed_at'] = now()->toIso8601String();
+        $meta['proposed_by'] = $actorId ?? 'ai';
+
+        $item->forceFill([
+            'proposed_scheduled_for' => $proposedFor,
+            'publish_metadata' => $meta,
+        ])->save();
+
+        AuditLog::query()->create([
+            'workspace_id' => $workspace->id,
+            'actor_type' => 'agent',
+            'actor_id' => $actorId ?? 'ai',
+            'action' => 'content.schedule_proposed',
+            'target_type' => 'content_item',
+            'target_id' => $item->id,
+            'created_at' => now(),
+            'metadata' => ['proposed_scheduled_for' => $proposedFor],
+        ]);
+
+        return [
+            'ok' => true,
+            'content' => $item->fresh(),
+            'note' => 'Proposal only — admin must confirm a go-live date on Calendar or Content Studio.',
+        ];
     }
 
     /**

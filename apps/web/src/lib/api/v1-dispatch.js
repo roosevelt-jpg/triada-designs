@@ -674,9 +674,93 @@ export async function dispatchV1(method, segments, request, body) {
           422
         );
       }
-      const when = body?.scheduled_for || new Date(Date.now() + 3 * 86400000).toISOString();
-      const content = patchContent(contentId, { status: "scheduled", scheduled_for: when });
+      if (!body?.scheduled_for) {
+        return jsonOk(
+          {
+            ok: false,
+            error: "Admin must choose an explicit go-live datetime.",
+            gate: "human_schedule_required",
+          },
+          422
+        );
+      }
+      const when = body.scheduled_for;
+      const wasScheduled = item.status === "scheduled";
+      const nextMeta = { ...(item.publish_metadata || {}) };
+      delete nextMeta.proposed_scheduled_for;
+      delete nextMeta.proposal_source;
+      nextMeta.schedule_source = "human";
+      nextMeta.scheduled_by = "dual-run-admin";
+      nextMeta.scheduled_at = new Date().toISOString();
+      const content = patchContent(contentId, {
+        status: "scheduled",
+        scheduled_for: when,
+        proposed_scheduled_for: null,
+        publish_metadata: nextMeta,
+      });
+      return jsonOk({
+        ok: true,
+        content,
+        action: wasScheduled ? "reschedule" : "schedule",
+      });
+    }
+    if (action === "cancel-schedule") {
+      if (item.status === "published") {
+        return jsonOk(
+          { ok: false, error: "Published content cannot be unscheduled.", gate: "already_published" },
+          422
+        );
+      }
+      if (item.status !== "scheduled" && !item.scheduled_for) {
+        return jsonOk(
+          { ok: false, error: "Content is not scheduled.", gate: "not_scheduled" },
+          422
+        );
+      }
+      const content = patchContent(contentId, {
+        status: "approved",
+        scheduled_for: null,
+        publish_metadata: {
+          ...(item.publish_metadata || {}),
+          schedule_source: "human_cancelled",
+          schedule_cancelled_by: "dual-run-admin",
+          schedule_cancelled_at: new Date().toISOString(),
+        },
+      });
       return jsonOk({ ok: true, content });
+    }
+    if (action === "propose-schedule") {
+      if (item.status === "published") {
+        return jsonOk(
+          {
+            ok: false,
+            error: "Published content cannot receive schedule proposals.",
+            gate: "already_published",
+          },
+          422
+        );
+      }
+      const proposed = body?.proposed_scheduled_for;
+      if (!proposed) {
+        return jsonOk(
+          { ok: false, error: "proposed_scheduled_for is required.", gate: "proposal_required" },
+          422
+        );
+      }
+      const content = patchContent(contentId, {
+        proposed_scheduled_for: proposed,
+        publish_metadata: {
+          ...(item.publish_metadata || {}),
+          proposed_scheduled_for: proposed,
+          proposal_source: "ai",
+          proposed_at: new Date().toISOString(),
+        },
+      });
+      return jsonOk({
+        ok: true,
+        content,
+        note: "Proposal only — admin must confirm a go-live date on Calendar or Content Studio.",
+      });
     }
     if (action === "publish") {
       if (item.status !== "approved" && item.status !== "scheduled") {
@@ -2546,8 +2630,17 @@ export async function dispatchV1(method, segments, request, body) {
       data: listScheduled(),
       pending_approval: listPendingApproval(),
       pending_review: listPendingReview(),
+      flow: "generate → human approve → admin sets / overrides date → cron publish (or cancel)",
+      admin_controls: {
+        schedule: true,
+        reschedule: true,
+        cancel: true,
+        override_ai_proposal: true,
+        note: "Only admins set go-live. AI may propose a slot; cron never invents dates.",
+      },
       cron: {
         path: "/api/cron/content-publish",
+        note: "Publishes only what you scheduled. Cancel anytime before go-live.",
       },
     });
   }

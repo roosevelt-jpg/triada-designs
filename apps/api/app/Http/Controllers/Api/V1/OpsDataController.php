@@ -91,10 +91,17 @@ class OpsDataController extends Controller
         return response()->json([
             'data' => $scheduled,
             'pending_approval' => $pendingApproval,
-            'flow' => 'generate → pending approval → calendar date → cron publish',
+            'flow' => 'generate → human approve → admin sets / overrides date → cron publish (or cancel)',
+            'admin_controls' => [
+                'schedule' => true,
+                'reschedule' => true,
+                'cancel' => true,
+                'override_ai_proposal' => true,
+                'note' => 'Only admins set go-live. AI may propose a slot; cron never invents dates.',
+            ],
             'cron' => [
                 'path' => '/api/cron/content-publish',
-                'note' => 'Vercel Cron publishes due scheduled posts (approval gates enforced).',
+                'note' => 'Vercel Cron publishes only what you scheduled. Cancel anytime before go-live.',
             ],
         ]);
     }

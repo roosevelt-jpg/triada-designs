@@ -26,6 +26,17 @@ class ContentScheduleService
             ];
         }
 
+        // Human must already have set a go-live datetime — never invent +1 day.
+        $when = $scheduledFor ?: optional($content->scheduled_for)?->toIso8601String();
+        if (! $when) {
+            return [
+                'ok' => false,
+                'error' => 'Admin must set an explicit go-live datetime on Calendar or Content Studio before cross-post.',
+                'gate' => 'human_schedule_required',
+                'content_status' => $content->status,
+            ];
+        }
+
         $allowed = ['instagram', 'tiktok', 'facebook', 'linkedin'];
         $channels = array_values(array_intersect($channels ?: $allowed, $allowed));
         $pubs = [];
@@ -39,24 +50,30 @@ class ContentScheduleService
                 'approval_version_checked' => (int) ($content->approval_version ?? 1),
                 'metadata' => [
                     'cross_post' => true,
-                    'scheduled_for' => $scheduledFor ?: ($content->scheduled_for?->toIso8601String()),
+                    'scheduled_for' => $when,
                     'requires_human_before_live' => true,
+                    'schedule_source' => 'human',
                 ],
             ]);
         }
 
+        $meta = array_merge($content->publish_metadata ?? [], [
+            'cross_post_channels' => $channels,
+            'awaiting_go_live_approval' => true,
+            'schedule_source' => 'human',
+        ]);
+
         $content->forceFill([
-            'scheduled_for' => $scheduledFor ?: $content->scheduled_for ?: now()->addDay(),
-            'publish_metadata' => array_merge($content->publish_metadata ?? [], [
-                'cross_post_channels' => $channels,
-                'awaiting_go_live_approval' => true,
-            ]),
+            'scheduled_for' => $when,
+            'status' => in_array($content->status, ['approved', 'scheduled'], true) ? 'scheduled' : $content->status,
+            'publish_metadata' => $meta,
         ])->save();
 
         return [
             'ok' => true,
             'publications' => $pubs,
-            'note' => 'Cross-post scheduled — approve again before anything goes live.',
+            'scheduled_for' => $when,
+            'note' => 'Cross-post queued for the admin-set go-live time — cancel anytime from Calendar.',
         ];
     }
 

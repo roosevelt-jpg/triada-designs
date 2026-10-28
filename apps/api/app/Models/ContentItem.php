@@ -22,6 +22,7 @@ class ContentItem extends Model
         'body',
         'channel',
         'scheduled_for',
+        'proposed_scheduled_for',
         'campaign_key',
         'published_at',
         'publish_metadata',
@@ -34,6 +35,7 @@ class ContentItem extends Model
         return [
             'approved_at' => 'datetime',
             'scheduled_for' => 'datetime',
+            'proposed_scheduled_for' => 'datetime',
             'published_at' => 'datetime',
             'publish_metadata' => 'array',
             'creative_brief' => 'array',

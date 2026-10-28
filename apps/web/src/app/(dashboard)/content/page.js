@@ -116,21 +116,61 @@ export default function ContentPage() {
     openPreview(item, asset, "", media?.variants || []);
   }
 
-  async function schedule(item) {
+  function proposedFor(item) {
+    return (
+      item?.proposed_scheduled_for ||
+      item?.publish_metadata?.proposed_scheduled_for ||
+      null
+    );
+  }
+
+  function schedulePickerValue(item) {
+    if (scheduleDrafts[item.id]) return scheduleDrafts[item.id];
+    if (item.scheduled_for) return toIntlDateTimeValue(new Date(item.scheduled_for));
+    const proposal = proposedFor(item);
+    if (proposal) return toIntlDateTimeValue(new Date(proposal));
+    return toIntlDateTimeValue(new Date(nowDate().getTime() + 3 * 24 * 60 * 60 * 1000));
+  }
+
+  async function schedule(item, { explicitDraft = null, overrideProposal = false } = {}) {
     setBusyId(`schedule-${item.id}`);
     try {
       await syncSystemTime().catch(() => {});
-      const draft = scheduleDrafts[item.id];
-      const when = draft
-        ? new Date(draft).toISOString()
-        : new Date(nowDate().getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
+      const draft = explicitDraft || schedulePickerValue(item);
+      if (!draft) {
+        setError("Choose a go-live date before scheduling.");
+        return;
+      }
+      const when = new Date(draft).toISOString();
       await apiFetch(`/v1/content/${item.id}/schedule`, {
         method: "POST",
         body: { scheduled_for: when },
       });
       setNotice(
-        `Scheduled for ${formatDateTime(when)}. Appears on Calendar.`
+        overrideProposal
+          ? `Your date overrides the AI proposal — goes live ${formatDateTime(when)}.`
+          : `Scheduled by you for ${formatDateTime(when)}. Cancel or change anytime on Calendar.`
       );
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function cancelSchedule(item) {
+    if (
+      !window.confirm(
+        `Cancel the scheduled go-live for “${item.title}”? It stays approved until you set a new date.`
+      )
+    ) {
+      return;
+    }
+    setBusyId(`cancel-${item.id}`);
+    try {
+      await apiFetch(`/v1/content/${item.id}/cancel-schedule`, { method: "POST" });
+      setNotice(`Cancelled schedule for “${item.title}”. Still approved.`);
       await load();
     } catch (err) {
       setError(err.message);
@@ -339,7 +379,7 @@ export default function ContentPage() {
   return (
     <DashboardShell
       title="Content studio"
-      description="Generate, preview, approve, schedule, and publish."
+      description="You approve and set go-live — AI never auto-publishes."
     >
       <ContentPreviewModal
         open={Boolean(preview)}
@@ -365,6 +405,16 @@ export default function ContentPage() {
       {loading ? <Skeleton className="h-64" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       {notice ? <p className="mb-4 text-sm text-brown-dark">{notice}</p> : null}
+
+      {!loading ? (
+        <section className="mb-6 border border-brown/25 bg-brown/5 px-5 py-4">
+          <p className="font-medium text-ink">Admin controls the calendar</p>
+          <p className="mt-1 text-sm text-muted">
+            After you approve, you choose the go-live datetime, reschedule, or cancel. AI may
+            propose a slot — only your confirmed date goes on the calendar.
+          </p>
+        </section>
+      ) : null}
 
       {!loading && creativeStatus ? (
         <section className="mb-6 surface-card space-y-3 p-5">
@@ -579,26 +629,41 @@ export default function ContentPage() {
                   ) : null}
                   {item.status === "approved" ? (
                     <>
+                      {proposedFor(item) ? (
+                        <Badge tone="warning">
+                          AI proposed {formatDateTime(proposedFor(item))}
+                        </Badge>
+                      ) : null}
                       <DatePicker
                         mode="datetime"
-                        label="Calendar date"
+                        label="Your go-live time"
                         className="min-w-[12rem]"
-                        value={
-                          scheduleDrafts[item.id] ||
-                          toIntlDateTimeValue(
-                            new Date(nowDate().getTime() + 3 * 24 * 60 * 60 * 1000)
-                          )
-                        }
+                        value={schedulePickerValue(item)}
                         onChange={(next) =>
                           setScheduleDrafts((prev) => ({ ...prev, [item.id]: next }))
                         }
                       />
+                      {proposedFor(item) ? (
+                        <Button
+                          variant="secondary"
+                          disabled={busyId === `schedule-${item.id}`}
+                          onClick={() => {
+                            const draft = toIntlDateTimeValue(new Date(proposedFor(item)));
+                            setScheduleDrafts((prev) => ({ ...prev, [item.id]: draft }));
+                            schedule(item, { explicitDraft: draft });
+                          }}
+                        >
+                          Use AI date
+                        </Button>
+                      ) : null}
                       <Button
                         variant="secondary"
                         disabled={busyId === `schedule-${item.id}`}
-                        onClick={() => schedule(item)}
+                        onClick={() =>
+                          schedule(item, { overrideProposal: Boolean(proposedFor(item)) })
+                        }
                       >
-                        Schedule on calendar
+                        {proposedFor(item) ? "Override & schedule" : "Schedule on calendar"}
                       </Button>
                       <Button
                         disabled={busyId === `publish-${item.id}-wordpress`}
@@ -617,6 +682,32 @@ export default function ContentPage() {
                   ) : null}
                   {item.status === "scheduled" ? (
                     <>
+                      <p className="w-full text-sm text-muted">
+                        Scheduled by you · {formatDateTime(item.scheduled_for)}
+                      </p>
+                      <DatePicker
+                        mode="datetime"
+                        label="Reschedule"
+                        className="min-w-[12rem]"
+                        value={schedulePickerValue(item)}
+                        onChange={(next) =>
+                          setScheduleDrafts((prev) => ({ ...prev, [item.id]: next }))
+                        }
+                      />
+                      <Button
+                        variant="secondary"
+                        disabled={busyId === `schedule-${item.id}`}
+                        onClick={() => schedule(item)}
+                      >
+                        Save new date
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={busyId === `cancel-${item.id}`}
+                        onClick={() => cancelSchedule(item)}
+                      >
+                        Cancel schedule
+                      </Button>
                       <Button
                         disabled={busyId === `publish-${item.id}-wordpress`}
                         onClick={() => publish(item, "wordpress")}
