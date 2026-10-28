@@ -112,14 +112,16 @@ WHATSAPP_ACCESS_TOKEN=
 
 **Capabilities**
 
-- Connect / disconnect (paste Admin API token or OAuth scaffold URL when `SHOPIFY_CLIENT_ID` set)
+- Connect / disconnect (status-only in dashboard; Admin API token on Vercel / host env)
 - Product + order sync (local simulator fixtures when credentials absent)
+- **Outbound product publish** from dashboard Products → Shopify Admin API create/update when `SHOPIFY_ACCESS_TOKEN` present (`write_products` scope recommended)
+- WordPress marketing posts for the same product when `WORDPRESS_*` Application Password env is present
 - Webhook ingest `POST /api/webhooks/shopify` with HMAC verification when secret set
-- Admin UI: `/integrations/shopify`
+- Admin UI: `/integrations/shopify`, catalog UI: `/products`
 
-**Env:** `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `SHOPIFY_REDIRECT_URI`, `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_ACCESS_TOKEN`, `SHOPIFY_WEBHOOK_SECRET`
+**Env:** `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `SHOPIFY_REDIRECT_URI`, `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_ACCESS_TOKEN` (or `SHOPIFY_ADMIN_ACCESS_TOKEN`), `SHOPIFY_WEBHOOK_SECRET`, `SHOPIFY_SCOPES` (include `write_products` for publish)
 
-Status stays **disconnected** / **awaiting_credentials** until live tokens + `INTEGRATION_MODE=live`. Never claim healthy without that.
+Status stays **disconnected** / **awaiting_credentials** until live tokens. Never claim healthy without that. See `/cursor/stores/self/docs/product-channel-publish.md`.
 
 ## Telegram / TikTok / Email / Webchat
 
