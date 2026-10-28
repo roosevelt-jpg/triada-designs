@@ -61,24 +61,60 @@ import {
   readBearerToken,
 } from "@/lib/auth/supabase-auth";
 import { runAgentOrchestration } from "@/lib/agents/orchestrator";
+import { runTeamCollaboration } from "@/lib/agents/team-orchestrator";
+import {
+  assignTask,
+  createAgent,
+  listAgents,
+  listTasks,
+  updateAgent,
+  updateTask,
+} from "@/lib/agents/agent-store";
+import {
+  getSharedKv,
+  listSharedKv,
+  setSharedKv,
+} from "@/lib/agents/shared-memory";
 import {
   deleteTrainingDoc,
   listTrainingDocs,
   retrieveTrainingDocs,
   upsertTrainingDoc,
 } from "@/lib/training/training-docs-store";
+import {
+  TEMPLATE_CATEGORIES,
+  isTemplateCategory,
+  mapTemplateCategoryToMeta,
+  normalizeTemplateCategory,
+} from "@/lib/templates/categories";
 import { wrapChannelTemplate } from "@/lib/brand/wrap-template";
 import { wrapEmailMessage } from "@/lib/brand/wrap-email";
 import { wrapInvoiceDocument } from "@/lib/brand/wrap-invoice";
 import { ensureBrandedOutboundText } from "@/lib/brand/wrap-message";
 import { BRAND, brandLogoUrl } from "@/lib/brand/identity";
 
-/** @type {{ timezone: string, workflows: ReturnType<typeof buildWorkflows>, agents: ReturnType<typeof buildAgents> }} */
+/** @type {{ timezone: string, workflows: ReturnType<typeof buildWorkflows>, agents: Awaited<ReturnType<typeof listAgents>>["data"] }} */
 const runtimeState = {
   timezone: WORKSPACE.timezone,
   workflows: buildWorkflows(),
   agents: buildAgents(),
 };
+
+let agentsHydrated = false;
+
+async function hydrateAgents() {
+  if (agentsHydrated) return runtimeState.agents;
+  try {
+    const listed = await listAgents();
+    if (listed.data?.length) {
+      runtimeState.agents = listed.data;
+    }
+  } catch {
+    /* keep seed */
+  }
+  agentsHydrated = true;
+  return runtimeState.agents;
+}
 
 /**
  * @param {Request} request
@@ -1126,12 +1162,23 @@ export async function dispatchV1(method, segments, request, body) {
     });
   }
 
+  if (path === "channel-templates/categories" && m === "GET") {
+    return jsonOk({ data: TEMPLATE_CATEGORIES });
+  }
+
   if (path === "channel-templates" && m === "POST") {
     const input =
       body && typeof body === "object"
         ? /** @type {Record<string, unknown>} */ (body)
         : {};
     const platform = String(input.platform || "whatsapp").toLowerCase();
+    const category = normalizeTemplateCategory(input.category, "product_inquiry");
+    if (input.category != null && input.category !== "" && !isTemplateCategory(category)) {
+      return jsonErr(
+        `Category must be one of: ${TEMPLATE_CATEGORIES.map((c) => c.value).join(", ")}`,
+        422,
+      );
+    }
     const branded = wrapChannelTemplate({
       platform,
       name: String(input.name || ""),
@@ -1144,7 +1191,7 @@ export async function dispatchV1(method, segments, request, body) {
       const result = await createAndSubmitWhatsAppTemplate({
         name: input.name,
         body: branded.body,
-        category: input.category || "MARKETING",
+        category: mapTemplateCategoryToMeta(category),
         language: input.language || "en",
         variables: input.variables,
         components: input.components || branded.components,
@@ -1153,6 +1200,8 @@ export async function dispatchV1(method, segments, request, body) {
         {
           template: {
             ...result.template,
+            category,
+            meta_category: mapTemplateCategoryToMeta(category),
             branded: true,
             logo_url: branded.logo_url,
             greeting: branded.greeting,
@@ -1173,7 +1222,7 @@ export async function dispatchV1(method, segments, request, body) {
           status: "draft",
           platform,
           name: String(input.name || "template"),
-          category: input.category || "general",
+          category,
           body: branded.body,
           html: branded.html || undefined,
           subject: branded.subject || undefined,
@@ -1209,8 +1258,23 @@ export async function dispatchV1(method, segments, request, body) {
     // Prefer WhatsApp Cloud re-submit when the id is known there or platform is whatsapp.
     const waList = await listWhatsAppTemplatesPayload();
     const known = (waList.data || []).find((t) => String(t.id) === String(templateId));
+    if (input.category != null && input.category !== "") {
+      input.category = normalizeTemplateCategory(input.category, "general");
+      if (!isTemplateCategory(input.category)) {
+        return jsonErr(
+          `Category must be one of: ${TEMPLATE_CATEGORIES.map((c) => c.value).join(", ")}`,
+          422,
+        );
+      }
+    }
     if (known || String(input.platform || "").toLowerCase() === "whatsapp") {
-      const result = await updateAndSubmitWhatsAppTemplate(templateId, input);
+      const metaInput = {
+        ...input,
+        category: input.category
+          ? mapTemplateCategoryToMeta(input.category)
+          : input.category,
+      };
+      const result = await updateAndSubmitWhatsAppTemplate(templateId, metaInput);
       if (!result.template && result.error === "Template not found") {
         return jsonErr(result.error, 404);
       }
@@ -1244,7 +1308,9 @@ export async function dispatchV1(method, segments, request, body) {
         const result = await updateAndSubmitWhatsAppTemplate(templateId, {
           name: hit.name,
           body: hit.body,
-          category: hit.category,
+          category: mapTemplateCategoryToMeta(
+            normalizeTemplateCategory(hit.category, "marketing"),
+          ),
           language: hit.language,
         });
         return jsonOk(
@@ -1277,7 +1343,21 @@ export async function dispatchV1(method, segments, request, body) {
 
   // ---- agents / ops lists ----
   if (path === "agents" && m === "GET") {
-    return jsonOk({ data: runtimeState.agents });
+    const agents = await hydrateAgents();
+    return jsonOk({ data: agents, team_size: agents.length });
+  }
+
+  if (path === "agents" && m === "POST") {
+    try {
+      const created = await createAgent(
+        body && typeof body === "object" ? /** @type {any} */ (body) : { name: "" },
+      );
+      runtimeState.agents = (await listAgents()).data;
+      agentsHydrated = true;
+      return jsonOk({ ok: true, agent: created.agent, storage: created.storage }, 201);
+    } catch (err) {
+      return jsonErr(err instanceof Error ? err.message : "Create agent failed", 422);
+    }
   }
 
   // Training docs + brand preview before agents/:id catch-all
@@ -1329,6 +1409,81 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk({ ok: true, doc: saved.doc, storage: saved.storage });
   }
 
+  if (path === "agents/tasks" && m === "GET") {
+    const url = new URL(request.url);
+    const agentFilter = url.searchParams.get("agent_id") || url.searchParams.get("agent_key") || "";
+    const listed = await listTasks(agentFilter || undefined);
+    return jsonOk({ data: listed.data, storage: listed.storage });
+  }
+
+  if (path === "agents/tasks" && m === "POST") {
+    try {
+      const assigned = await assignTask(
+        body && typeof body === "object" ? /** @type {any} */ (body) : { title: "" },
+      );
+      return jsonOk(
+        { ok: true, task: assigned.task, agent: assigned.agent, storage: assigned.storage },
+        201,
+      );
+    } catch (err) {
+      return jsonErr(err instanceof Error ? err.message : "Assign task failed", 422);
+    }
+  }
+
+  if (path.match(/^agents\/tasks\/[^/]+$/) && (m === "PATCH" || m === "PUT")) {
+    try {
+      const updated = await updateTask(
+        segments[2],
+        body && typeof body === "object" ? /** @type {Record<string, unknown>} */ (body) : {},
+      );
+      return jsonOk(updated);
+    } catch (err) {
+      return jsonErr(err instanceof Error ? err.message : "Update task failed", 404);
+    }
+  }
+
+  if (path === "agents/shared-memory" && m === "GET") {
+    const url = new URL(request.url);
+    const prefix = url.searchParams.get("prefix") || "";
+    const listed = await listSharedKv(prefix);
+    return jsonOk({ data: listed.data, storage: listed.storage });
+  }
+
+  if (path === "agents/shared-memory" && m === "POST") {
+    try {
+      const key = String(body?.key || "").trim();
+      if (!key) return jsonErr("key is required", 422);
+      const saved = await setSharedKv({
+        key,
+        value: body?.value,
+        written_by: String(body?.written_by || "admin"),
+        tags: Array.isArray(body?.tags) ? body.tags.map(String) : [],
+      });
+      return jsonOk(saved, 201);
+    } catch (err) {
+      return jsonErr(err instanceof Error ? err.message : "Shared memory write failed", 422);
+    }
+  }
+
+  if (path.match(/^agents\/shared-memory\/.+$/) && m === "GET") {
+    const key = decodeURIComponent(path.slice("agents/shared-memory/".length));
+    const entry = await getSharedKv(key);
+    if (!entry) return jsonErr("Key not found", 404);
+    return jsonOk({ entry });
+  }
+
+  if (path === "agents/collaborate" && m === "POST") {
+    const result = await runTeamCollaboration({
+      agent_key: String(body?.agent_key || body?.agent_id || "ai_support"),
+      purpose: String(body?.purpose || "draft_reply"),
+      message: String(body?.message || ""),
+      dry_run: body?.dry_run !== false,
+      context: body?.context && typeof body.context === "object" ? body.context : {},
+      collaborators: Array.isArray(body?.collaborators) ? body.collaborators.map(String) : undefined,
+    });
+    return jsonOk(result);
+  }
+
   if (path.match(/^agents\/[^/]+$/) && (m === "PATCH" || m === "PUT")) {
     const reserved = new Set([
       "training-docs",
@@ -1336,21 +1491,24 @@ export async function dispatchV1(method, segments, request, body) {
       "activity",
       "test-run",
       "orchestrate",
+      "tasks",
+      "shared-memory",
+      "collaborate",
     ]);
     if (reserved.has(segments[1])) {
       return jsonErr("Not found.", 404);
     }
-    const idx = runtimeState.agents.findIndex((a) => a.id === segments[1]);
-    if (idx < 0) return jsonErr("Agent not found.", 404);
-    runtimeState.agents[idx] = {
-      ...runtimeState.agents[idx],
-      ...(body && typeof body === "object" ? body : {}),
-      id: runtimeState.agents[idx].id,
-    };
-    if (body && typeof body === "object" && "paused" in body) {
-      runtimeState.agents[idx].status = body.paused ? "paused" : "active";
+    try {
+      const updated = await updateAgent(
+        segments[1],
+        body && typeof body === "object" ? /** @type {Record<string, unknown>} */ (body) : {},
+      );
+      runtimeState.agents = (await listAgents()).data;
+      agentsHydrated = true;
+      return jsonOk(updated.agent);
+    } catch (err) {
+      return jsonErr(err instanceof Error ? err.message : "Agent not found.", 404);
     }
-    return jsonOk(runtimeState.agents[idx]);
   }
 
   if (path === "agents/llm/status" && m === "GET") {
@@ -1359,44 +1517,78 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "agents/activity" && m === "GET") {
+    const agents = await hydrateAgents();
+    const tasks = await listTasks();
     return jsonOk({
-      data: [
-        {
-          id: "act-1",
-          agent: "Jewellery answer-bot",
-          event: "replied",
-          channel: "instagram",
-          at: new Date().toISOString(),
-        },
-      ],
+      data: agents.slice(0, 8).map((a, i) => ({
+        id: `act-${a.key}`,
+        agent_key: a.key,
+        agent: a.name,
+        purpose: "team_ready",
+        event: i === 0 ? "collaborating" : "listening",
+        channel: (a.config?.channels || ["internal"])[0] || "internal",
+        status: a.status === "active" ? "completed" : "paused",
+        provider: "shared_memory",
+        latency_ms: 0,
+        at: new Date().toISOString(),
+      })),
+      metrics: {
+        total_runs: agents.length,
+        failed_runs: 0,
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        open_tasks: (tasks.data || []).filter((t) => t.status === "open").length,
+      },
     });
   }
 
   if (path === "agents/test-run" && m === "POST") {
+    await hydrateAgents();
     const agentId = String(body?.agent_id || body?.agent_key || "");
     const agent =
       runtimeState.agents.find(
         (a) => a.id === agentId || a.key === agentId || a.name === agentId,
       ) || runtimeState.agents[0];
-    const result = await runAgentOrchestration({
-      agent_key: agent?.id || agentId || "answer_bot",
-      agent,
-      purpose: String(body?.purpose || "draft_reply"),
-      message: String(body?.message || ""),
-      dry_run: body?.dry_run !== false,
-      context: body?.context && typeof body.context === "object" ? body.context : {},
-    });
+    const collaborate = body?.collaborate === true;
+    const result = collaborate
+      ? await runTeamCollaboration({
+          agent_key: agent?.key || agentId || "ai_support",
+          purpose: String(body?.purpose || "draft_reply"),
+          message: String(body?.message || ""),
+          dry_run: body?.dry_run !== false,
+          context: body?.context && typeof body.context === "object" ? body.context : {},
+        })
+      : await runAgentOrchestration({
+          agent_key: agent?.key || agentId || "ai_support",
+          agent,
+          purpose: String(body?.purpose || "draft_reply"),
+          message: String(body?.message || ""),
+          dry_run: body?.dry_run !== false,
+          context: body?.context && typeof body.context === "object" ? body.context : {},
+        });
     return jsonOk(result);
   }
 
   if (path === "agents/orchestrate" && m === "POST") {
-    const result = await runAgentOrchestration({
-      agent_key: String(body?.agent_key || body?.agent_id || "answer_bot"),
-      purpose: String(body?.purpose || "draft_reply"),
-      message: String(body?.message || ""),
-      dry_run: Boolean(body?.dry_run),
-      context: body?.context && typeof body.context === "object" ? body.context : {},
-    });
+    const collaborate = body?.collaborate !== false;
+    const result = collaborate
+      ? await runTeamCollaboration({
+          agent_key: String(body?.agent_key || body?.agent_id || "ai_support"),
+          purpose: String(body?.purpose || "draft_reply"),
+          message: String(body?.message || ""),
+          dry_run: Boolean(body?.dry_run),
+          context: body?.context && typeof body.context === "object" ? body.context : {},
+          collaborators: Array.isArray(body?.collaborators)
+            ? body.collaborators.map(String)
+            : undefined,
+        })
+      : await runAgentOrchestration({
+          agent_key: String(body?.agent_key || body?.agent_id || "ai_support"),
+          purpose: String(body?.purpose || "draft_reply"),
+          message: String(body?.message || ""),
+          dry_run: Boolean(body?.dry_run),
+          context: body?.context && typeof body.context === "object" ? body.context : {},
+        });
     return jsonOk(result);
   }
 
@@ -1576,7 +1768,7 @@ export async function dispatchV1(method, segments, request, body) {
 
   if (path === "jewellery-ops/answer-bot" && m === "POST") {
     const result = await runAgentOrchestration({
-      agent_key: "agent-answer",
+      agent_key: "ai_support",
       purpose: "draft_reply",
       message: String(body?.message || body?.query || ""),
       dry_run: Boolean(body?.dry_run),

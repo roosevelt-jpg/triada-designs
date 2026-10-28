@@ -10,6 +10,8 @@ import { retrieveTrainingDocs } from "@/lib/training/training-docs-store";
 import { BRAND, warmGreeting, brandAddressPlain } from "@/lib/brand/identity";
 import { ensureBrandedOutboundText } from "@/lib/brand/wrap-message";
 import { buildAgents } from "@/lib/api/seed-data";
+import { findAgent } from "./agent-store";
+import { resolveAgent } from "./team-roster";
 
 /**
  * @param {{
@@ -25,12 +27,14 @@ export async function runAgentOrchestration(input = {}) {
   const started = Date.now();
   const purpose = String(input.purpose || "draft_reply");
   const message = String(input.message || input.context?.message || "").trim();
-  const agentKey = String(input.agent_key || input.agent?.key || "answer_bot");
-  const agents = buildAgents();
+  const agentKey = String(input.agent_key || input.agent?.key || "ai_support");
+  const seeded = buildAgents();
+  const stored = input.agent ? null : await findAgent(agentKey);
   const agent =
     input.agent ||
-    agents.find((a) => a.id === agentKey || a.key === agentKey || a.name === agentKey) ||
-    agents[0] ||
+    stored ||
+    resolveAgent(agentKey, seeded) ||
+    seeded[0] ||
     { name: "Triada assistant", config: {} };
 
   const training = await retrieveTrainingDocs(message || purpose, { limit: 4 });
@@ -40,10 +44,13 @@ export async function runAgentOrchestration(input = {}) {
     purpose,
     training,
     customPrompt: agent?.config?.system_prompt,
+    sharedMemory: typeof input.context?.shared_memory === "string" ? input.context.shared_memory : "",
+    assignedTasks: typeof input.context?.assigned_tasks === "string" ? input.context.assigned_tasks : "",
   });
   const userPrompt = [
     `Purpose: ${purpose}`,
     input.context?.intent ? `Intent hint: ${input.context.intent}` : "",
+    input.context?.draft ? `Prior draft to review:\n${input.context.draft}` : "",
     `Customer message:\n${message || "(empty)"}`,
   ]
     .filter(Boolean)
@@ -110,6 +117,8 @@ export async function runAgentOrchestration(input = {}) {
  *   purpose: string,
  *   training: Array<{ title: string, excerpt: string, category: string }>,
  *   customPrompt?: unknown,
+ *   sharedMemory?: string,
+ *   assignedTasks?: string,
  * }} opts
  */
 export function buildSystemPrompt(opts) {
@@ -119,23 +128,30 @@ export function buildSystemPrompt(opts) {
   const kb = (opts.training || [])
     .map((k) => `- [${k.category}] ${k.title}: ${k.excerpt}`)
     .join("\n");
+  const peers = Array.isArray(opts.agent?.config?.collaborates_with)
+    ? opts.agent.config.collaborates_with.join(", ")
+    : "";
 
   return `You are ${name} (${role}) for ${BRAND.name} — jewellery and Salt & Spirit collections.
 Purpose: ${opts.purpose}.
+You collaborate with the Triada agent team via shared memory/kv${peers ? ` (peers: ${peers})` : ""}.
 
 Hard rules:
 - Disclose you are an AI assistant and that a person is available on request.
 - NEVER invent prices, stock, delivery promises, custom quotes, or off-brand words.
-- When unsure of tone, timing, open/close wording, or policy — use the Training Docs below. If still unsure, say you will connect a human.
+- When unsure of tone, timing, open/close wording, or policy — use the Training Docs below. If still unsure, say you will connect a human or Escalation officer.
 - Start customer-facing replies with a warm Triada greeting when appropriate.
 - End threads with Triada contact/address when closing.
 - WhatsApp: business messages only to opted-in customers. Broadcasts need human approval.
 - Materials: silver with gold plating; 14K and 18K gold on request. Typical make time ~7 days.
+- Treat Shared memory as team context other agents already wrote — do not contradict it without escalating.
 
 Brand contact footer (use when closing):
 ${brandAddressPlain()}
 
 ${policy ? `Agent policy:\n${policy}\n` : ""}
+${opts.assignedTasks ? `Assigned tasks:\n${opts.assignedTasks}\n` : ""}
+${opts.sharedMemory ? `Shared memory / kv:\n${opts.sharedMemory}\n` : ""}
 Training docs (authoritative — retrieve & obey; do not fabricate beyond these):
 ${kb || "(none loaded — escalate rather than invent)"}
 `;

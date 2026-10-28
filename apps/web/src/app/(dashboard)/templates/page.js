@@ -10,6 +10,11 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import {
+  TEMPLATE_CATEGORIES,
+  normalizeTemplateCategory,
+  templateCategoryLabel,
+} from "@/lib/templates/categories";
 
 const PLATFORMS = [
   "facebook",
@@ -36,6 +41,27 @@ const emptyForm = {
   category: "product_inquiry",
   body: "",
 };
+
+function CategorySelect({ value, onChange, id }) {
+  return (
+    <label className="block space-y-1.5" htmlFor={id}>
+      <span className="block text-[13px] font-medium text-ink">Category</span>
+      <select
+        id={id}
+        className="h-10 w-full rounded-sm border border-line bg-white px-3 text-sm"
+        value={normalizeTemplateCategory(value, "general")}
+        onChange={(e) => onChange(e.target.value)}
+        required
+      >
+        {TEMPLATE_CATEGORIES.map((c) => (
+          <option key={c.value} value={c.value}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 export default function ChannelTemplatesPage() {
   const [items, setItems] = useState([]);
@@ -75,7 +101,7 @@ export default function ChannelTemplatesPage() {
       setForm({
         platform: selected.platform,
         name: selected.name,
-        category: selected.category || "general",
+        category: normalizeTemplateCategory(selected.category, "general"),
         body: selected.body || "",
       });
     }
@@ -215,6 +241,13 @@ export default function ChannelTemplatesPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium text-ink">{tpl.name}</span>
                         <Badge tone="brand">{tpl.platform}</Badge>
+                        {tpl.category ? (
+                          <Badge tone="neutral">
+                            {templateCategoryLabel(
+                              normalizeTemplateCategory(tpl.category, "general"),
+                            )}
+                          </Badge>
+                        ) : null}
                         <Badge tone={tone(tpl.status)}>{tpl.status}</Badge>
                         {tpl.publish_mode ? (
                           <Badge tone="neutral">{tpl.publish_mode}</Badge>
@@ -240,10 +273,10 @@ export default function ChannelTemplatesPage() {
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 />
-                <Input
-                  label="Category"
+                <CategorySelect
+                  id="edit-template-category"
                   value={form.category}
-                  onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                  onChange={(category) => setForm((f) => ({ ...f, category }))}
                 />
                 <label className="block space-y-1.5">
                   <span className="block text-[13px] font-medium text-ink">Body</span>
@@ -309,10 +342,10 @@ export default function ChannelTemplatesPage() {
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               />
-              <Input
-                label="Category"
+              <CategorySelect
+                id="new-template-category"
                 value={form.category}
-                onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                onChange={(category) => setForm((f) => ({ ...f, category }))}
               />
               <label className="block space-y-1.5">
                 <span className="block text-[13px] font-medium text-ink">Body</span>

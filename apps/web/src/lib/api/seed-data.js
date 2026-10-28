@@ -23,6 +23,7 @@ import {
   providerNickname,
 } from "@/lib/integrations/brand-labels";
 import { metaChannelHealth } from "@/lib/integrations/meta-credentials";
+import { TEAM_ROSTER } from "@/lib/agents/team-roster";
 
 export { envPresent } from "@/lib/integrations/env-presence";
 
@@ -1074,48 +1075,16 @@ export function buildLeads() {
 }
 
 export function buildAgents() {
-  return [
-    {
-      id: "agent-answer",
-      key: "answer_bot",
-      workspace_id: WORKSPACE.id,
-      name: "Jewellery answer-bot",
-      role: "support",
-      description: "Sizes, materials, care, shipping, price list — human handoff when unsure.",
-      status: "active",
-      config: {
-        disclosure: true,
-        channels: ["instagram", "whatsapp", "facebook", "webchat"],
-        system_prompt:
-          "Retrieve training docs for tone, timing, and open/close. Never invent off-brand words or prices.",
-      },
-    },
-    {
-      id: "agent-gift",
-      key: "gift_finder",
-      workspace_id: WORKSPACE.id,
-      name: "Gift finder",
-      role: "sales",
-      description: "Recommends verified catalog pieces for gift intent.",
-      status: "active",
-      config: {
-        channels: ["instagram", "whatsapp", "webchat"],
-        system_prompt: "Recommend only catalog pieces. Use warm Triada greetings from training docs.",
-      },
-    },
-    {
-      id: "agent-creative",
-      key: "creative_media",
-      workspace_id: WORKSPACE.id,
-      name: "Creative media",
-      role: "marketing",
-      description: "Post-aligned images and platform variants when creative AI is connected.",
-      status: "paused",
-      config: {
-        channels: ["instagram", "tiktok", "facebook"],
-      },
-    },
-  ];
+  // Multi-agent team: Support, Creative, Follow up, Marketing, QC,
+  // Compliance, Leads Qualification, Escalation officer.
+  // Persistent agent-store may supersede this seed at runtime.
+  const at = nowIso();
+  return TEAM_ROSTER.map((row) => ({
+    ...row,
+    workspace_id: WORKSPACE.id,
+    created_at: at,
+    updated_at: at,
+  }));
 }
 
 export function paginate(items, page = 1, perPage = 50) {
