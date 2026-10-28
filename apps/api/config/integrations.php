@@ -56,7 +56,7 @@ return [
         'shop_domain' => env('SHOPIFY_SHOP_DOMAIN', 'jwtjzw-nu.myshopify.com'),
         'access_token' => env('SHOPIFY_ACCESS_TOKEN'),
         'webhook_secret' => env('SHOPIFY_WEBHOOK_SECRET'),
-        'scopes' => env('SHOPIFY_SCOPES', 'read_products,read_orders,read_inventory'),
+        'scopes' => env('SHOPIFY_SCOPES', 'read_products,write_products,read_orders,read_inventory'),
         'timeout' => (int) env('SHOPIFY_TIMEOUT', 20),
     ],
 

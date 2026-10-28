@@ -20,6 +20,17 @@ import {
   paginate,
 } from "@/lib/api/seed-data";
 import {
+  publishProductById,
+  saveAndMaybePublishProduct,
+  syncShopifyCatalogInbound,
+} from "@/lib/commerce/product-channel-publish";
+import { listProducts, getProduct } from "@/lib/commerce/products-store";
+import { shopifyStatusPayload } from "@/lib/commerce/shopify-admin";
+import {
+  upsertWordpressProductPost,
+  wordpressStatusPayload,
+} from "@/lib/commerce/wordpress-products";
+import {
   importContactRows,
   listContacts,
   listWhatsAppCampaignRecipients,
@@ -51,7 +62,6 @@ import {
 import {
   hasGeminiEnv,
   hasMetaPageToken,
-  hasShopifyEnv,
   hasWhatsAppPhoneId,
   hasWhatsAppToken,
 } from "@/lib/integrations/env-presence";
@@ -249,7 +259,104 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "products" && m === "GET") {
-    return jsonOk(paginate(PRODUCTS));
+    const url = new URL(request.url);
+    const q = url.searchParams.get("q") || "";
+    const listed = await listProducts({ q });
+    return jsonOk({
+      ...paginate(listed.data),
+      mode: listed.mode,
+      shopify: shopifyStatusPayload(),
+      wordpress: wordpressStatusPayload(),
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "products" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await saveAndMaybePublishProduct(input, {
+      publish: Boolean(input.publish),
+      channels: Array.isArray(input.channels) ? input.channels : ["all"],
+    });
+    if (!result.ok && result.status === 422) {
+      return jsonErr(result.error || "Invalid product", 422);
+    }
+    return jsonOk(
+      {
+        ...result.product,
+        created: result.created,
+        published: result.published,
+        awaiting_credentials: result.awaiting_credentials,
+        channels: result.channels,
+        summary: result.summary,
+        mode: result.mode,
+        source: "next_dual_run",
+      },
+      result.created ? 201 : 200,
+    );
+  }
+
+  if (path.match(/^products\/[^/]+$/) && m === "GET") {
+    const id = segments[1];
+    const product = await getProduct(id);
+    if (!product) return jsonErr("Product not found", 404);
+    return jsonOk({ ...product, source: "next_dual_run" });
+  }
+
+  if (path.match(/^products\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
+    const id = segments[1];
+    const existing = await getProduct(id);
+    if (!existing) return jsonErr("Product not found", 404);
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await saveAndMaybePublishProduct(
+      { ...existing, ...input, id },
+      {
+        publish: Boolean(input.publish),
+        channels: Array.isArray(input.channels) ? input.channels : ["all"],
+      },
+    );
+    if (!result.ok && result.status === 422) {
+      return jsonErr(result.error || "Invalid product", 422);
+    }
+    return jsonOk({
+      ...result.product,
+      created: false,
+      published: result.published,
+      awaiting_credentials: result.awaiting_credentials,
+      channels: result.channels,
+      summary: result.summary,
+      mode: result.mode,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path.match(/^products\/[^/]+\/publish$/) && m === "POST") {
+    const id = segments[1];
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await publishProductById(id, {
+      channels: Array.isArray(input.channels) ? input.channels : ["all"],
+    });
+    if (!result.ok && result.status === 404) {
+      return jsonErr(result.error || "Product not found", 404);
+    }
+    return jsonOk({
+      ok: result.ok,
+      awaiting_credentials: result.awaiting_credentials,
+      product: result.product,
+      channels: result.channels,
+      summary: result.summary,
+      shopify_runtime: result.shopify_runtime,
+      wordpress_runtime: result.wordpress_runtime,
+      source: "next_dual_run",
+    });
   }
 
   if (path === "content" && m === "GET") {
@@ -367,13 +474,44 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk(buildIntegrationsHealth({ anthropic, meta }));
   }
 
+  if (path === "integrations/wordpress/status" && m === "GET") {
+    return jsonOk(wordpressStatusPayload());
+  }
+
   if (path === "integrations/wordpress/drafts" && m === "POST") {
+    const wp = wordpressStatusPayload();
+    if (!wp.connected) {
+      return jsonOk(
+        {
+          id: `wp-draft-${Date.now()}`,
+          title: body?.title || "Untitled draft",
+          status: "awaiting_credentials",
+          source: "next_dual_run",
+          message: wp.message,
+        },
+        201,
+      );
+    }
+    const draftProduct = {
+      id: `draft-${Date.now()}`,
+      title: String(body?.title || "Untitled draft"),
+      description: String(body?.content || body?.excerpt || ""),
+      published_status: "draft",
+      channel_sync: { shopify: {}, wordpress: {} },
+    };
+    const result = await upsertWordpressProductPost(
+      /** @type {import("@/lib/commerce/products-store").ProductRecord} */ (
+        draftProduct
+      ),
+    );
     return jsonOk(
       {
-        id: `wp-draft-${Date.now()}`,
-        title: body?.title || "Untitled draft",
-        status: "draft",
-        source: "next_seed",
+        id: result.external_id || `wp-draft-${Date.now()}`,
+        title: draftProduct.title,
+        status: result.status === "synced" ? "draft" : result.status,
+        link: result.link,
+        source: "next_dual_run",
+        message: result.message,
       },
       201,
     );
@@ -381,8 +519,12 @@ export async function dispatchV1(method, segments, request, body) {
 
   if (path === "integrations/wordpress/posts" && m === "GET") {
     const anthropic = await getAnthropicStatus();
+    const wp = wordpressStatusPayload();
     return jsonOk({
-      mode: "local",
+      mode: wp.mode,
+      status: wp.status,
+      status_label: wp.status_label,
+      message: wp.message,
       data: buildIntegrationsHealth({ anthropic }).wordpress_posts,
     });
   }
@@ -711,28 +853,62 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "integrations/shopify/status" && m === "GET") {
-    const connected = hasShopifyEnv();
-    return jsonOk({
-      connected,
-      store: "jwtjzw-nu.myshopify.com",
-      status: connected ? "connected" : "awaiting_credentials",
-      status_label: connected ? "Connected" : "Waiting credentials",
-      summary: connected
-        ? "Shopify Admin API is connected."
-        : "Waiting for Shopify Admin API credentials on Vercel.",
-    });
+    return jsonOk(shopifyStatusPayload());
   }
 
-  if (
-    (path === "integrations/shopify/connect" ||
-      path === "integrations/shopify/disconnect" ||
-      path === "integrations/shopify/sync") &&
-    m === "POST"
-  ) {
+  if (path === "integrations/shopify/connect" && m === "POST") {
+    const status = shopifyStatusPayload();
     return jsonOk({
       ok: true,
       mode: "next_dual_run",
-      message: `${path} stubbed — provide Shopify credentials to go live.`,
+      message: status.connected
+        ? "Shopify Admin API credentials already present on the host."
+        : "Paste SHOPIFY_ACCESS_TOKEN on Vercel — dashboard stays status-only.",
+      status,
+    });
+  }
+
+  if (path === "integrations/shopify/disconnect" && m === "POST") {
+    return jsonOk({
+      ok: true,
+      mode: "next_dual_run",
+      message:
+        "Remove SHOPIFY_ACCESS_TOKEN from Vercel to disconnect. Dashboard cannot clear host secrets.",
+      status: shopifyStatusPayload(),
+    });
+  }
+
+  if (path === "integrations/shopify/sync" && m === "POST") {
+    const syncType =
+      body && typeof body === "object" && body.sync_type
+        ? String(body.sync_type)
+        : "products";
+    if (syncType === "orders") {
+      const status = shopifyStatusPayload();
+      return jsonOk({
+        ok: true,
+        run: {
+          status: status.connected ? "completed" : "completed",
+          mode: status.connected ? status.mode : "local_sim",
+          sync_type: "orders",
+          records_upserted: 0,
+          records_failed: 0,
+          summary: {
+            note: status.connected
+              ? "Orders sync reserved — use products sync for catalog publish."
+              : status.summary,
+          },
+        },
+        status,
+      });
+    }
+    const result = await syncShopifyCatalogInbound();
+    return jsonOk({
+      ok: result.ok,
+      run: result.run,
+      status: result.status_payload,
+      mode: result.mode,
+      source: "next_dual_run",
     });
   }
 

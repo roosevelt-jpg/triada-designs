@@ -13,6 +13,7 @@ import {
   hasSupabaseEnv,
   hasTelegramEnv,
   hasWhatsAppMessagingEnv,
+  hasWordpressEnv,
   hasZohoBooksOrg,
   hasZohoEnv,
   integrationRuntimeMode,
@@ -266,6 +267,7 @@ export function buildIntegrationsList(opts = {}) {
   const anthropicReady =
     Boolean(opts.anthropicHasCredentials) || envPresent("ANTHROPIC_API_KEY");
   const shopifyReady = hasShopifyEnv();
+  const wordpressReady = hasWordpressEnv();
   const telegramReady = hasTelegramEnv();
   const zohoReady = hasZohoEnv();
   const anthropicModel =
@@ -278,12 +280,15 @@ export function buildIntegrationsList(opts = {}) {
       id: "int-wordpress",
       provider: "wordpress",
       display_name: "WordPress CMS",
-      status: "seeded",
-      status_label: connectionLabel("seeded"),
+      status: wordpressReady ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(
+        wordpressReady ? "connected" : "awaiting_credentials",
+      ),
       external_account_id: "wordpress-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
-      capabilities: ["posts.read", "posts.draft", "webhooks"],
+      capabilities: ["posts.read", "posts.draft", "products.publish", "webhooks"],
+      metadata: { site_hint: "https://triada-designs.com" },
     },
     {
       id: "int-zoho",
@@ -365,7 +370,7 @@ export function buildIntegrationsList(opts = {}) {
       external_account_id: "shopify-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
-      capabilities: ["products.sync", "orders", "webhooks"],
+      capabilities: ["products.sync", "products.publish", "orders", "webhooks"],
       metadata: { store_hint: "jwtjzw-nu.myshopify.com" },
     },
     {
@@ -570,9 +575,13 @@ export function buildIntegrationsHealth(opts = {}) {
     mode_label: integrationRuntimeMode(liveCredentials) === "live" ? "Live" : "Local",
     credentials: presence,
     wordpress: {
-      status: "seeded",
-      status_label: connectionLabel("seeded"),
-      message: "WordPress posts served from the seeded Triada catalog.",
+      status: hasWordpressEnv() ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(
+        hasWordpressEnv() ? "connected" : "awaiting_credentials",
+      ),
+      message: hasWordpressEnv()
+        ? "WordPress Application Password credentials are present — product publish can go live."
+        : "Waiting for WordPress credentials on Vercel. Product publish stays awaiting until keyed.",
     },
     zoho: {
       status: zohoReady ? "connected" : "awaiting_credentials",
