@@ -55,6 +55,7 @@ import {
   hasWhatsAppPhoneId,
   hasWhatsAppToken,
 } from "@/lib/integrations/env-presence";
+import { buildSalesChannelsStatus } from "@/lib/integrations/channels-status";
 import { creativeModeLabel } from "@/lib/integrations/brand-labels";
 import {
   getUserFromAccessToken,
@@ -737,24 +738,58 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "integrations/channels/status" && m === "GET") {
-    return jsonOk({
-      data: buildIntegrationsList().filter((i) =>
-        ["telegram", "tiktok", "email", "linkedin", "webchat"].includes(i.provider),
-      ),
-    });
+    // UI expects { channels: { facebook: { status, status_label, ... }, ... }, webchat_widget }.
+    // Prior stub returned { data: [...] } and omitted Meta/Shopify → false "Waiting credentials".
+    const meta = await getMetaStatus();
+    return jsonOk(buildSalesChannelsStatus({ meta }));
+  }
+
+  if (path === "integrations/channels/webchat-token" && m === "POST") {
+    const meta = await getMetaStatus();
+    const publicToken = `wc_${Date.now().toString(36)}`;
+    return jsonOk(
+      buildSalesChannelsStatus({
+        meta,
+        webchat_widget: {
+          id: `webchat-widget-${publicToken}`,
+          name: "Website widget",
+          public_token: publicToken,
+          rate_limit_per_minute: 30,
+          embed_path: "/widget/chat.js",
+        },
+      }),
+    );
   }
 
   if (
     (path === "integrations/channels/connect" ||
       path === "integrations/channels/disconnect" ||
-      path === "integrations/channels/simulate-inbound" ||
-      path === "integrations/channels/webchat-token") &&
+      path === "integrations/channels/simulate-inbound") &&
     m === "POST"
   ) {
+    const meta = await getMetaStatus();
+    if (path === "integrations/channels/simulate-inbound") {
+      const channel =
+        body && typeof body === "object" && body.channel
+          ? String(body.channel)
+          : "webchat";
+      return jsonOk({
+        ok: true,
+        mode: "next_dual_run",
+        ai: { intent: "jewellery_inquiry" },
+        messages: [
+          {
+            conversation: { id: `sim-${channel}-${Date.now()}` },
+            body: body && typeof body === "object" ? body.body : undefined,
+          },
+        ],
+        channels: buildSalesChannelsStatus({ meta }).channels,
+      });
+    }
     return jsonOk({
       ok: true,
-      token: path.includes("webchat") ? `webchat_${Date.now()}` : undefined,
       mode: "next_dual_run",
+      ...buildSalesChannelsStatus({ meta }),
     });
   }
 
