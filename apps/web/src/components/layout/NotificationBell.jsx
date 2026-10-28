@@ -163,7 +163,7 @@ export function NotificationBell() {
             <ul className="divide-y divide-line/70">
               {items.map((item) => {
                 const unreadItem = !item.read_at;
-                const href = item.href || "/notifications";
+                const href = item.href || "/content/review";
                 return (
                   <li key={item.id}>
                     <Link

@@ -87,6 +87,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/products', [CatalogController::class, 'products']);
         Route::get('/services', [CatalogController::class, 'services']);
         Route::get('/content', [CatalogController::class, 'content']);
+        Route::get('/content/review', [CatalogController::class, 'contentReview']);
         Route::post('/content/{contentId}/approve', [CatalogController::class, 'approveContent']);
         Route::post('/content/{contentId}/schedule', [ContentPublishController::class, 'schedule']);
         Route::post('/content/{contentId}/publish', [ContentPublishController::class, 'publish']);

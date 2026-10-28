@@ -153,7 +153,7 @@ export default function NotificationsPage() {
       {!loading && !error && visible.length > 0 ? (
         <ul className="divide-y divide-line/80 overflow-hidden rounded-md border border-line bg-white/90">
           {visible.map((item) => {
-            const href = item.href || "/content";
+            const href = item.href || "/content/review";
             const unreadItem = !item.read_at;
             return (
               <li

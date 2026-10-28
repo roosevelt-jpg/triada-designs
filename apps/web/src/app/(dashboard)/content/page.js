@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { ContentPreviewModal } from "@/components/content/ContentPreviewModal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -25,11 +27,12 @@ function modeTone(mode) {
 
 function mediaUrl(url) {
   if (!url) return null;
-  if (url.startsWith("http")) return url;
+  if (url.startsWith("http") || url.startsWith("data:")) return url;
   return url.startsWith("/") ? url : `/${url}`;
 }
 
 export default function ContentPage() {
+  const router = useRouter();
   const [items, setItems] = useState([]);
   const [publications, setPublications] = useState([]);
   const [creativeStatus, setCreativeStatus] = useState(null);
@@ -39,6 +42,7 @@ export default function ContentPage() {
   const [busyId, setBusyId] = useState(null);
   const [notice, setNotice] = useState("");
   const [scheduleDrafts, setScheduleDrafts] = useState({});
+  const [preview, setPreview] = useState(null);
 
   const refreshMedia = useCallback(async (itemId) => {
     try {
@@ -82,12 +86,18 @@ export default function ContentPage() {
       setNotice(
         `Approved (v${result.content?.approval_version ?? "?"}). Ready to schedule.`
       );
+      setPreview(null);
       await load();
     } catch (err) {
       setError(err.message);
     } finally {
       setBusyId(null);
     }
+  }
+
+  function openPreview(item, asset, extraNotice = "") {
+    setPreview({ item, asset });
+    if (extraNotice) setNotice(extraNotice);
   }
 
   async function schedule(item) {
@@ -147,10 +157,14 @@ export default function ContentPage() {
           materials: item.product_context?.materials || "gold, refined stones",
         },
       });
-      setNotice(
-        `Image generated (${creativeModeLabel(result.mode)}). Approval is still required before publish.`
-      );
+      const nextItem = result.content || { ...item, status: "in_review" };
       await refreshMedia(item.id);
+      openPreview(
+        nextItem,
+        result.asset,
+        `Image ready for preview (${creativeModeLabel(result.mode)}).`
+      );
+      await load();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -167,10 +181,14 @@ export default function ContentPage() {
         body: {},
       });
       const count = result.variants?.length || 0;
-      setNotice(
-        `Generated ${count} platform variants (${creativeModeLabel(result.mode)}).`
-      );
+      const nextItem = result.content || { ...item, status: "in_review" };
       await refreshMedia(item.id);
+      openPreview(
+        nextItem,
+        result.asset || result.variants?.[0]?.media_asset,
+        `Generated ${count} platform variants (${creativeModeLabel(result.mode)}). Preview before approval.`
+      );
+      await load();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -190,8 +208,11 @@ export default function ContentPage() {
             "0-1s jewellery hook close-up; mid soft Gulf light + desire beat; end calm CTA frame.",
         },
       });
-      setNotice(
-        `Short video drafted (${result.mode_label || creativeModeLabel(result.mode) || "ready"}). Open Calendar to approve and schedule.`
+      const nextItem = result.content || { ...item, status: "in_review" };
+      openPreview(
+        nextItem,
+        result.asset,
+        `Short video ready for preview (${result.mode_label || creativeModeLabel(result.mode) || "ready"}).`
       );
       await load();
     } catch (err) {
@@ -215,8 +236,11 @@ export default function ContentPage() {
           duration_ms: 8000,
         },
       });
-      setNotice(
-        `UGC video queued for approval (${result.mode_label || creativeModeLabel(result.mode) || "ready"}). Open Calendar to approve and schedule.`
+      const nextItem = result.content || { ...item, status: "in_review" };
+      openPreview(
+        nextItem,
+        result.asset,
+        `UGC video ready for preview (${result.mode_label || creativeModeLabel(result.mode) || "ready"}).`
       );
       await load();
     } catch (err) {
@@ -241,8 +265,14 @@ export default function ContentPage() {
           storyboard: "Subtle jewellery motion loop for feed and stories.",
         },
       });
-      setNotice(`Marketing animation drafted (${result.mode}).`);
+      const nextItem = result.content || { ...item, status: "in_review" };
       await refreshMedia(item.id);
+      openPreview(
+        nextItem,
+        result.asset,
+        `Animation ready for preview (${creativeModeLabel(result.mode)}).`
+      );
+      await load();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -263,11 +293,15 @@ export default function ContentPage() {
           product: item.product_context?.name || "Triada Designs jewellery",
         },
       });
-      const variantCount = result.variants?.variants?.length || result.variants?.length || 0;
-      setNotice(
-        `Full creative pack ready (${creativeModeLabel(result.mode)}): image + ${variantCount} variants + video + animation.`
-      );
+      const variantCount = result.variants?.length || 0;
+      const nextItem = result.content || { ...item, status: "in_review" };
       await refreshMedia(item.id);
+      openPreview(
+        nextItem,
+        result.asset,
+        `Full creative pack ready (${creativeModeLabel(result.mode)}): preview before approval · ${variantCount} variants.`
+      );
+      await load();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -281,8 +315,28 @@ export default function ContentPage() {
   return (
     <DashboardShell
       title="Content studio"
-      description="Generate, approve, schedule, and publish."
+      description="Generate, preview, approve, schedule, and publish."
     >
+      <ContentPreviewModal
+        open={Boolean(preview)}
+        item={preview?.item || null}
+        asset={preview?.asset || null}
+        busy={Boolean(busyId && String(busyId).startsWith("approve-"))}
+        onClose={() => setPreview(null)}
+        onApprove={() => preview?.item?.id && approve(preview.item.id)}
+        onOpenReview={() => {
+          const id = preview?.item?.id;
+          setPreview(null);
+          router.push(id ? `/content/review?highlight=${encodeURIComponent(id)}` : "/content/review");
+        }}
+      />
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Button variant="secondary" size="sm" onClick={() => router.push("/content/review")}>
+          Open review queue
+        </Button>
+      </div>
+
       {loading ? <Skeleton className="h-64" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       {notice ? <p className="mb-4 text-sm text-brown-dark">{notice}</p> : null}

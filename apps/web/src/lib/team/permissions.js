@@ -40,8 +40,14 @@ export const PERMISSION_AREAS = [
   {
     key: "content",
     label: "Content / Calendar",
-    description: "Content studio, calendar, campaigns, notifications",
-    hrefs: ["/content", "/calendar", "/campaigns", "/notifications"],
+    description: "Content studio, review queue, calendar, campaigns, notifications",
+    hrefs: [
+      "/content",
+      "/content/review",
+      "/calendar",
+      "/campaigns",
+      "/notifications",
+    ],
   },
   {
     key: "templates",

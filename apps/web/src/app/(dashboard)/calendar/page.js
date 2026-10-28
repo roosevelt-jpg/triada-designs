@@ -189,12 +189,17 @@ export default function CalendarPage() {
         <section className="mb-8">
           <div className="mb-3 flex items-end justify-between gap-3">
             <h2 className="ops-section-title">Awaiting approval</h2>
-            <Badge tone="warning">{pending.length}</Badge>
+            <div className="flex items-center gap-2">
+              <Badge tone="warning">{pending.length}</Badge>
+              <a href="/content/review" className="text-sm text-brown-dark underline-offset-2 hover:underline">
+                Open review queue
+              </a>
+            </div>
           </div>
           {pending.length === 0 ? (
             <EmptyState
               title="No drafts awaiting approval"
-              description="Generate content in Content Studio to review it here."
+              description="Generate content in Content Studio to preview and review it."
             />
           ) : (
             <div className="surface-card divide-y divide-line overflow-hidden">

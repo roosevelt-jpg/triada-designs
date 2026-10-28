@@ -49,7 +49,12 @@ class CreativeMediaController extends Controller
             'brief' => $result['brief'] ?? null,
             'error' => $result['error'],
             'asset' => $result['asset'],
-            'note' => 'Image draft only — human approval still required before public publish.',
+            'content' => $result['content'] ?? null,
+            'preview_required' => true,
+            'review_url' => '/content/review',
+            'admin_notified' => $result['admin_notified'] ?? false,
+            'notify' => $result['notify'] ?? null,
+            'note' => 'Image draft ready — preview before approval.',
         ]);
     }
 
@@ -106,14 +111,16 @@ class CreativeMediaController extends Controller
             'prompt' => $result['prompt'] ?? null,
             'brief' => $result['brief'] ?? null,
             'script' => $result['script'] ?? null,
-            'dual_path' => $result['dual_path'] ?? null,
             'flow' => $result['flow'] ?? null,
             'error' => $result['error'],
             'asset' => $result['asset'],
             'sidecar' => $result['sidecar'] ?? null,
             'content' => $result['content'] ?? null,
-            'note' => $result['note']
-                ?? 'Short video draft only — human approval still required before public publish. Claude wrote script/storyboard; pixels use VIDEO_PROVIDER or local animation.',
+            'preview_required' => true,
+            'review_url' => '/content/review',
+            'admin_notified' => $result['admin_notified'] ?? false,
+            'notify' => $result['notify'] ?? null,
+            'note' => $result['note'] ?? 'Short video draft ready — preview before approval.',
         ]);
     }
 
@@ -137,13 +144,16 @@ class CreativeMediaController extends Controller
             'prompt' => $result['prompt'] ?? null,
             'brief' => $result['brief'] ?? null,
             'script' => $result['script'] ?? null,
-            'dual_path' => $result['dual_path'] ?? null,
             'flow' => $result['flow'] ?? null,
             'error' => $result['error'],
             'asset' => $result['asset'],
             'sidecar' => $result['sidecar'] ?? null,
             'content' => $result['content'] ?? null,
-            'note' => $result['note'] ?? 'UGC video queued for admin approval.',
+            'preview_required' => true,
+            'review_url' => '/content/review',
+            'admin_notified' => $result['admin_notified'] ?? false,
+            'notify' => $result['notify'] ?? null,
+            'note' => $result['note'] ?? 'UGC video ready — preview before approval.',
         ]);
     }
 

@@ -20,7 +20,27 @@ class CreativeMediaService
         protected VideoScriptService $scripts,
         protected JewelleryPromptBuilder $prompts,
         protected PlatformSizeCatalog $sizes,
+        protected ContentReviewNotifier $reviewNotifier,
     ) {
+    }
+
+    /**
+     * Move draft/in-progress creatives into pending review and notify admin once.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function markPendingReview(ContentItem $item, string $kind = 'creative'): ?array
+    {
+        if (! in_array($item->status, ['approved', 'scheduled', 'published'], true)) {
+            $item->forceFill(['status' => 'in_review'])->save();
+        }
+
+        $fresh = $item->fresh() ?: $item;
+        if ($fresh->status !== 'in_review') {
+            return null;
+        }
+
+        return $this->reviewNotifier->notify($fresh, $kind);
     }
 
     /**
@@ -66,6 +86,7 @@ class CreativeMediaService
         ])->save();
 
         $result = $this->images->generateForContent($workspace, $item, $context);
+        $notify = $this->markPendingReview($item->fresh() ?: $item, 'image');
 
         return [
             'ok' => (bool) ($result['ok'] ?? false),
@@ -74,6 +95,11 @@ class CreativeMediaService
             'mode' => (string) ($result['mode'] ?? 'local_sim'),
             'prompt' => $result['prompt'] ?? $brief['image_prompt'],
             'error' => $result['error'] ?? null,
+            'content' => $item->fresh(),
+            'preview_required' => true,
+            'review_url' => '/content/review',
+            'notify' => $notify,
+            'admin_notified' => (bool) (($notify['ok'] ?? false) && empty($notify['skipped'])),
         ];
     }
 
@@ -172,18 +198,16 @@ class CreativeMediaService
 
         $result = $this->videos->generateForContent($workspace, $item, $mergedContext);
 
-        $statusPatch = [];
-        if (in_array($item->status, ['draft', ''], true) || $item->status === null) {
-            $statusPatch['status'] = 'in_review';
-        }
-
-        $item->forceFill(array_merge([
+        $item->forceFill([
             'creative_brief' => array_merge($item->creative_brief ?? [], [
                 'video' => $brief,
                 'ugc_script' => $script,
                 'updated_at' => now()->toIso8601String(),
             ]),
-        ], $statusPatch))->save();
+        ])->save();
+
+        $kind = $style === 'ugc' ? 'UGC video' : 'video';
+        $notify = $this->markPendingReview($item->fresh() ?: $item, $kind);
 
         return [
             'ok' => (bool) ($result['ok'] ?? false),
@@ -195,6 +219,10 @@ class CreativeMediaService
             'error' => $result['error'] ?? null,
             'sidecar' => $result['sidecar'] ?? null,
             'content' => $item->fresh(),
+            'preview_required' => true,
+            'review_url' => '/content/review',
+            'notify' => $notify,
+            'admin_notified' => (bool) (($notify['ok'] ?? false) && empty($notify['skipped'])),
             'dual_path' => [
                 'script_mode' => $script['mode'],
                 'script_provider' => $script['provider'],
@@ -224,8 +252,10 @@ class CreativeMediaService
             $result['content'] = $fresh->fresh();
         }
 
-        $result['flow'] = 'generate → pending approval (in_review) → calendar date → publish on schedule';
-        $result['note'] = 'UGC video draft queued for admin approval. Claude wrote the script; pixels used VIDEO_PROVIDER or local animation.';
+        $result['flow'] = 'generate → preview → approve → calendar → publish';
+        $result['note'] = 'UGC video draft ready — preview before approval.';
+        $result['preview_required'] = true;
+        $result['review_url'] = '/content/review';
 
         return $result;
     }
