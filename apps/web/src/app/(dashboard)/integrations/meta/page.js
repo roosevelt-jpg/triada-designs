@@ -426,19 +426,20 @@ export default function MetaIntegrationsPage() {
               <div>
                 <h2 className="font-display text-2xl">WhatsApp Cloud templates</h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted">
-                  Manage jewellery message templates in the dashboard. Live Cloud API submit and sync
-                  use host WhatsApp credentials; otherwise Triada uses the local jewellery catalog.
+                  Create and submit jewellery message templates to Meta for approval from this
+                  dashboard. Live submit/sync use META_WA_* or Integrations-stored WhatsApp Cloud
+                  credentials; otherwise Triada uses the local jewellery catalog.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone={healthTone(waTemplates?.status?.status)}>
                   {waTemplates?.status?.mode === "live_ready" ||
                   waTemplates?.status?.mode === "live"
-                    ? "Live"
-                    : "Local"}
+                    ? "Live Meta Graph"
+                    : "Local sim"}
                 </Badge>
                 <Button onClick={syncWaTemplates} disabled={busy === "wa-sync"}>
-                  Sync from Cloud / sim
+                  Sync approval status
                 </Button>
                 <Link
                   href="/templates?platform=whatsapp"
@@ -458,19 +459,32 @@ export default function MetaIntegrationsPage() {
                       tone={healthTone(
                         tpl.status === "approved" || tpl.status === "published"
                           ? "healthy"
-                          : "awaiting_credentials",
+                          : tpl.status === "rejected"
+                            ? "error"
+                            : tpl.status === "pending_approval" ||
+                                String(tpl.status || "").toUpperCase() === "PENDING"
+                              ? "awaiting_credentials"
+                              : "awaiting_credentials",
                       )}
                     >
                       {tpl.status === "approved" || tpl.status === "published"
                         ? "Approved"
                         : tpl.status === "rejected"
                           ? "Rejected"
-                          : "Draft"}
+                          : tpl.status === "pending_approval" ||
+                              String(tpl.status || "").toUpperCase() === "PENDING"
+                            ? "Pending Meta"
+                            : "Draft"}
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm text-muted line-clamp-3">{tpl.body}</p>
                   <p className="mt-2 text-xs uppercase tracking-wide text-muted">
-                    {tpl.category} · {tpl.publish_mode === "live" ? "Live" : "Draft"}
+                    {tpl.category} ·{" "}
+                    {tpl.publish_mode === "live"
+                      ? "Live Graph"
+                      : tpl.publish_mode === "local_sim"
+                        ? "Local sim"
+                        : "Draft"}
                   </p>
                   <div className="mt-3">
                     <Button variant="ghost" onClick={() => beginEditWaTemplate(tpl)}>
@@ -548,7 +562,7 @@ export default function MetaIntegrationsPage() {
               </div>
               <div>
                 <Button type="submit" disabled={busy === "wa-create"}>
-                  Create / submit template
+                  Create & submit to Meta
                 </Button>
               </div>
             </form>

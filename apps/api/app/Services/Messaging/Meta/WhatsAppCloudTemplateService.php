@@ -35,8 +35,8 @@ class WhatsAppCloudTemplateService
             'phone_number_id' => $cfg['whatsapp_phone_number_id'] ?? null,
             'business_account_id' => $cfg['whatsapp_business_account_id'] ?? null,
             'message' => $local
-                ? 'WhatsApp Cloud templates use the local jewellery catalog until META_WA_ACCESS_TOKEN (or WHATSAPP_ACCESS_TOKEN), META_WA_PHONE_NUMBER_ID, and META_WA_BUSINESS_ACCOUNT_ID are set with INTEGRATION_MODE=live.'
-                : 'Live WhatsApp Cloud API template path enabled.',
+                ? 'WhatsApp Cloud templates use the local jewellery catalog until META_WA_ACCESS_TOKEN (or WHATSAPP_ACCESS_TOKEN), META_WA_PHONE_NUMBER_ID, and META_WA_BUSINESS_ACCOUNT_ID are set (leave INTEGRATION_MODE unset/live — local forces the sim catalog).'
+                : 'Live WhatsApp Cloud API template path enabled (Meta Graph message_templates).',
         ];
     }
 

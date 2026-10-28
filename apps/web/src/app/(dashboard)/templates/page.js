@@ -91,9 +91,15 @@ export default function ChannelTemplatesPage() {
         method: "POST",
         body: form,
       });
-      setNotice(`Created ${result.template.name}`);
+      const mode = result.mode ? ` (${result.mode})` : "";
+      const status = result.template?.status ? ` · ${result.template.status}` : "";
+      setNotice(
+        form.platform === "whatsapp"
+          ? `WhatsApp template submitted${mode}${status}`
+          : `Created ${result.template?.name || form.name}${status}`,
+      );
       setForm(emptyForm);
-      setSelectedId(result.template.id);
+      setSelectedId(result.template?.id || null);
       await load();
     } catch (err) {
       setError(err.message);
@@ -146,13 +152,20 @@ export default function ChannelTemplatesPage() {
   return (
     <DashboardShell
       title="Channel templates"
-      description="Create, approve, and publish jewellery message / post templates per connected platform. Local sim publish until live credentials."
+      description="Create, approve, and publish jewellery message / post templates per connected platform. WhatsApp templates submit to Meta for approval when Cloud credentials are connected."
       actions={
-        <Link href="/integrations/channels">
-          <Button size="sm" variant="secondary">
-            Channels
-          </Button>
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/integrations/meta">
+            <Button size="sm" variant="secondary">
+              WhatsApp Cloud
+            </Button>
+          </Link>
+          <Link href="/integrations/channels">
+            <Button size="sm" variant="secondary">
+              Channels
+            </Button>
+          </Link>
+        </div>
       }
     >
       {loading ? <Skeleton className="h-48" /> : null}
@@ -311,7 +324,9 @@ export default function ChannelTemplatesPage() {
                 />
               </label>
               <Button type="submit" size="sm" disabled={busy === "create"}>
-                Create draft
+                {form.platform === "whatsapp"
+                  ? "Create & submit to Meta"
+                  : "Create draft"}
               </Button>
             </form>
           </aside>

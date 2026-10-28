@@ -57,12 +57,22 @@ class MetaGraphClient
 
     public function usesWhatsAppTemplateLocalFallback(): bool
     {
-        return $this->mode() !== 'live' || ! $this->whatsappTemplateConfigured();
+        if (! $this->whatsappTemplateConfigured()) {
+            return true;
+        }
+
+        // Explicit local mode keeps the jewellery sim catalog; otherwise META_WA_*
+        // credentials drive live Graph message_templates (create/sync/submit).
+        return $this->mode() === 'local';
     }
 
     public function usesWhatsAppSendLocalFallback(): bool
     {
-        return $this->usesWhatsAppLocalFallback();
+        if (! $this->whatsappConfigured()) {
+            return true;
+        }
+
+        return $this->mode() === 'local';
     }
 
     /**

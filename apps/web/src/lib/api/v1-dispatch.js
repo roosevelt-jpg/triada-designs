@@ -31,6 +31,14 @@ import {
   saveMetaCredentials,
 } from "@/lib/integrations/meta-credentials";
 import {
+  createAndSubmitWhatsAppTemplate,
+  listWhatsAppTemplatesPayload,
+  sendWhatsAppTemplateMessage,
+  syncWhatsAppTemplates,
+  updateAndSubmitWhatsAppTemplate,
+  whatsappTemplateStatus,
+} from "@/lib/integrations/whatsapp-cloud-templates";
+import {
   hasGeminiEnv,
   hasMetaPageToken,
   hasShopifyEnv,
@@ -518,47 +526,98 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "integrations/whatsapp/templates" && m === "GET") {
-    return jsonOk({
-      data: [
-        {
-          id: "wa-tpl-welcome",
-          name: "welcome_triada",
-          language: "en",
-          status: "APPROVED",
-          category: "MARKETING",
-          body: "Welcome to Triada Designs — reply CARE for aftercare tips.",
-        },
-      ],
-      mode: hasWhatsAppToken() ? "live_ready" : "local_seed",
-    });
+    try {
+      const payload = await listWhatsAppTemplatesPayload();
+      return jsonOk(payload);
+    } catch (err) {
+      return jsonErr(
+        err instanceof Error ? err.message : "Failed to list WhatsApp templates",
+        502,
+      );
+    }
   }
 
-  if (
-    (path === "integrations/whatsapp/templates" ||
-      path === "integrations/whatsapp/templates/sync" ||
-      path === "integrations/whatsapp/send-template") &&
-    m === "POST"
-  ) {
-    return jsonOk({
-      ok: true,
-      mode: "next_dual_run",
-      template: body || { name: "welcome_triada" },
+  if (path === "integrations/whatsapp/templates/sync" && m === "POST") {
+    try {
+      const result = await syncWhatsAppTemplates();
+      return jsonOk(result);
+    } catch (err) {
+      return jsonErr(
+        err instanceof Error ? err.message : "WhatsApp template sync failed",
+        502,
+      );
+    }
+  }
+
+  if (path === "integrations/whatsapp/templates" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    if (!input.name || !input.body) {
+      return jsonErr("name and body are required to submit a WhatsApp template.", 422);
+    }
+    const result = await createAndSubmitWhatsAppTemplate(input);
+    return jsonOk(result, result.ok ? 201 : 422);
+  }
+
+  if (path === "integrations/whatsapp/send-template" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    if (!input.to || !input.template_name) {
+      return jsonErr("to and template_name are required.", 422);
+    }
+    if (input.marketing_opt_out === true && input.purpose !== "transactional") {
+      return {
+        status: 422,
+        body: { ok: false, error: "marketing_opt_out", eligibility: { eligible: false } },
+      };
+    }
+    const result = await sendWhatsAppTemplateMessage({
+      to: String(input.to),
+      template_name: String(input.template_name),
+      language: input.language ? String(input.language) : "en",
+      components: Array.isArray(input.components) ? input.components : [],
     });
+    return jsonOk(result, result.ok ? 200 : 422);
   }
 
   if (path.match(/^integrations\/whatsapp\/templates\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
-    return jsonOk({ ok: true, template: { id: segments[3], ...(body || {}) } });
+    const templateId = segments[3];
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await updateAndSubmitWhatsAppTemplate(templateId, input);
+    if (!result.template && result.error === "Template not found") {
+      return jsonErr(result.error, 404);
+    }
+    return jsonOk(result, result.ok ? 200 : 422);
   }
 
   if (path === "integrations/whatsapp/status" && m === "GET") {
     const meta = await getMetaStatus();
-    const connected = meta.whatsapp_ready || hasWhatsAppToken();
+    const waStatus = await whatsappTemplateStatus();
+    const connected = meta.whatsapp_ready || hasWhatsAppToken() || waStatus.configured;
     return jsonOk({
+      ...waStatus,
       connected,
       phone_number_id_present:
-        meta.has_wa_phone_number_id || hasWhatsAppPhoneId(),
-      status: connected ? "connected" : "awaiting_credentials",
-      status_label: connected ? "Connected" : "Needs setup",
+        waStatus.phone_number_id_present ||
+        meta.has_wa_phone_number_id ||
+        hasWhatsAppPhoneId(),
+      status: connected
+        ? waStatus.mode === "live"
+          ? "live"
+          : "connected"
+        : "awaiting_credentials",
+      status_label: connected
+        ? waStatus.mode === "live"
+          ? "Live Cloud API"
+          : "Connected"
+        : "Needs setup",
     });
   }
 
@@ -790,26 +849,75 @@ export async function dispatchV1(method, segments, request, body) {
 
   // ---- channel templates ----
   if (path === "channel-templates" && m === "GET") {
+    const url = new URL(request.url);
+    const platform = (url.searchParams.get("platform") || "").toLowerCase();
+    if (!platform || platform === "whatsapp") {
+      const wa = await listWhatsAppTemplatesPayload();
+      let data = Array.isArray(wa.data) ? wa.data : [];
+      if (platform === "whatsapp") {
+        return jsonOk({ data, meta: { source: "whatsapp_cloud", mode: wa.status?.mode } });
+      }
+      // All platforms: WhatsApp Cloud templates + a small multi-channel seed
+      return jsonOk({
+        data: [
+          ...data,
+          {
+            id: "ct-ig-welcome",
+            platform: "instagram",
+            name: "ig_welcome",
+            status: "draft",
+            body: "Thanks for messaging Triada Designs on Instagram.",
+          },
+        ],
+        meta: { source: "next_dual_run", whatsapp_mode: wa.status?.mode },
+      });
+    }
     return jsonOk({
       data: [
         {
-          id: "ct-wa-welcome",
-          channel: "whatsapp",
-          name: "welcome_triada",
-          status: "approved",
-          language: "en",
-          body: "Welcome to Triada Designs.",
+          id: `ct-${platform}-seed`,
+          platform,
+          name: `${platform}_seed`,
+          status: "draft",
+          body: `Triada Designs ${platform} template draft.`,
         },
       ],
     });
   }
 
   if (path === "channel-templates" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const platform = String(input.platform || "whatsapp").toLowerCase();
+    if (platform === "whatsapp") {
+      // Create + submit to Meta Graph (or local_sim) so dashboard approval path is live-capable.
+      const result = await createAndSubmitWhatsAppTemplate({
+        name: input.name,
+        body: input.body,
+        category: input.category || "MARKETING",
+        language: input.language || "en",
+        variables: input.variables,
+        components: input.components,
+      });
+      return jsonOk(
+        {
+          template: result.template,
+          ok: result.ok,
+          mode: result.mode,
+          error: result.error,
+          external: result.external,
+        },
+        result.ok ? 201 : 422,
+      );
+    }
     return jsonOk(
       {
         template: {
           id: `ct-${Date.now()}`,
           status: "draft",
+          platform,
           ...(body && typeof body === "object" ? body : {}),
         },
       },
@@ -818,13 +926,45 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path.match(/^channel-templates\/[^/]+$/) && (m === "GET" || m === "PUT" || m === "PATCH")) {
+    const templateId = segments[1];
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    if (m === "GET") {
+      const wa = await listWhatsAppTemplatesPayload();
+      const hit = (wa.data || []).find((t) => String(t.id) === String(templateId));
+      if (hit) return jsonOk({ template: hit });
+      return jsonOk({
+        template: {
+          id: templateId,
+          platform: "whatsapp",
+          name: "welcome_triada",
+          status: "approved",
+        },
+      });
+    }
+    // Prefer WhatsApp Cloud re-submit when the id is known there or platform is whatsapp.
+    const waList = await listWhatsAppTemplatesPayload();
+    const known = (waList.data || []).find((t) => String(t.id) === String(templateId));
+    if (known || String(input.platform || "").toLowerCase() === "whatsapp") {
+      const result = await updateAndSubmitWhatsAppTemplate(templateId, input);
+      if (!result.template && result.error === "Template not found") {
+        return jsonErr(result.error, 404);
+      }
+      return jsonOk({
+        template: result.template,
+        ok: result.ok,
+        mode: result.mode,
+        error: result.error,
+      }, result.ok ? 200 : 422);
+    }
     return jsonOk({
       template: {
-        id: segments[1],
-        channel: "whatsapp",
-        name: "welcome_triada",
-        status: "approved",
-        ...(body && typeof body === "object" ? body : {}),
+        id: templateId,
+        platform: input.platform || "facebook",
+        status: "draft",
+        ...input,
       },
     });
   }
@@ -833,9 +973,43 @@ export async function dispatchV1(method, segments, request, body) {
     path.match(/^channel-templates\/[^/]+\/(submit-review|approve|reject|publish)$/) &&
     m === "POST"
   ) {
+    const templateId = segments[1];
+    const action = segments[2];
+    if (action === "submit-review") {
+      const wa = await listWhatsAppTemplatesPayload();
+      const hit = (wa.data || []).find((t) => String(t.id) === String(templateId));
+      if (hit) {
+        const result = await updateAndSubmitWhatsAppTemplate(templateId, {
+          name: hit.name,
+          body: hit.body,
+          category: hit.category,
+          language: hit.language,
+        });
+        return jsonOk(
+          {
+            ok: result.ok,
+            mode: result.mode,
+            template: result.template,
+            error: result.error,
+          },
+          result.ok ? 200 : 422,
+        );
+      }
+    }
     return jsonOk({
       ok: true,
-      template: { id: segments[1], status: segments[2] === "reject" ? "rejected" : "approved" },
+      mode: "local_review",
+      template: {
+        id: templateId,
+        status:
+          action === "reject"
+            ? "rejected"
+            : action === "publish"
+              ? "published"
+              : action === "submit-review"
+                ? "pending_approval"
+                : "approved",
+      },
     });
   }
 

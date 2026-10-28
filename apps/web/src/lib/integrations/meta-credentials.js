@@ -260,6 +260,61 @@ async function loadStoredFields() {
 }
 
 /**
+ * Server-only: decrypted Meta fields from Integrations store (table / app_metadata / local).
+ * Never return this object from an HTTP response.
+ * @returns {Promise<MetaCredentialFields>}
+ */
+export async function loadMetaCredentialFields() {
+  return loadStoredFields();
+}
+
+/**
+ * Resolve WhatsApp Cloud API credentials: stored Integrations fields first, then META_WA_* / WHATSAPP_* env.
+ * Values are for server-side Graph calls only — never serialize into client payloads.
+ * @returns {Promise<{
+ *   accessToken: string,
+ *   phoneNumberId: string,
+ *   businessAccountId: string,
+ *   tokenSource: 'stored' | 'env' | 'none',
+ *   templateReady: boolean,
+ *   sendReady: boolean,
+ * }>}
+ */
+export async function resolveWhatsAppCloudCredentials() {
+  const fields = await loadStoredFields();
+  const envToken = String(
+    process.env.META_WA_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN || "",
+  ).trim();
+  const envPhone = String(
+    process.env.META_WA_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+  ).trim();
+  const envWaba = String(
+    process.env.META_WA_BUSINESS_ACCOUNT_ID ||
+      process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ||
+      "",
+  ).trim();
+
+  const storedToken = String(fields.wa_access_token || "").trim();
+  const accessToken = storedToken || envToken;
+  const phoneNumberId = String(fields.wa_phone_number_id || "").trim() || envPhone;
+  const businessAccountId =
+    String(fields.wa_business_account_id || "").trim() || envWaba;
+
+  let tokenSource = "none";
+  if (storedToken) tokenSource = "stored";
+  else if (envToken) tokenSource = "env";
+
+  return {
+    accessToken,
+    phoneNumberId,
+    businessAccountId,
+    tokenSource,
+    sendReady: Boolean(accessToken && phoneNumberId),
+    templateReady: Boolean(accessToken && businessAccountId),
+  };
+}
+
+/**
  * Presence-only Meta status (env + Integrations store). Never returns secrets.
  * @returns {Promise<MetaStatusPayload>}
  */
