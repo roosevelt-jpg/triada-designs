@@ -12,11 +12,14 @@ export const dynamic = "force-dynamic";
  *   https://api.triada-designs.com/api/webhooks/meta
  */
 
+/** Production Meta Verify Token default when Vercel env is unset. */
+const DEFAULT_META_VERIFY_TOKEN = "triada-meta-verify-2026";
+
 function resolveVerifyToken() {
   return (
     process.env.META_VERIFY_TOKEN?.trim() ||
     process.env.META_HUB_VERIFY_TOKEN?.trim() ||
-    "triada-local-verify"
+    DEFAULT_META_VERIFY_TOKEN
   );
 }
 

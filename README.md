@@ -146,7 +146,7 @@ Set on **Vercel** (Production) and in `apps/web/.env.local` for local work:
 | `SUPABASE_URL` | Live DB / Auth | Project URL |
 | `SUPABASE_ANON_KEY` | Browser / RLS client | Safe with RLS |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server webhook ingest | **Never** `NEXT_PUBLIC_` |
-| `META_VERIFY_TOKEN` | Meta hub challenge | Must match Meta App webhook verify token |
+| `META_VERIFY_TOKEN` | Meta hub challenge | Must match Meta App webhook verify token (alias: `META_HUB_VERIFY_TOKEN`; default `triada-meta-verify-2026`) |
 | `API_ORIGIN` | Dual-run `/api/v1` rewrite | Still required on Vercel until Laravel is retired |
 | `CRON_SECRET` | Vercel Cron → workers | Existing |
 
@@ -174,7 +174,7 @@ If `api.triada-designs.com` is rewritten to the same Vercel deployment:
 https://api.triada-designs.com/api/webhooks/meta
 ```
 
-Verify token = `META_VERIFY_TOKEN`. `GET` returns `hub.challenge`; `POST` stores to Supabase (or local mock). Other `/api/webhooks/*` still proxy to Laravel during dual-run.
+Verify token = `META_VERIFY_TOKEN` or `META_HUB_VERIFY_TOKEN` (default `triada-meta-verify-2026`). `GET` returns plain-text `hub.challenge`; `POST` stores to Supabase (or local mock). Other `/api/webhooks/*` still proxy to Laravel during dual-run.
 
 ## Meta messaging (local simulator by default)
 
@@ -184,7 +184,8 @@ Day-to-day Facebook Messenger, Instagram Messaging, and WhatsApp Cloud API ops a
 # Optional — leave empty for local simulator (never reports live healthy without tokens)
 META_APP_ID=
 META_APP_SECRET=
-META_VERIFY_TOKEN=triada-local-verify
+META_VERIFY_TOKEN=triada-meta-verify-2026
+META_HUB_VERIFY_TOKEN=triada-meta-verify-2026
 META_WEBHOOK_SECRET=
 META_PAGE_ACCESS_TOKEN=
 WHATSAPP_PHONE_NUMBER_ID=
