@@ -15,12 +15,24 @@ export function getSupabaseAnonKey() {
   return (
     process.env.SUPABASE_ANON_KEY?.trim() ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+    // Supabase dashboard "publishable" key aliases the anon key
+    process.env.SUPABASE_PUBLISHABLE_KEY?.trim() ||
     ""
   );
 }
 
 export function getSupabaseServiceRoleKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
+  return (
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+    // Supabase dashboard "secret" key aliases the service role key
+    process.env.SUPABASE_SECRET_KEY?.trim() ||
+    ""
+  );
+}
+
+/** Server-only JWT secret (Auth / edge verification). Never expose via NEXT_PUBLIC_*. */
+export function getSupabaseJwtSecret() {
+  return process.env.SUPABASE_JWT_SECRET?.trim() || "";
 }
 
 /** True when URL + anon key are present (browser / RLS client usable). */
