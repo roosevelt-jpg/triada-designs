@@ -72,79 +72,179 @@ function extractBody(row) {
 }
 
 /**
- * Seeded jewellery catalog for local_sim (mirrors Laravel MetaGraphClient).
+ * Build one seed row (Meta Graph–shaped).
+ * @param {{
+ *   id: string,
+ *   name: string,
+ *   category: string,
+ *   body: string,
+ *   variables?: string[],
+ *   campaign_type: string,
+ *   status?: string,
+ * }} def
+ */
+function seedRow(def) {
+  return {
+    id: def.id,
+    name: def.name,
+    status: def.status || "APPROVED",
+    category: def.category,
+    language: "en",
+    body: def.body,
+    variables: def.variables || [],
+    components: [{ type: "BODY", text: def.body }],
+    source: "seeded",
+    metadata: {
+      vertical: "jewellery",
+      campaign_type: def.campaign_type,
+      from_automation_doc: true,
+    },
+  };
+}
+
+/**
+ * Full Triada automation WhatsApp template catalog (Roosevelt doc).
+ * Covers abandonment, after-sale, VIP, waitlist, order updates, UGC, consult.
+ * @returns {Array<Record<string, unknown>>}
+ */
+export function triadaAutomationWhatsAppTemplateCatalog() {
+  return [
+    seedRow({
+      id: "sim-wa-jewellery-follow-up",
+      name: "jewellery_follow_up",
+      category: "MARKETING",
+      campaign_type: "inquiry_follow_up",
+      body: "Hi {{1}}, following up on your Triada Designs jewellery inquiry. Reply YES to continue, or visit triada-designs.com.",
+      variables: ["name"],
+    }),
+    seedRow({
+      id: "sim-wa-order-update",
+      name: "jewellery_order_update",
+      category: "UTILITY",
+      campaign_type: "order_update",
+      body: "Your Triada Designs order {{1}} update: {{2}}. Reply STOP to opt out of marketing messages.",
+      variables: ["order_number", "status"],
+    }),
+    seedRow({
+      id: "sim-wa-order-confirmed",
+      name: "jewellery_order_confirmed",
+      category: "UTILITY",
+      campaign_type: "order_confirmed",
+      body: "Your Triada Designs order {{1}} is confirmed. We handcraft each piece — about 7 days. Reply here with questions.",
+      variables: ["order_number"],
+    }),
+    seedRow({
+      id: "sim-wa-order-in-production",
+      name: "jewellery_order_in_production",
+      category: "UTILITY",
+      campaign_type: "order_in_production",
+      body: "Your Triada Designs order {{1}} is in production. We will message you when it ships.",
+      variables: ["order_number"],
+    }),
+    seedRow({
+      id: "sim-wa-order-shipped",
+      name: "jewellery_order_shipped",
+      category: "UTILITY",
+      campaign_type: "order_shipped",
+      body: "Your Triada Designs order {{1}} has shipped. Tracking: {{2}}. Reply here if you need help.",
+      variables: ["order_number", "tracking"],
+    }),
+    seedRow({
+      id: "sim-wa-order-delivered",
+      name: "jewellery_order_delivered",
+      category: "UTILITY",
+      campaign_type: "order_delivered",
+      body: "Your Triada Designs order {{1}} was delivered. Enjoy your piece — reply CARE for care tips.",
+      variables: ["order_number"],
+    }),
+    seedRow({
+      id: "sim-wa-consultation",
+      name: "jewellery_consultation_invite",
+      category: "MARKETING",
+      campaign_type: "consultation",
+      status: "PENDING",
+      body: "Triada Designs can arrange a personal jewellery consultation. Reply BOOK to request a time — a specialist will confirm.",
+    }),
+    seedRow({
+      id: "sim-wa-new-piece",
+      name: "new_piece_preview",
+      category: "MARKETING",
+      campaign_type: "new_drop",
+      body: "{{1}}, a new Triada Designs piece is ready to view. Open the link we share in-session, or reply INTERESTED.",
+      variables: ["name"],
+    }),
+    seedRow({
+      id: "sim-wa-cart-abandonment",
+      name: "cart_abandonment_remind",
+      category: "MARKETING",
+      campaign_type: "abandonment_cart",
+      body: "Hi {{1}}, your Triada Designs cart still has {{2}}. Reply YES and we will help you finish — or STOP to opt out.",
+      variables: ["name", "piece"],
+    }),
+    seedRow({
+      id: "sim-wa-sizing-abandonment",
+      name: "sizing_abandonment_remind",
+      category: "MARKETING",
+      campaign_type: "abandonment_sizing",
+      body: "Hi {{1}}, still deciding on size for your Triada Designs piece? Reply SIZE for our guide, or ask a specialist here.",
+      variables: ["name"],
+    }),
+    seedRow({
+      id: "sim-wa-waitlist",
+      name: "waitlist_back_in_stock",
+      category: "MARKETING",
+      campaign_type: "waitlist",
+      body: "{{1}}, your waitlisted Triada Designs piece ({{2}}) is available again. Reply CLAIM to continue — limited stock.",
+      variables: ["name", "piece"],
+    }),
+    seedRow({
+      id: "sim-wa-vip-drop",
+      name: "vip_drop_first_access",
+      category: "MARKETING",
+      campaign_type: "vip_drop",
+      body: "{{1}}, VIP first access: a new Triada Designs drop is live for you. Reply VIP or open the private link we share in-session.",
+      variables: ["name"],
+    }),
+    seedRow({
+      id: "sim-wa-after-sale-care",
+      name: "after_sale_care_tips",
+      category: "UTILITY",
+      campaign_type: "after_sale_care",
+      body: "Care tips for your Triada Designs piece: store dry, wipe gently after wear, avoid harsh chemicals. Reply HELP for more.",
+    }),
+    seedRow({
+      id: "sim-wa-after-sale-review",
+      name: "after_sale_review_request",
+      category: "MARKETING",
+      campaign_type: "after_sale_review",
+      body: "Hi {{1}}, how is your Triada Designs piece? A short review helps others choose — reply REVIEW or visit the link we share.",
+      variables: ["name"],
+    }),
+    seedRow({
+      id: "sim-wa-complete-set",
+      name: "after_sale_complete_the_set",
+      category: "MARKETING",
+      campaign_type: "after_sale_complete_set",
+      body: "{{1}}, complete the set — pieces that pair with yours are ready. Reply SET for suggestions, or STOP to opt out.",
+      variables: ["name"],
+    }),
+    seedRow({
+      id: "sim-wa-ugc-invite",
+      name: "ugc_tag_invite",
+      category: "MARKETING",
+      campaign_type: "ugc_invite",
+      body: "{{1}}, love your Triada Designs piece? Share a photo or reel and tag us for a thank-you reward. Reply TAG for details.",
+      variables: ["name"],
+    }),
+  ];
+}
+
+/**
+ * Seeded jewellery catalog for local_sim (automation doc + classic jewellery seeds).
  * @returns {Array<Record<string, unknown>>}
  */
 export function localJewelleryWhatsAppTemplates() {
-  return [
-    {
-      id: "sim-wa-jewellery-follow-up",
-      name: "jewellery_follow_up",
-      status: "APPROVED",
-      category: "MARKETING",
-      language: "en",
-      body: "Hi {{1}}, following up on your Triada Designs jewellery inquiry. Reply YES to continue, or visit triada-designs.com.",
-      variables: ["name"],
-      components: [
-        {
-          type: "BODY",
-          text: "Hi {{1}}, following up on your Triada Designs jewellery inquiry. Reply YES to continue, or visit triada-designs.com.",
-        },
-      ],
-      source: "seeded",
-      metadata: { vertical: "jewellery" },
-    },
-    {
-      id: "sim-wa-order-update",
-      name: "jewellery_order_update",
-      status: "APPROVED",
-      category: "UTILITY",
-      language: "en",
-      body: "Your Triada Designs order {{1}} update: {{2}}. Reply STOP to opt out of marketing messages.",
-      variables: ["order_number", "status"],
-      components: [
-        {
-          type: "BODY",
-          text: "Your Triada Designs order {{1}} update: {{2}}. Reply STOP to opt out of marketing messages.",
-        },
-      ],
-      source: "seeded",
-      metadata: { vertical: "jewellery" },
-    },
-    {
-      id: "sim-wa-consultation",
-      name: "jewellery_consultation_invite",
-      status: "PENDING",
-      category: "MARKETING",
-      language: "en",
-      body: "Triada Designs can arrange a personal jewellery consultation. Reply BOOK to request a time — a specialist will confirm.",
-      components: [
-        {
-          type: "BODY",
-          text: "Triada Designs can arrange a personal jewellery consultation. Reply BOOK to request a time — a specialist will confirm.",
-        },
-      ],
-      source: "seeded",
-      metadata: { vertical: "jewellery" },
-    },
-    {
-      id: "sim-wa-new-piece",
-      name: "new_piece_preview",
-      status: "APPROVED",
-      category: "MARKETING",
-      language: "en",
-      body: "{{1}}, a new Triada Designs piece is ready to view. Open the link we share in-session, or reply INTERESTED.",
-      variables: ["name"],
-      components: [
-        {
-          type: "BODY",
-          text: "{{1}}, a new Triada Designs piece is ready to view. Open the link we share in-session, or reply INTERESTED.",
-        },
-      ],
-      source: "seeded",
-      metadata: { vertical: "jewellery" },
-    },
-  ];
+  return triadaAutomationWhatsAppTemplateCatalog();
 }
 
 async function readDiskStore() {
@@ -461,7 +561,7 @@ export async function createAndSubmitWhatsAppTemplate(input = {}) {
     ? input.components
     : [{ type: "BODY", text: body }];
 
-  const id = `wa-${Date.now().toString(36)}`;
+  const id = `wa-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   /** @type {Record<string, unknown>} */
   let template = {
     id,
@@ -663,6 +763,161 @@ export async function updateAndSubmitWhatsAppTemplate(templateId, input = {}) {
       external_template_id: submit.external_template_id,
     },
     error: null,
+  };
+}
+
+/**
+ * Seed automation-doc WhatsApp templates into the editable dashboard store.
+ * Optionally submit each to Meta for approval (live Graph or local_sim auto-approve).
+ * Skips names that already exist unless `force` is true.
+ * @param {{
+ *   submit?: boolean,
+ *   force?: boolean,
+ *   campaign_types?: string[],
+ * }} [opts]
+ */
+export async function seedWhatsAppAutomationTemplates(opts = {}) {
+  const submit = opts.submit !== false;
+  const force = opts.force === true;
+  const filterTypes = Array.isArray(opts.campaign_types)
+    ? new Set(opts.campaign_types.map(String))
+    : null;
+
+  const catalog = triadaAutomationWhatsAppTemplateCatalog().filter((row) => {
+    if (!filterTypes) return true;
+    const ct = row.metadata?.campaign_type
+      ? String(row.metadata.campaign_type)
+      : "";
+    return filterTypes.has(ct) || filterTypes.has(String(row.name));
+  });
+
+  const status = await whatsappTemplateStatus();
+  await hydrateMemoryFromDisk();
+
+  const existingByName = new Map(
+    [...memoryStore.values()]
+      .filter((t) => t.platform === "whatsapp" || !t.platform)
+      .map((t) => [String(t.name || "").toLowerCase(), t]),
+  );
+
+  const seeded = [];
+  const skipped = [];
+  const submitted = [];
+  const failed = [];
+
+  for (const row of catalog) {
+    const nameKey = String(row.name || "").toLowerCase();
+    const existing = existingByName.get(nameKey);
+    if (existing && !force) {
+      skipped.push({
+        name: row.name,
+        id: existing.id,
+        status: existing.status,
+        reason: "already_present",
+      });
+      continue;
+    }
+
+    const local = toLocalTemplate(
+      {
+        ...row,
+        local_id: existing?.id || row.id,
+        status: submit ? "PENDING" : "DISABLED",
+      },
+      status.mode,
+    );
+    // Editable draft in dashboard before / unless Meta submit.
+    let template = {
+      ...local,
+      status: submit ? "pending_approval" : "draft",
+      publish_mode: null,
+      metadata: {
+        ...local.metadata,
+        campaign_type: row.metadata?.campaign_type,
+        from_automation_doc: true,
+        editable: true,
+      },
+    };
+
+    if (!submit) {
+      await upsertLocalTemplate(template);
+      existingByName.set(nameKey, template);
+      seeded.push(template);
+      continue;
+    }
+
+    const payload = {
+      name: String(row.name),
+      body: String(row.body || ""),
+      language: String(row.language || "en"),
+      category: String(row.category || "MARKETING"),
+      variables: Array.isArray(row.variables) ? row.variables : [],
+      components: Array.isArray(row.components) ? row.components : undefined,
+    };
+
+    const result = existing
+      ? await updateAndSubmitWhatsAppTemplate(String(existing.id), payload)
+      : await createAndSubmitWhatsAppTemplate(payload);
+
+    // Keep campaign metadata on the stored row.
+    if (result.template) {
+      template = {
+        ...result.template,
+        metadata: {
+          ...(result.template.metadata && typeof result.template.metadata === "object"
+            ? result.template.metadata
+            : {}),
+          campaign_type: row.metadata?.campaign_type,
+          from_automation_doc: true,
+          editable: true,
+          seed_submit: {
+            ok: result.ok,
+            mode: result.mode,
+          },
+        },
+      };
+      await upsertLocalTemplate(template);
+      existingByName.set(nameKey, template);
+      seeded.push(template);
+      if (result.ok) {
+        submitted.push({
+          name: template.name,
+          id: template.id,
+          status: template.status,
+          mode: result.mode,
+          external_template_id: template.external_template_id,
+        });
+      } else {
+        failed.push({
+          name: row.name,
+          error: result.error || "submit_failed",
+          mode: result.mode,
+        });
+      }
+    } else {
+      failed.push({
+        name: row.name,
+        error: result.error || "submit_failed",
+        mode: result.mode,
+      });
+    }
+  }
+
+  return {
+    ok: failed.length === 0,
+    mode: status.mode,
+    catalog_size: catalog.length,
+    seeded: seeded.length,
+    skipped: skipped.length,
+    submitted: submitted.length,
+    failed: failed.length,
+    templates: seeded,
+    skipped_detail: skipped,
+    submitted_detail: submitted,
+    failed_detail: failed,
+    message: submit
+      ? `Seeded ${seeded.length} automation templates; submitted ${submitted.length} to Meta (${status.mode}).`
+      : `Seeded ${seeded.length} automation templates as editable drafts (not submitted).`,
   };
 }
 

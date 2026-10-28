@@ -20,6 +20,7 @@ export default function ContactsPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [syncingWa, setSyncingWa] = useState(false);
   const [uploadNotice, setUploadNotice] = useState("");
   const [invalidRows, setInvalidRows] = useState([]);
   const [storeMode, setStoreMode] = useState("");
@@ -43,6 +44,39 @@ export default function ContactsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function syncFromWhatsApp() {
+    setSyncingWa(true);
+    setUploadNotice("");
+    setInvalidRows([]);
+    setError("");
+    try {
+      const result = await apiFetch("/v1/contacts/sync-whatsapp", {
+        method: "POST",
+        body: {
+          include_inbound: true,
+          default_region: "AE",
+        },
+      });
+      const summary = result.summary || {};
+      setInvalidRows(result.invalid || []);
+      setUploadNotice(
+        `WhatsApp sync (${result.mode || "local_sim"}): ${summary.imported ?? 0} imported` +
+          ` (${summary.created ?? 0} new, ${summary.updated ?? 0} updated)` +
+          (summary.on_whatsapp != null ? ` · ${summary.on_whatsapp} on WhatsApp` : "") +
+          (summary.invalid ? ` · ${summary.invalid} invalid` : "") +
+          (result.store_mode ? ` · store ${result.store_mode}` : ""),
+      );
+      if (!result.ok && result.error) {
+        setError(result.error);
+      }
+      await load();
+    } catch (err) {
+      setError(err.message || "WhatsApp contact sync failed");
+    } finally {
+      setSyncingWa(false);
+    }
+  }
 
   async function onUploadFile(event) {
     const file = event.target.files?.[0];
@@ -94,9 +128,9 @@ export default function ContactsPage() {
   return (
     <DashboardShell
       title="Contacts"
-      description="CRM contacts with E.164 phones for WhatsApp automation campaigns. Local UAE numbers (05x) normalize to +971."
+      description="CRM contacts with E.164 phones for WhatsApp automation campaigns. Sync from Meta Cloud API or upload CSV/Excel. Local UAE numbers (05x) normalize to +971."
       actions={
-        <div className="flex w-full max-w-xl flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="flex w-full max-w-2xl flex-col gap-2 sm:flex-row sm:items-end">
           <div className="w-full max-w-xs">
             <Input
               label="Search"
@@ -106,7 +140,7 @@ export default function ContactsPage() {
               placeholder="Name, email, phone"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               ref={fileRef}
               type="file"
@@ -117,10 +151,19 @@ export default function ContactsPage() {
             <Button
               type="button"
               size="sm"
-              disabled={uploading}
+              disabled={uploading || syncingWa}
               onClick={() => fileRef.current?.click()}
             >
               {uploading ? "Uploading…" : "Upload CSV / Excel"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={uploading || syncingWa}
+              onClick={syncFromWhatsApp}
+            >
+              {syncingWa ? "Syncing…" : "Sync WhatsApp contacts"}
             </Button>
           </div>
         </div>
@@ -173,7 +216,7 @@ export default function ContactsPage() {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No contacts"
-          description="Upload a CSV/Excel file or create a contact from inbox."
+          description="Sync WhatsApp contacts from Meta, upload CSV/Excel, or create a contact from inbox."
         />
       ) : null}
       {!loading && !error && items.length > 0 ? (

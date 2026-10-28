@@ -228,6 +228,36 @@ export default function MetaIntegrationsPage() {
     }
   }
 
+  async function seedWaAutomationTemplates(force = false) {
+    setBusy(force ? "wa-seed-force" : "wa-seed");
+    setNotice("");
+    setError("");
+    try {
+      const result = await apiFetch("/v1/integrations/whatsapp/templates/seed", {
+        method: "POST",
+        body: { submit: true, force },
+      });
+      setNotice(
+        result.message ||
+          `Seeded ${result.seeded || 0} automation templates · submitted ${result.submitted || 0} (${result.mode}).`,
+      );
+      if (result.failed > 0) {
+        setError(
+          `${result.failed} template(s) failed Meta submit` +
+            (result.failed_detail?.[0]?.error
+              ? `: ${result.failed_detail[0].error}`
+              : ""),
+        );
+      }
+      const wa = await apiFetch("/v1/integrations/whatsapp/templates");
+      setWaTemplates(wa);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function createWaTemplate(e) {
     e.preventDefault();
     setBusy("wa-create");
@@ -426,9 +456,9 @@ export default function MetaIntegrationsPage() {
               <div>
                 <h2 className="font-display text-2xl">WhatsApp Cloud templates</h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted">
-                  Create and submit jewellery message templates to Meta for approval from this
-                  dashboard. Live submit/sync use META_WA_* or Integrations-stored WhatsApp Cloud
-                  credentials; otherwise Triada uses the local jewellery catalog.
+                  Seed campaign templates from the Triada automation doc (orders, abandonment,
+                  waitlist, VIP, after-sale, UGC), edit here, then submit to Meta for approval.
+                  Live paths use META_WA_* or Integrations-stored WhatsApp Cloud credentials.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -438,6 +468,19 @@ export default function MetaIntegrationsPage() {
                     ? "Live Meta Graph"
                     : "Local sim"}
                 </Badge>
+                <Button
+                  onClick={() => seedWaAutomationTemplates(false)}
+                  disabled={busy === "wa-seed" || busy === "wa-seed-force"}
+                >
+                  {busy === "wa-seed" ? "Seeding…" : "Seed automation templates"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => seedWaAutomationTemplates(true)}
+                  disabled={busy === "wa-seed" || busy === "wa-seed-force"}
+                >
+                  {busy === "wa-seed-force" ? "Re-seeding…" : "Re-seed & submit"}
+                </Button>
                 <Button onClick={syncWaTemplates} disabled={busy === "wa-sync"}>
                   Sync approval status
                 </Button>
@@ -451,7 +494,7 @@ export default function MetaIntegrationsPage() {
             </div>
             <p className="text-sm text-muted">{waTemplates?.status?.message}</p>
             <div className="grid gap-3 md:grid-cols-2">
-              {(waTemplates?.data || []).slice(0, 8).map((tpl) => (
+              {(waTemplates?.data || []).slice(0, 16).map((tpl) => (
                 <div key={tpl.id} className="rounded-md border border-line px-3 py-3">
                   <div className="flex items-start justify-between gap-2">
                     <p className="font-medium text-ink">{tpl.name}</p>
@@ -479,7 +522,11 @@ export default function MetaIntegrationsPage() {
                   </div>
                   <p className="mt-2 text-sm text-muted line-clamp-3">{tpl.body}</p>
                   <p className="mt-2 text-xs uppercase tracking-wide text-muted">
-                    {tpl.category} ·{" "}
+                    {tpl.category}
+                    {tpl.metadata?.campaign_type
+                      ? ` · ${tpl.metadata.campaign_type}`
+                      : ""}{" "}
+                    ·{" "}
                     {tpl.publish_mode === "live"
                       ? "Live Graph"
                       : tpl.publish_mode === "local_sim"

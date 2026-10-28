@@ -25,6 +25,7 @@ import {
   listWhatsAppCampaignRecipients,
   upsertContacts,
 } from "@/lib/crm/contacts-store";
+import { syncWhatsAppContactsToCrm } from "@/lib/crm/meta-contact-sync";
 import { mapContactUploadRows } from "@/lib/crm/parse-contacts-file";
 import { toWhatsAppRecipient } from "@/lib/crm/phone-e164";
 import {
@@ -40,8 +41,10 @@ import {
 import {
   createAndSubmitWhatsAppTemplate,
   listWhatsAppTemplatesPayload,
+  seedWhatsAppAutomationTemplates,
   sendWhatsAppTemplateMessage,
   syncWhatsAppTemplates,
+  triadaAutomationWhatsAppTemplateCatalog,
   updateAndSubmitWhatsAppTemplate,
   whatsappTemplateStatus,
 } from "@/lib/integrations/whatsapp-cloud-templates";
@@ -556,6 +559,37 @@ export async function dispatchV1(method, segments, request, body) {
     }
   }
 
+  if (path === "integrations/whatsapp/templates/seed" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    try {
+      const result = await seedWhatsAppAutomationTemplates({
+        submit: input.submit !== false && input.submit !== "false",
+        force: input.force === true || input.force === "true",
+        campaign_types: Array.isArray(input.campaign_types)
+          ? input.campaign_types.map(String)
+          : undefined,
+      });
+      return jsonOk(result, result.ok ? 200 : 207);
+    } catch (err) {
+      return jsonErr(
+        err instanceof Error ? err.message : "WhatsApp template seed failed",
+        502,
+      );
+    }
+  }
+
+  if (path === "integrations/whatsapp/templates/catalog" && m === "GET") {
+    const catalog = triadaAutomationWhatsAppTemplateCatalog();
+    return jsonOk({
+      data: catalog,
+      count: catalog.length,
+      source: "automation_doc",
+    });
+  }
+
   if (path === "integrations/whatsapp/templates" && m === "POST") {
     const input =
       body && typeof body === "object"
@@ -738,6 +772,41 @@ export async function dispatchV1(method, segments, request, body) {
       imported: imported.imported,
       preview_invalid: mapped.invalid.slice(0, 50),
     });
+  }
+
+  if (
+    (path === "contacts/sync-whatsapp" || path === "contacts/sync-meta") &&
+    m === "POST"
+  ) {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    try {
+      const result = await syncWhatsAppContactsToCrm({
+        phones: Array.isArray(input.phones) ? input.phones.map(String) : [],
+        contacts: Array.isArray(input.contacts)
+          ? /** @type {Array<{ phone?: string, name?: string, email?: string }>} */ (
+              input.contacts
+            )
+          : [],
+        include_inbound: input.include_inbound !== false,
+        include_crm: input.include_crm === true,
+        default_region: String(input.default_region || "AE"),
+      });
+      return jsonOk(
+        {
+          ...result,
+          source: "next_dual_run",
+        },
+        result.ok ? 200 : 502,
+      );
+    } catch (err) {
+      return jsonErr(
+        err instanceof Error ? err.message : "WhatsApp contact sync failed",
+        502,
+      );
+    }
   }
 
   if (path === "contacts/whatsapp-recipients" && m === "GET") {
