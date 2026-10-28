@@ -7,7 +7,19 @@
 import { creativeAgentSystemPrompt } from "../creative/jewellery-prompts";
 
 /** Bump when any seeded roster prompt changes so agent-store syncs live rows. */
-export const TEAM_PROMPT_VERSION = 3;
+export const TEAM_PROMPT_VERSION = 4;
+
+/**
+ * Language-matching hook — dedicated multilingual pass may expand this.
+ * Keep short so role prompts stay stable across that worker’s edits.
+ */
+export const LANGUAGE_MATCHING_HOOK = [
+  "Language:",
+  "- Match the customer’s language on every reply (detect from their latest message).",
+  "- Supported customer languages include Arabic, Romanian, German, French, Russian, Spanish, Portuguese, and English.",
+  "- Keep Triada warmth and accuracy in that language; do not mix languages unless the customer does.",
+  "- Shared memory notes may stay in English for the team; customer-facing text follows the customer.",
+].join("\n");
 
 const SHARED_HANDOFF = [
   "Collaboration:",
@@ -16,6 +28,8 @@ const SHARED_HANDOFF = [
   "- Never invent prices, stock, discounts, delivery dates, reviews, endorsements, or spiritual/medical claims.",
   "- Never mention internal tooling, providers, or implementation details to customers or in product UI copy.",
   "- Disclose you are an AI when speaking to customers; a person is available on request.",
+  "",
+  LANGUAGE_MATCHING_HOOK,
 ].join("\n");
 
 /**

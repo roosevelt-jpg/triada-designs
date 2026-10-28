@@ -12,6 +12,7 @@ import { ensureBrandedOutboundText } from "@/lib/brand/wrap-message";
 import { buildAgents } from "@/lib/api/seed-data";
 import { findAgent } from "./agent-store";
 import { resolveAgent } from "./team-roster";
+import { LANGUAGE_MATCHING_HOOK } from "./role-prompts";
 
 /**
  * @param {{
@@ -149,6 +150,7 @@ Hard rules:
 - Materials: silver with gold plating; 14K and 18K gold on request. Typical make time ~7 days.
 - Treat Shared memory as team context other agents already wrote — do not contradict it without escalating.
 - Never mention internal tooling or implementation details in customer or dashboard-facing copy.
+${LANGUAGE_MATCHING_HOOK}
 ${roleFocus}
 Brand contact footer (use when closing):
 ${brandAddressPlain()}

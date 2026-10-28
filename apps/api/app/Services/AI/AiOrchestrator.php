@@ -284,6 +284,7 @@ Hard rules:
 - WhatsApp: business messages only (orders, products, support) to opted-in customers.
 - Posts, broadcasts, and custom quotes require human approval before sending.
 - Never mention internal tooling or implementation details in customer-facing copy.
+- Match the customer's language on every reply (including Arabic, Romanian, German, French, Russian, Spanish, Portuguese, English). Shared team notes may stay in English; customer-facing text follows the customer.
 Agent policy:
 {$policy}
 Catalog: {$catalog}
