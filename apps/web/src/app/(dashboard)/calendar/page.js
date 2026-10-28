@@ -303,44 +303,46 @@ export default function CalendarPage() {
               </Button>
             </div>
           </div>
-          <div className="grid grid-cols-7 gap-px overflow-hidden rounded-sm border border-line bg-line">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => (
-              <div
-                key={label}
-                className="bg-stone/40 px-2 py-2 text-center text-xs font-medium uppercase tracking-wide text-muted"
-              >
-                {label}
-              </div>
-            ))}
-            {days.map((day) => {
-              const key = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
-              const dayItems = itemsByDay.get(key) || [];
-              const inMonth = day.getMonth() === monthCursor.getMonth();
-              return (
+          <div className="overflow-x-auto rounded-sm border border-line">
+            <div className="grid min-w-[36rem] grid-cols-7 gap-px bg-line">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => (
                 <div
-                  key={key}
-                  className={`min-h-[96px] bg-ivory p-2 ${inMonth ? "" : "opacity-45"} ${
-                    sameDay(day, today) ? "ring-1 ring-inset ring-brown/40" : ""
-                  }`}
+                  key={label}
+                  className="bg-stone/40 px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wide text-muted sm:px-2 sm:text-xs"
                 >
-                  <p className="text-xs font-medium text-ink">{day.getDate()}</p>
-                  <div className="mt-1 space-y-1">
-                    {dayItems.slice(0, 3).map((item) => (
-                      <p
-                        key={item.id}
-                        className="truncate rounded-sm bg-brown/10 px-1.5 py-0.5 text-[11px] text-brown-dark"
-                        title={item.title}
-                      >
-                        {item.title}
-                      </p>
-                    ))}
-                    {dayItems.length > 3 ? (
-                      <p className="text-[11px] text-muted">+{dayItems.length - 3} more</p>
-                    ) : null}
-                  </div>
+                  {label}
                 </div>
-              );
-            })}
+              ))}
+              {days.map((day) => {
+                const key = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
+                const dayItems = itemsByDay.get(key) || [];
+                const inMonth = day.getMonth() === monthCursor.getMonth();
+                return (
+                  <div
+                    key={key}
+                    className={`min-h-[72px] min-w-0 bg-ivory p-1.5 sm:min-h-[96px] sm:p-2 ${
+                      inMonth ? "" : "opacity-45"
+                    } ${sameDay(day, today) ? "ring-1 ring-inset ring-brown/40" : ""}`}
+                  >
+                    <p className="text-xs font-medium text-ink">{day.getDate()}</p>
+                    <div className="mt-1 space-y-1">
+                      {dayItems.slice(0, 3).map((item) => (
+                        <p
+                          key={item.id}
+                          className="truncate rounded-sm bg-brown/10 px-1.5 py-0.5 text-[11px] text-brown-dark"
+                          title={item.title}
+                        >
+                          {item.title}
+                        </p>
+                      ))}
+                      {dayItems.length > 3 ? (
+                        <p className="text-[11px] text-muted">+{dayItems.length - 3} more</p>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </section>
       ) : null}
