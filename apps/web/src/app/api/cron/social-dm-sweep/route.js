@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { sweepUnansweredSocialDms } from "@/lib/agents/social-media-manager";
 
 /**
- * Vercel Cron: Social Media Manager unanswered DM sweep.
+ * Vercel Cron: Social Media Manager unanswered DM sweep (Hobby-safe daily).
  * Path: GET|POST /api/cron/social-dm-sweep
  * Replies open Instagram / Messenger / Facebook / LinkedIn DMs so none stay unanswered.
+ * Inbound simulate + manual sweep API still reply immediately between cron runs.
  */
 export async function GET(request) {
   return handle(request);

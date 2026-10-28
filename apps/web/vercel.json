@@ -24,7 +24,7 @@
     },
     {
       "path": "/api/cron/social-dm-sweep",
-      "schedule": "*/15 * * * *"
+      "schedule": "30 11 * * *"
     }
   ],
   "headers": [
