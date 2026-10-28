@@ -13,7 +13,6 @@ import { apiFetch } from "@/lib/api-client";
 import {
   aiStatusSummary,
   connectionLabel,
-  modelNickname,
 } from "@/lib/integrations/brand-labels";
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
