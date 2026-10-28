@@ -35,15 +35,13 @@ class CreativeMediaService
             'video' => $video,
             'resize_engine' => $this->resize->engine(),
             'platforms' => $this->sizes->all(),
+            // Internal only — dashboard UI must not render these keys.
             'dual_path' => [
-                'scripts' => 'Anthropic Claude (Integrations) — captions, UGC scripts, storyboards',
-                'pixels' => $video['dual_path']['pixels'] ?? 'VIDEO_PROVIDER for video frames',
-                'local_animation' => 'VIDEO_PROVIDER=local|animation uses existing creative SVG motion + mp4 stub',
-                'claude_alone' => false,
-                'note' => 'Claude cannot render video pixels. Admin needs a video provider OR the local animation pipeline — not Claude alone.',
+                'scripts' => 'claude_copy',
+                'pixels' => $video['dual_path']['pixels'] ?? 'gemini_media',
+                'local_animation' => 'local_svg_mp4',
             ],
-            'honesty' => 'Creative tools never auto-publish. Human approval + calendar schedule remain required before public posts. Claude writes scripts only.',
-            'summary' => 'Dual path: Anthropic scripts/storyboards → VIDEO_PROVIDER (or local animation) for pixels → pending approval → calendar date → cron publish.',
+            'summary' => 'Generate, approve, schedule, and publish.',
         ];
     }
 

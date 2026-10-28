@@ -66,6 +66,41 @@ function slugKey(name) {
     .slice(0, 48) || "agent";
 }
 
+/**
+ * Push newer roster system prompts onto seeded agents (by key) when
+ * prompt_version advances — preserves admin custom agents.
+ * @param {AgentRecord[]} agents
+ * @returns {{ agents: AgentRecord[], changed: boolean }}
+ */
+function applyRosterPromptUpdates(agents) {
+  let changed = false;
+  const next = agents.map((agent) => {
+    const roster = TEAM_ROSTER.find((r) => r.key === agent.key || r.id === agent.id);
+    if (!roster) return agent;
+    const rosterVersion = Number(roster.config?.prompt_version || 0);
+    if (!rosterVersion) return agent;
+    const currentVersion = Number(agent.config?.prompt_version || 0);
+    if (currentVersion >= rosterVersion) return agent;
+    changed = true;
+    return {
+      ...agent,
+      description: roster.description || agent.description,
+      config: {
+        ...(agent.config || {}),
+        ...(roster.config || {}),
+        prompt_version: rosterVersion,
+        system_prompt: roster.config?.system_prompt,
+        channels: roster.config?.channels || agent.config?.channels,
+        collaborates_with:
+          roster.config?.collaborates_with || agent.config?.collaborates_with,
+        allowed_tools: roster.config?.allowed_tools || agent.config?.allowed_tools,
+      },
+      updated_at: nowIso(),
+    };
+  });
+  return { agents: next, changed };
+}
+
 /** @returns {AgentRecord[]} */
 export function seedAgents() {
   const at = nowIso();
@@ -129,6 +164,21 @@ function seedStarterTasks() {
       updated_at: at,
     },
     {
+      id: "task-seed-creative-ugc",
+      workspace_id: WORKSPACE_ID,
+      agent_id: "agent-creative",
+      agent_key: "content_creator",
+      title: "Draft viral UGC for Meta / IG / TikTok / WhatsApp",
+      description:
+        "Produce high-converting jewellery UGC scripts, captions, and creative briefs. Hook first, soft CTA, no fake scarcity. Queue for QC then human approval.",
+      status: "open",
+      priority: "high",
+      context_keys: ["workspace.brand", "collab.active_thread"],
+      created_by: "system",
+      created_at: at,
+      updated_at: at,
+    },
+    {
       id: "task-seed-qc-review",
       workspace_id: WORKSPACE_ID,
       agent_id: "agent-quality-control",
@@ -175,7 +225,16 @@ export async function listAgents() {
           .eq("workspace_id", WORKSPACE_ID)
           .order("name", { ascending: true });
         if (!error && Array.isArray(data) && data.length > 0) {
-          return { data: data.map(normalizeAgent), storage: "supabase" };
+          const normalized = data.map(normalizeAgent);
+          const synced = applyRosterPromptUpdates(normalized);
+          if (synced.changed) {
+            try {
+              await supabase.from(AGENTS_TABLE).upsert(synced.agents);
+            } catch {
+              /* non-blocking — return updated in-memory */
+            }
+          }
+          return { data: synced.agents, storage: "supabase" };
         }
         if (!error && Array.isArray(data) && data.length === 0) {
           const seeded = seedAgents();
@@ -189,7 +248,15 @@ export async function listAgents() {
   }
 
   const state = await ensureLocalSeeded();
-  return { data: state.agents, storage: "local_file" };
+  const synced = applyRosterPromptUpdates(state.agents);
+  if (synced.changed) {
+    try {
+      await writeLocal({ ...state, agents: synced.agents });
+    } catch {
+      /* read-only hosts */
+    }
+  }
+  return { data: synced.agents, storage: "local_file" };
 }
 
 /**

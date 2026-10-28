@@ -77,6 +77,7 @@ import {
 import { buildSalesChannelsStatus } from "@/lib/integrations/channels-status";
 import { googlePlacesStatus } from "@/lib/integrations/google-places";
 import { creativeModeLabel } from "@/lib/integrations/brand-labels";
+import { composeCreativePackage } from "@/lib/creative/compose-package";
 import {
   approvePopupApplication,
   draftPopupApplication,
@@ -564,45 +565,29 @@ export async function dispatchV1(method, segments, request, body) {
       action === "generate-animation" ||
       action === "ensure-creative"
     ) {
-      const live = hasGeminiEnv();
       const isUgc = action === "generate-ugc-video" || body?.style === "ugc";
+      const composed = await composeCreativePackage({
+        item,
+        body: body || {},
+        action,
+      });
       const content = patchContent(contentId, {
         status: item.status === "draft" || isUgc ? "in_review" : item.status,
-        creative_brief: {
-          ...(item.creative_brief || {}),
-          ugc_script: isUgc
-            ? {
-                hook: "POV: soft Gulf light on a piece you will wear every day.",
-                script: `Local_sim UGC script for ${body?.product || item.product_context?.name || "Triada jewellery"}.`,
-                storyboard: "0-2s handheld close-up; mid soft light; end brand restraint.",
-                cta: "Shop Triada Designs",
-                mode: "local_sim",
-              }
-            : undefined,
-          updated_at: new Date().toISOString(),
-        },
+        creative_brief: composed.creative_brief,
       });
       return jsonOk({
         ok: true,
-        mode: live ? "gemini" : "local_sim",
-        mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
-        message: isUgc
-          ? "UGC video drafted and queued for approval."
-          : "Creative generation ready.",
+        mode: composed.mode,
+        mode_label: composed.mode_label || creativeModeLabel(composed.mode),
+        message: composed.message,
         content_id: contentId,
         content,
-        script: content.creative_brief?.ugc_script || null,
+        script: composed.script || content.creative_brief?.ugc_script || null,
         asset: {
+          ...composed.asset,
           id: `asset-${contentId}-${action}`,
-          kind: action.includes("anim") ? "animation" : action.includes("video") ? "video" : "image",
-          mode: live ? "gemini" : "local_sim",
-          width: 1080,
-          height: action.includes("video") ? 1920 : 1080,
-          url: null,
         },
-        sidecar: action.includes("video")
-          ? { placeholder_mp4: true, animation_svg: true }
-          : null,
+        sidecar: composed.sidecar,
       });
     }
     return jsonOk({ ok: true, content: item });

@@ -190,7 +190,8 @@ export default function ContentPage() {
         method: "POST",
         body: {
           product: item.product_context?.name || "Triada Designs jewellery",
-          storyboard: "Slow push-in on jewellery, soft light shift, calm end frame.",
+          storyboard:
+            "0-1s jewellery hook close-up; mid soft Gulf light + desire beat; end calm CTA frame.",
         },
       });
       setNotice(
@@ -230,7 +231,7 @@ export default function ContentPage() {
   }
 
   function bodyStoryboardUgc(product) {
-    return `Handheld UGC vertical of ${product}: natural desk light, authentic voiceover, soft end frame — no fake badges.`;
+    return `Viral UGC vertical of ${product}: first-second hook close-up, natural Gulf desk light, authentic voiceover, soft conversion CTA — no fake badges.`;
   }
 
   async function generateAnimation(item) {

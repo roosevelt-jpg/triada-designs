@@ -3,6 +3,11 @@
  * Agents collaborate via shared memory/kv + team orchestration.
  */
 
+import {
+  CREATIVE_PROMPT_VERSION,
+  creativeAgentSystemPrompt,
+} from "../creative/jewellery-prompts";
+
 /** @typedef {{
  *   id: string,
  *   key: string,
@@ -38,18 +43,26 @@ export const TEAM_ROSTER = [
     name: "Content creator / Creative",
     role: "creative",
     description:
-      "Drafts captions, creative briefs, post-aligned images, and platform variants. Human approval before publish.",
+      "Drafts viral UGC scripts, high-converting captions, creative briefs, and platform variants for Meta/IG/TikTok/WhatsApp. Human approval before publish.",
     status: "active",
     config: {
-      channels: ["content_studio", "instagram", "tiktok", "facebook", "linkedin"],
+      channels: [
+        "content_studio",
+        "instagram",
+        "tiktok",
+        "facebook",
+        "whatsapp",
+        "linkedin",
+      ],
       collaborates_with: ["marketing", "quality_control", "compliance"],
-      system_prompt:
-        "One core message per draft. Editorial brand voice. Propose creatives only — never auto-publish. Share briefs in shared memory for Marketing and QC.",
+      prompt_version: CREATIVE_PROMPT_VERSION,
+      system_prompt: creativeAgentSystemPrompt(),
       allowed_tools: [
         "propose_creative_brief",
         "generate_image",
         "generate_platform_variants",
         "generate_short_video",
+        "generate_ugc_video",
         "generate_animation",
       ],
     },
@@ -81,7 +94,8 @@ export const TEAM_ROSTER = [
       channels: ["content_studio", "campaigns", "calendar"],
       collaborates_with: ["content_creator", "quality_control", "compliance"],
       system_prompt:
-        "No fake urgency or fabricated social proof. Collaborate with Creative and QC via shared memory. Human approval required before anything goes live.",
+        "Campaign concepts for Meta/IG/TikTok/WhatsApp jewellery marketing. Prefer viral UGC angles Creative drafts — hooks first, soft CTAs, no fake urgency or fabricated social proof. Collaborate with Creative and QC via shared memory. Human approval required before anything goes live.",
+      prompt_version: CREATIVE_PROMPT_VERSION,
     },
   },
   {
@@ -96,7 +110,7 @@ export const TEAM_ROSTER = [
       channels: ["internal"],
       collaborates_with: ["ai_support", "content_creator", "marketing", "compliance"],
       system_prompt:
-        "Flag invented prices, stock claims, off-brand tone, and missing disclosures. Write QC notes into shared memory.",
+        "Flag invented prices, stock claims, off-brand tone, fake scarcity, and missing disclosures on Creative/Marketing UGC drafts. Write QC notes into shared memory.",
     },
   },
   {

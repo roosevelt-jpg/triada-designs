@@ -84,7 +84,8 @@ class VideoScriptService
             'model' => (string) ($completion['model'] ?? $this->llm->model()),
             'mode' => $live ? 'live' : 'local_sim',
             'video_prompt' => $videoPrompt,
-            'note' => 'Script/storyboard only — video pixels require VIDEO_PROVIDER (Runway/Luma/Veo/local animation). Claude does not render frames.',
+            'note' => 'Script/storyboard draft ready for media generation and human approval.',
+            'prompt_version' => JewelleryPromptBuilder::PROMPT_VERSION,
         ];
     }
 
@@ -119,14 +120,14 @@ class VideoScriptService
             ];
         }
 
-        // Local heuristic / free-text fallback shaped as UGC.
+        // Local heuristic / free-text fallback shaped as high-converting UGC.
         $hook = $style === 'ugc'
-            ? 'POV: you just found the piece that finishes every outfit.'
+            ? 'POV: soft Gulf light on the piece you’ll actually wear every day.'
             : 'Quiet luxury for Gulf light.';
         $script = $trimmed !== ''
             ? $trimmed
-            : "{$hook} This {$product} — {$caption} Soft natural light, no hard sell. Human-approved before we post.";
-        $storyboard = "0-2s handheld close-up of {$product}; 2-{$seconds}s soft light shift + authentic voiceover; end frame brand restraint, no fake badges.";
+            : "{$hook} This {$product} — {$caption} Soft natural light, no hard sell. Soft CTA to shop Triada Designs.";
+        $storyboard = "0-1s jewellery close-up hook of {$product}; 1-{$seconds}s handheld soft light + authentic voiceover; end frame brand restraint + soft CTA, no fake badges.";
 
         return [
             'script' => $script,

@@ -132,6 +132,19 @@ export function buildSystemPrompt(opts) {
     ? opts.agent.config.collaborates_with.join(", ")
     : "";
 
+  const creativeFocus =
+    role === "creative" ||
+    role === "marketing" ||
+    /creative|ugc|caption|storyboard|content/i.test(String(opts.purpose || ""))
+      ? `
+Creative conversion focus (when drafting social/UGC):
+- Optimize for viral, high-converting jewellery creative on Meta, Instagram, TikTok, and WhatsApp.
+- Hook in the first line / first second; one desire; soft CTA (Shop / DM / WhatsApp).
+- Authentic UGC tone — Gulf-light quiet luxury; no fake urgency, fake reviews, or invented discounts.
+- Propose drafts only; human approval before publish.
+`
+      : "";
+
   return `You are ${name} (${role}) for ${BRAND.name} — jewellery and Salt & Spirit collections.
 Purpose: ${opts.purpose}.
 You collaborate with the Triada agent team via shared memory/kv${peers ? ` (peers: ${peers})` : ""}.
@@ -145,7 +158,7 @@ Hard rules:
 - WhatsApp: business messages only to opted-in customers. Broadcasts need human approval.
 - Materials: silver with gold plating; 14K and 18K gold on request. Typical make time ~7 days.
 - Treat Shared memory as team context other agents already wrote — do not contradict it without escalating.
-
+${creativeFocus}
 Brand contact footer (use when closing):
 ${brandAddressPlain()}
 

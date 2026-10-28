@@ -14,12 +14,13 @@ return [
     |
     */
     'image' => [
-        'provider' => env('IMAGE_PROVIDER', env('LLM_PROVIDER', 'anthropic')),
-        'api_key' => env('IMAGE_API_KEY', env('ANTHROPIC_API_KEY', env('GEMINI_API_KEY'))),
-        'model' => env('IMAGE_MODEL', 'claude-sonnet-4-20250514'),
+        // Pixels: Gemini when keyed. Claude remains the copy/script path via VideoScriptService.
+        'provider' => env('IMAGE_PROVIDER', 'gemini'),
+        'api_key' => env('IMAGE_API_KEY', env('GEMINI_API_KEY', env('ANTHROPIC_API_KEY'))),
+        'model' => env('IMAGE_MODEL', env('GEMINI_IMAGE_MODEL', 'gemini-2.0-flash-preview-image-generation')),
         'base_url' => env(
             'IMAGE_BASE_URL',
-            env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com')
+            env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta')
         ),
         'timeout' => (int) env('IMAGE_TIMEOUT', 60),
         'default_width' => 1080,
@@ -42,7 +43,8 @@ return [
     |
     */
     'video' => [
-        'provider' => env('VIDEO_PROVIDER', 'local'),
+        // Default Gemini/Veo for viral UGC pixels when keyed; local animation remains operable without keys.
+        'provider' => env('VIDEO_PROVIDER', 'gemini'),
         'api_key' => env('VIDEO_API_KEY', env('GEMINI_API_KEY')),
         'model' => env('VIDEO_MODEL', 'veo-2.0-generate-001'),
         'base_url' => env('VIDEO_BASE_URL', ''),
