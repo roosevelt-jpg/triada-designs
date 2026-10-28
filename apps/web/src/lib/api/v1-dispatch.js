@@ -952,7 +952,7 @@ export async function dispatchV1(method, segments, request, body) {
       }
 
       return jsonOk({
-        ok: true,
+        ok: composed.ok !== false,
         mode: composed.mode,
         mode_label: composed.mode_label || creativeModeLabel(composed.mode),
         message: composed.message,
@@ -966,6 +966,7 @@ export async function dispatchV1(method, segments, request, body) {
         admin_notified: Boolean(notify?.ok && !notify?.skipped),
         notify,
         sidecar: composed.sidecar,
+        error: composed.error || null,
       });
     }
     return jsonOk({ ok: true, content: item });
@@ -1001,23 +1002,22 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "creative/status" && m === "GET") {
+    // Next dual-run: Gemini key drives live image + video pixels (Omni / Imagen cascade).
     const live = hasGeminiEnv();
-    const videoProvider = String(process.env.VIDEO_PROVIDER || "gemini").toLowerCase();
-    const videoLive = live || ["gemini", "veo", "runway", "luma", "http"].includes(videoProvider);
-    const videoMode = videoLive ? (live ? "gemini" : "live") : "local_sim";
+    const mode = live ? "gemini" : "local_sim";
     return jsonOk({
-      mode: live ? "gemini" : "local_sim",
-      mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
+      mode,
+      mode_label: creativeModeLabel(mode),
       has_gemini: live,
       image: {
-        mode: live ? "gemini" : "local_sim",
-        mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
+        mode,
+        mode_label: creativeModeLabel(mode),
         message: live ? "Image generation is connected." : "Image generation is local.",
       },
       video: {
-        mode: videoMode,
-        mode_label: creativeModeLabel(videoMode),
-        message: videoLive ? "Video generation is connected." : "Video generation is local.",
+        mode,
+        mode_label: creativeModeLabel(mode),
+        message: live ? "Video generation is connected." : "Video generation is local.",
       },
       resize_engine: "triada",
       summary: "Generate, preview, approve, schedule, and publish.",

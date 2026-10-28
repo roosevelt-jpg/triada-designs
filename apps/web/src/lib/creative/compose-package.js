@@ -1,5 +1,5 @@
 /**
- * Compose Content Studio packages: Claude for copy/scripts, Gemini-oriented media prompts.
+ * Compose Content Studio packages: Claude for copy/scripts, Gemini for media pixels.
  * UI must stay product-facing (generate → approve → schedule → publish).
  */
 
@@ -16,6 +16,7 @@ import {
   ugcScriptSystemPrompt,
   ugcScriptUserPrompt,
 } from "./jewellery-prompts";
+import { generateGeminiMedia, resolveGeminiApiKey } from "./gemini-media";
 import { previewSvgDataUrl } from "./preview-svg";
 
 /**
@@ -94,7 +95,7 @@ export async function composeCreativePackage(input) {
 
   let ugcScript = null;
   let copyLive = false;
-  const geminiReady = hasGeminiEnv();
+  const geminiReady = hasGeminiEnv() || Boolean(resolveGeminiApiKey());
 
   if (isUgc || isVideo || action === "ensure-creative") {
     const fallback = localUgcPackage({
@@ -178,11 +179,6 @@ export async function composeCreativePackage(input) {
   brief.video_prompt = videoPrompt;
   if (ugcScript) brief.ugc_script = ugcScript;
 
-  // Media path prefers Gemini when keyed; copy path prefers Claude when keyed.
-  // Product-facing mode badge only (Live AI / Local) — no provider plumbing in UI.
-  const mediaMode = geminiReady ? "gemini" : "local_sim";
-  const overallMode = copyLive || geminiReady ? (geminiReady ? "gemini" : "live") : "local_sim";
-
   const kind = action.includes("anim")
     ? "animation"
     : isVideo
@@ -194,14 +190,67 @@ export async function composeCreativePackage(input) {
   const prompt = isVideo ? videoPrompt : imagePrompt;
   const productTitle =
     String(item.product_context?.name || product || item.title || "Triada Designs");
-  const previewUrl = previewSvgDataUrl({
-    width,
-    height,
-    title: productTitle,
-    target: isUgc ? "ugc" : kind,
-    prompt,
-    kind,
-  });
+
+  let mediaMode = "local_sim";
+  let mediaError = null;
+  let previewUrl = null;
+  let mimeType = "image/svg+xml";
+  let mediaModel = null;
+  let mediaPath = null;
+  let posterOnly = false;
+
+  if (geminiReady) {
+    const media = await generateGeminiMedia({
+      prompt,
+      kind,
+      width,
+      height,
+      durationMs,
+    });
+
+    if (media.ok && media.dataUrl) {
+      mediaMode = "gemini";
+      previewUrl = media.dataUrl;
+      mimeType = media.mimeType || (isVideo ? "video/mp4" : "image/png");
+      mediaModel = media.model || null;
+      mediaPath = media.path || null;
+      posterOnly = Boolean(media.poster_only);
+      if (media.video_error) {
+        mediaError = media.video_error;
+      }
+    } else {
+      // Keyed but failed — do not pretend SVG is Gemini output.
+      mediaMode = "error";
+      mediaError = media.error || "Gemini media generation failed";
+      previewUrl = previewSvgDataUrl({
+        width,
+        height,
+        title: productTitle,
+        target: isUgc ? "ugc" : kind,
+        prompt,
+        kind,
+      });
+      mimeType = "image/svg+xml";
+    }
+  } else {
+    previewUrl = previewSvgDataUrl({
+      width,
+      height,
+      title: productTitle,
+      target: isUgc ? "ugc" : kind,
+      prompt,
+      kind,
+    });
+  }
+
+  const overallMode =
+    mediaMode === "gemini"
+      ? "gemini"
+      : copyLive
+        ? "live"
+        : mediaMode === "error"
+          ? "local_sim"
+          : "local_sim";
 
   /** @type {object[]} */
   const variants = [];
@@ -212,6 +261,34 @@ export async function composeCreativePackage(input) {
       { key: "facebook_feed", w: 1200, h: 630, ratio: "1.91:1" },
       { key: "tiktok", w: 1080, h: 1920, ratio: "9:16" },
     ];
+
+    // Prefer one live Gemini hero, then crop-label variants from that asset URL.
+    let heroUrl = previewUrl;
+    if (geminiReady && mediaMode === "gemini" && kind !== "image") {
+      const hero = await generateGeminiMedia({
+        prompt: imagePrompt,
+        kind: "image",
+        width: 1080,
+        height: 1080,
+      });
+      if (hero.ok && hero.dataUrl) heroUrl = hero.dataUrl;
+    } else if (geminiReady && mediaMode !== "gemini") {
+      const hero = await generateGeminiMedia({
+        prompt: imagePrompt,
+        kind: "image",
+        width: 1080,
+        height: 1080,
+      });
+      if (hero.ok && hero.dataUrl) {
+        heroUrl = hero.dataUrl;
+        mediaMode = "gemini";
+        previewUrl = hero.dataUrl;
+        mimeType = hero.mimeType || "image/png";
+        mediaModel = hero.model;
+        mediaPath = hero.path;
+      }
+    }
+
     for (const platform of platforms) {
       variants.push({
         id: `variant-${item.id || "draft"}-${platform.key}`,
@@ -219,27 +296,36 @@ export async function composeCreativePackage(input) {
         width: platform.w,
         height: platform.h,
         aspect_ratio: platform.ratio,
-        mode: mediaMode,
+        mode: mediaMode === "gemini" ? "gemini" : "local_sim",
         media_asset: {
-          url: previewSvgDataUrl({
-            width: platform.w,
-            height: platform.h,
-            title: productTitle,
-            target: platform.key,
-            prompt,
-            kind: "image",
-          }),
+          url:
+            mediaMode === "gemini" && heroUrl
+              ? heroUrl
+              : previewSvgDataUrl({
+                  width: platform.w,
+                  height: platform.h,
+                  title: productTitle,
+                  target: platform.key,
+                  prompt: imagePrompt,
+                  kind: "image",
+                }),
           kind: "image",
-          mode: mediaMode,
+          mode: mediaMode === "gemini" ? "gemini" : "local_sim",
+          mime_type:
+            mediaMode === "gemini" && heroUrl && !String(heroUrl).startsWith("data:image/svg")
+              ? "image/png"
+              : "image/svg+xml",
         },
       });
     }
   }
 
+  const ok = mediaMode === "gemini" || !geminiReady;
+
   return {
-    ok: true,
-    mode: overallMode,
-    mode_label: creativeModeLabel(overallMode),
+    ok,
+    mode: overallMode === "gemini" ? "gemini" : overallMode,
+    mode_label: creativeModeLabel(overallMode === "gemini" ? "gemini" : overallMode),
     prompt_version: CREATIVE_PROMPT_VERSION,
     creative_brief: {
       ...(item.creative_brief && typeof item.creative_brief === "object"
@@ -249,6 +335,8 @@ export async function composeCreativePackage(input) {
       ugc_script: ugcScript || undefined,
       image_prompt: imagePrompt,
       video_prompt: videoPrompt,
+      media_model: mediaModel,
+      media_path: mediaPath,
       updated_at: new Date().toISOString(),
       prompt_version: CREATIVE_PROMPT_VERSION,
     },
@@ -256,26 +344,40 @@ export async function composeCreativePackage(input) {
     asset: {
       id: `asset-${item.id || "draft"}-${action || "creative"}`,
       kind,
-      mode: mediaMode,
+      mode: mediaMode === "gemini" ? "gemini" : "local_sim",
       width,
       height,
       aspect_ratio: height === width ? "1:1" : height > width ? "9:16" : "16:9",
       duration_ms: isVideo ? durationMs : null,
       url: previewUrl,
-      mime_type: "image/svg+xml",
+      mime_type: mimeType,
       prompt,
-      preview_ready: true,
+      preview_ready: Boolean(previewUrl),
+      model: mediaModel,
+      metadata: {
+        media_path: mediaPath,
+        poster_only: posterOnly || undefined,
+        gemini_error: mediaError || undefined,
+        realistic_3d: mediaMode === "gemini",
+      },
     },
     variants,
     sidecar: isVideo
-      ? { placeholder_mp4: !geminiReady, animation_svg: !geminiReady }
+      ? {
+          placeholder_mp4: mediaMode !== "gemini",
+          animation_svg: mediaMode !== "gemini",
+          poster_only: posterOnly || undefined,
+        }
       : null,
-    message: isUgc
-      ? "UGC video drafted — preview before approval."
-      : isVideo
-        ? "Short video drafted — preview before approval."
-        : isImage
-          ? "Creative draft ready — preview before approval."
-          : "Creative generation ready.",
+    error: geminiReady && mediaMode !== "gemini" ? mediaError : null,
+    message: !ok
+      ? "Media generation needs a retry — preview is not live yet."
+      : isUgc
+        ? "UGC video drafted — preview before approval."
+        : isVideo
+          ? "Short video drafted — preview before approval."
+          : isImage
+            ? "Creative draft ready — preview before approval."
+            : "Creative generation ready.",
   };
 }
