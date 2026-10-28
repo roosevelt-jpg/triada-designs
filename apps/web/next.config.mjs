@@ -44,10 +44,11 @@ const nextConfig = {
   poweredByHeader: false,
   transpilePackages: ["three", "@react-three/fiber", "@react-three/drei"],
   async rewrites() {
-    // Dual-mode (Next.js + Supabase migration Slice 1):
-    // - Filesystem Route Handlers always win: /api/webhooks/meta, /api/health, /api/cron/*
-    // - Laravel proxy lives in `fallback` so Meta hits Next directly.
-    // - Other /api/* (including remaining /api/webhooks/*) still proxy to API_ORIGIN.
+    // Dual-mode (Next.js + Supabase migration):
+    // - Filesystem Route Handlers always win:
+    //   /api/webhooks/meta, /api/health, /api/cron/*, /api/v1/auth/{login,me,logout}
+    // - Laravel proxy lives in `fallback` so those paths never hit a dead API_ORIGIN.
+    // - Other /api/* (including remaining /api/webhooks/* and /api/v1/*) still proxy to API_ORIGIN.
     return {
       fallback: [
         {
