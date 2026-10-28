@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { getLocalDataDir } from "@/lib/local-data-dir";
 
-const STORE_DIR = path.join(process.cwd(), ".triada-local");
+const STORE_DIR = getLocalDataDir();
 const STORE_FILE = path.join(STORE_DIR, "meta-webhook-events.json");
 
 /**

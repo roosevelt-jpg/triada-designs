@@ -9,10 +9,11 @@ import { buildContacts } from "@/lib/api/seed-data";
 import { normalizePhoneToE164 } from "./phone-e164.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { getLocalDataDir } from "@/lib/local-data-dir";
 
 const TABLE = "crm_contacts";
 const WORKSPACE_ID = "triada-ops";
-const LOCAL_DIR = path.join(process.cwd(), ".triada-local");
+const LOCAL_DIR = getLocalDataDir();
 const LOCAL_FILE = path.join(LOCAL_DIR, "crm-contacts.json");
 
 /**

@@ -12,12 +12,13 @@ import {
 } from "./env-presence";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { getLocalDataDir } from "@/lib/local-data-dir";
 
 const TABLE = "integration_secrets";
 const WORKSPACE_ID = "triada-ops";
 const PROVIDER = "meta";
 const SECRET_TYPE = "credentials";
-const LOCAL_DIR = path.join(process.cwd(), ".triada-local");
+const LOCAL_DIR = getLocalDataDir();
 const LOCAL_FILE = path.join(LOCAL_DIR, "integration-secrets.json");
 
 /**

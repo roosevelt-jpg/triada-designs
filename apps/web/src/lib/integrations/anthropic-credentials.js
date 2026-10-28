@@ -7,13 +7,14 @@ import { connectionLabel, modelNickname } from "./brand-labels";
 import { decryptSecret, encryptSecret } from "./credential-crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { getLocalDataDir } from "@/lib/local-data-dir";
 
 const TABLE = "integration_secrets";
 const WORKSPACE_ID = "triada-ops";
 const PROVIDER = "anthropic";
 const SECRET_TYPE = "api_key";
 const DEFAULT_MODEL = "claude-sonnet-4-20250514";
-const LOCAL_DIR = path.join(process.cwd(), ".triada-local");
+const LOCAL_DIR = getLocalDataDir();
 const LOCAL_FILE = path.join(LOCAL_DIR, "integration-secrets.json");
 
 /** Anthropic keys are `sk-ant-…` — reject other shapes so typos fail closed. */

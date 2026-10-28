@@ -8,10 +8,11 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { hasSupabaseAdminCredentials } from "@/lib/supabase/config";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { getLocalDataDir } from "@/lib/local-data-dir";
 
 const TABLE = "training_docs";
 const WORKSPACE_ID = "triada-ops";
-const LOCAL_DIR = path.join(process.cwd(), ".triada-local");
+const LOCAL_DIR = getLocalDataDir();
 const LOCAL_FILE = path.join(LOCAL_DIR, "training-docs.json");
 
 /**
@@ -153,7 +154,11 @@ async function readLocal() {
     // missing file → seed
   }
   const seeded = seedTrainingDocs();
-  await writeLocal(seeded);
+  try {
+    await writeLocal(seeded);
+  } catch {
+    // Read-only hosts: keep in-memory seed for this invocation.
+  }
   return seeded;
 }
 

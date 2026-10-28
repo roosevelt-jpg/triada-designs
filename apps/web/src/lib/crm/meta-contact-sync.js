@@ -14,12 +14,13 @@ import { integrationRuntimeMode } from "@/lib/integrations/env-presence";
 import { resolveWhatsAppCloudCredentials } from "@/lib/integrations/meta-credentials";
 import { normalizePhoneToE164 } from "./phone-e164.js";
 import { importContactRows, listContacts, upsertContacts } from "./contacts-store.js";
+import { getLocalDataDir } from "@/lib/local-data-dir";
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || "v21.0";
 const GRAPH_BASE = (
   process.env.META_GRAPH_BASE || "https://graph.facebook.com"
 ).replace(/\/$/, "");
-const LOCAL_DIR = path.join(process.cwd(), ".triada-local");
+const LOCAL_DIR = getLocalDataDir();
 const PEERS_FILE = path.join(LOCAL_DIR, "whatsapp-contact-peers.json");
 
 /**
