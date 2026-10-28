@@ -69,10 +69,12 @@ function slugKey(name) {
 /**
  * Push newer roster system prompts onto seeded agents (by key) when
  * prompt_version advances — preserves admin custom agents.
+ * Also inserts any missing seeded starter tasks by id.
  * @param {AgentRecord[]} agents
- * @returns {{ agents: AgentRecord[], changed: boolean }}
+ * @param {AgentTask[]} [tasks]
+ * @returns {{ agents: AgentRecord[], tasks: AgentTask[], changed: boolean }}
  */
-function applyRosterPromptUpdates(agents) {
+function applyRosterPromptUpdates(agents, tasks = []) {
   let changed = false;
   const next = agents.map((agent) => {
     const roster = TEAM_ROSTER.find((r) => r.key === agent.key || r.id === agent.id);
@@ -98,7 +100,29 @@ function applyRosterPromptUpdates(agents) {
       updated_at: nowIso(),
     };
   });
-  return { agents: next, changed };
+
+  // Ensure every roster seed key exists (admin may have partial local seed).
+  const byKey = new Set(next.map((a) => a.key));
+  for (const roster of TEAM_ROSTER) {
+    if (byKey.has(roster.key)) continue;
+    changed = true;
+    next.push({
+      ...roster,
+      workspace_id: WORKSPACE_ID,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    });
+  }
+
+  const taskIds = new Set((tasks || []).map((t) => t.id));
+  const mergedTasks = [...(tasks || [])];
+  for (const seed of seedStarterTasks()) {
+    if (taskIds.has(seed.id)) continue;
+    changed = true;
+    mergedTasks.push(seed);
+  }
+
+  return { agents: next, tasks: mergedTasks, changed };
 }
 
 /** @returns {AgentRecord[]} */
@@ -155,7 +179,7 @@ function seedStarterTasks() {
       agent_key: "ai_support",
       title: "Ground replies in training docs",
       description:
-        "When unsure of tone or policy, retrieve Training docs and write notes to shared memory for Follow up.",
+        "When unsure of tone or policy, retrieve Training docs and write notes to shared memory for Follow up and Leads.",
       status: "open",
       priority: "normal",
       context_keys: ["workspace.brand", "collab.active_thread"],
@@ -179,13 +203,43 @@ function seedStarterTasks() {
       updated_at: at,
     },
     {
+      id: "task-seed-follow-up",
+      workspace_id: WORKSPACE_ID,
+      agent_id: "agent-follow-up",
+      agent_key: "follow_up",
+      title: "One soft reminder after quiet cart/sizing threads",
+      description:
+        "Read Support/Leads shared memory; confirm Compliance opt-in; draft one warm reminder — never spam or invent offers.",
+      status: "open",
+      priority: "normal",
+      context_keys: ["workspace.brand", "collab.active_thread", "collab.last_handoff"],
+      created_by: "system",
+      created_at: at,
+      updated_at: at,
+    },
+    {
+      id: "task-seed-marketing-calendar",
+      workspace_id: WORKSPACE_ID,
+      agent_id: "agent-marketing",
+      agent_key: "marketing",
+      title: "Propose UGC campaign angles for human approval",
+      description:
+        "Collaborate with Creative on Meta/IG/TikTok/WhatsApp concepts. No fake urgency. Queue QC + Compliance before calendar publish.",
+      status: "open",
+      priority: "normal",
+      context_keys: ["workspace.brand", "collab.active_thread"],
+      created_by: "system",
+      created_at: at,
+      updated_at: at,
+    },
+    {
       id: "task-seed-qc-review",
       workspace_id: WORKSPACE_ID,
       agent_id: "agent-quality-control",
       agent_key: "quality_control",
       title: "QC marketing drafts before publish",
       description:
-        "Review Creative/Marketing shared memory drafts for invented claims and missing disclosures.",
+        "Review Creative/Marketing/Support shared memory drafts for invented claims, fake scarcity, and missing disclosures. PASS / NEEDS FIXES / BLOCK.",
       status: "open",
       priority: "high",
       context_keys: ["collab.active_thread"],
@@ -200,10 +254,40 @@ function seedStarterTasks() {
       agent_key: "compliance",
       title: "Verify WhatsApp opt-in before Follow up",
       description:
-        "Block Follow up sends when consent is missing. Record decision in shared kv.",
+        "ALLOW / HOLD / BLOCK Follow up and Marketing sends when consent is missing. Record decision in shared kv.",
       status: "open",
       priority: "high",
       context_keys: ["collab.active_thread"],
+      created_by: "system",
+      created_at: at,
+      updated_at: at,
+    },
+    {
+      id: "task-seed-leads-qualify",
+      workspace_id: WORKSPACE_ID,
+      agent_id: "agent-leads-qualification",
+      agent_key: "leads_qualification",
+      title: "Score inbound intent from explicit signals only",
+      description:
+        "Update lead stage from what the customer said. Route hot / wholesale / custom to Escalation; share context for Support and Follow up.",
+      status: "open",
+      priority: "high",
+      context_keys: ["workspace.brand", "collab.active_thread"],
+      created_by: "system",
+      created_at: at,
+      updated_at: at,
+    },
+    {
+      id: "task-seed-escalation-handoff",
+      workspace_id: WORKSPACE_ID,
+      agent_id: "agent-escalation-officer",
+      agent_key: "escalation_officer",
+      title: "Prepare human handoffs for complaints and custom quotes",
+      description:
+        "Summarize ask → verified facts → risks → owner → next action. Never invent prices or promises. Write collab.last_handoff.",
+      status: "open",
+      priority: "high",
+      context_keys: ["collab.active_thread", "collab.last_handoff"],
       created_by: "system",
       created_at: at,
       updated_at: at,
@@ -226,10 +310,31 @@ export async function listAgents() {
           .order("name", { ascending: true });
         if (!error && Array.isArray(data) && data.length > 0) {
           const normalized = data.map(normalizeAgent);
-          const synced = applyRosterPromptUpdates(normalized);
+          let existingTasks = [];
+          try {
+            const taskRes = await supabase
+              .from(TASKS_TABLE)
+              .select("id")
+              .eq("workspace_id", WORKSPACE_ID)
+              .limit(200);
+            if (!taskRes.error && Array.isArray(taskRes.data)) {
+              existingTasks = taskRes.data.map((row) => ({
+                id: String(row.id),
+              }));
+            }
+          } catch {
+            /* optional */
+          }
+          const synced = applyRosterPromptUpdates(normalized, /** @type {AgentTask[]} */ (existingTasks));
           if (synced.changed) {
             try {
               await supabase.from(AGENTS_TABLE).upsert(synced.agents);
+              const newTasks = synced.tasks.filter(
+                (t) => !existingTasks.some((e) => e.id === t.id),
+              );
+              if (newTasks.length) {
+                await supabase.from(TASKS_TABLE).upsert(newTasks);
+              }
             } catch {
               /* non-blocking — return updated in-memory */
             }
@@ -248,10 +353,10 @@ export async function listAgents() {
   }
 
   const state = await ensureLocalSeeded();
-  const synced = applyRosterPromptUpdates(state.agents);
+  const synced = applyRosterPromptUpdates(state.agents, state.tasks);
   if (synced.changed) {
     try {
-      await writeLocal({ ...state, agents: synced.agents });
+      await writeLocal({ agents: synced.agents, tasks: synced.tasks });
     } catch {
       /* read-only hosts */
     }

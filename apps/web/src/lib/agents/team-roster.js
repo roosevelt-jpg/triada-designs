@@ -3,10 +3,7 @@
  * Agents collaborate via shared memory/kv + team orchestration.
  */
 
-import {
-  CREATIVE_PROMPT_VERSION,
-  creativeAgentSystemPrompt,
-} from "../creative/jewellery-prompts";
+import { TEAM_PROMPT_VERSION, systemPromptForRole } from "./role-prompts";
 
 /** @typedef {{
  *   id: string,
@@ -32,9 +29,9 @@ export const TEAM_ROSTER = [
     config: {
       channels: ["instagram", "whatsapp", "facebook", "webchat", "email"],
       escalation: true,
-      collaborates_with: ["escalation_officer", "quality_control", "compliance"],
-      system_prompt:
-        "You are AI Support for Triada Designs. Retrieve training docs for tone, timing, and open/close. Never invent prices or policies. Write shared memory notes for follow-up and escalation when needed.",
+      collaborates_with: ["escalation_officer", "quality_control", "compliance", "leads_qualification", "follow_up"],
+      prompt_version: TEAM_PROMPT_VERSION,
+      system_prompt: systemPromptForRole("ai_support"),
     },
   },
   {
@@ -55,8 +52,8 @@ export const TEAM_ROSTER = [
         "linkedin",
       ],
       collaborates_with: ["marketing", "quality_control", "compliance"],
-      prompt_version: CREATIVE_PROMPT_VERSION,
-      system_prompt: creativeAgentSystemPrompt(),
+      prompt_version: TEAM_PROMPT_VERSION,
+      system_prompt: systemPromptForRole("content_creator"),
       allowed_tools: [
         "propose_creative_brief",
         "generate_image",
@@ -77,9 +74,9 @@ export const TEAM_ROSTER = [
     status: "active",
     config: {
       channels: ["whatsapp", "email", "instagram"],
-      collaborates_with: ["ai_support", "marketing", "leads_qualification"],
-      system_prompt:
-        "One friendly reminder after a quiet day. Warm Triada tone. Never spam. Read shared context from Support and Leads before drafting.",
+      collaborates_with: ["ai_support", "marketing", "leads_qualification", "compliance"],
+      prompt_version: TEAM_PROMPT_VERSION,
+      system_prompt: systemPromptForRole("follow_up"),
     },
   },
   {
@@ -93,9 +90,8 @@ export const TEAM_ROSTER = [
     config: {
       channels: ["content_studio", "campaigns", "calendar"],
       collaborates_with: ["content_creator", "quality_control", "compliance"],
-      system_prompt:
-        "Campaign concepts for Meta/IG/TikTok/WhatsApp jewellery marketing. Prefer viral UGC angles Creative drafts — hooks first, soft CTAs, no fake urgency or fabricated social proof. Collaborate with Creative and QC via shared memory. Human approval required before anything goes live.",
-      prompt_version: CREATIVE_PROMPT_VERSION,
+      prompt_version: TEAM_PROMPT_VERSION,
+      system_prompt: systemPromptForRole("marketing"),
     },
   },
   {
@@ -108,9 +104,9 @@ export const TEAM_ROSTER = [
     status: "active",
     config: {
       channels: ["internal"],
-      collaborates_with: ["ai_support", "content_creator", "marketing", "compliance"],
-      system_prompt:
-        "Flag invented prices, stock claims, off-brand tone, fake scarcity, and missing disclosures on Creative/Marketing UGC drafts. Write QC notes into shared memory.",
+      collaborates_with: ["ai_support", "content_creator", "marketing", "compliance", "follow_up"],
+      prompt_version: TEAM_PROMPT_VERSION,
+      system_prompt: systemPromptForRole("quality_control"),
     },
   },
   {
@@ -123,9 +119,9 @@ export const TEAM_ROSTER = [
     status: "active",
     config: {
       channels: ["internal", "whatsapp", "email", "linkedin"],
-      collaborates_with: ["ai_support", "follow_up", "marketing", "escalation_officer"],
-      system_prompt:
-        "WhatsApp: business messages only to opted-in customers. No bulk unsolicited WhatsApp. Outreach needs easy opt-out and consent records.",
+      collaborates_with: ["ai_support", "follow_up", "marketing", "escalation_officer", "quality_control"],
+      prompt_version: TEAM_PROMPT_VERSION,
+      system_prompt: systemPromptForRole("compliance"),
     },
   },
   {
@@ -140,8 +136,8 @@ export const TEAM_ROSTER = [
       channels: ["webchat", "facebook", "instagram", "whatsapp", "telegram", "email"],
       create_leads: true,
       collaborates_with: ["ai_support", "follow_up", "escalation_officer"],
-      system_prompt:
-        "Score from explicit purchase/service signals only. Share lead context in shared memory for Follow up and Support.",
+      prompt_version: TEAM_PROMPT_VERSION,
+      system_prompt: systemPromptForRole("leads_qualification"),
     },
   },
   {
@@ -154,9 +150,9 @@ export const TEAM_ROSTER = [
     status: "active",
     config: {
       channels: ["internal", "telegram", "email", "whatsapp"],
-      collaborates_with: ["ai_support", "compliance", "leads_qualification"],
-      system_prompt:
-        "Prefer clear next actions and owners. Escalate wholesale, boutique, stylist, corporate gifting, custom quotes, and complaints. Never invent revenue or promises.",
+      collaborates_with: ["ai_support", "compliance", "leads_qualification", "quality_control"],
+      prompt_version: TEAM_PROMPT_VERSION,
+      system_prompt: systemPromptForRole("escalation_officer"),
     },
   },
 ];
@@ -196,3 +192,5 @@ export function resolveAgent(keyOrId, agents) {
     null
   );
 }
+
+export { TEAM_PROMPT_VERSION };

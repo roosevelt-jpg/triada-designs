@@ -132,33 +132,24 @@ export function buildSystemPrompt(opts) {
     ? opts.agent.config.collaborates_with.join(", ")
     : "";
 
-  const creativeFocus =
-    role === "creative" ||
-    role === "marketing" ||
-    /creative|ugc|caption|storyboard|content/i.test(String(opts.purpose || ""))
-      ? `
-Creative conversion focus (when drafting social/UGC):
-- Optimize for viral, high-converting jewellery creative on Meta, Instagram, TikTok, and WhatsApp.
-- Hook in the first line / first second; one desire; soft CTA (Shop / DM / WhatsApp).
-- Authentic UGC tone — Gulf-light quiet luxury; no fake urgency, fake reviews, or invented discounts.
-- Propose drafts only; human approval before publish.
-`
-      : "";
+  const purpose = String(opts.purpose || "");
+  const roleFocus = buildRoleFocus(role, purpose);
 
   return `You are ${name} (${role}) for ${BRAND.name} — jewellery and Salt & Spirit collections.
-Purpose: ${opts.purpose}.
+Purpose: ${purpose}.
 You collaborate with the Triada agent team via shared memory/kv${peers ? ` (peers: ${peers})` : ""}.
 
 Hard rules:
 - Disclose you are an AI assistant and that a person is available on request.
-- NEVER invent prices, stock, delivery promises, custom quotes, or off-brand words.
+- NEVER invent prices, stock, delivery promises, custom quotes, discounts, reviews, or off-brand words.
 - When unsure of tone, timing, open/close wording, or policy — use the Training Docs below. If still unsure, say you will connect a human or Escalation officer.
 - Start customer-facing replies with a warm Triada greeting when appropriate.
 - End threads with Triada contact/address when closing.
 - WhatsApp: business messages only to opted-in customers. Broadcasts need human approval.
 - Materials: silver with gold plating; 14K and 18K gold on request. Typical make time ~7 days.
 - Treat Shared memory as team context other agents already wrote — do not contradict it without escalating.
-${creativeFocus}
+- Never mention internal tooling or implementation details in customer or dashboard-facing copy.
+${roleFocus}
 Brand contact footer (use when closing):
 ${brandAddressPlain()}
 
@@ -168,6 +159,77 @@ ${opts.sharedMemory ? `Shared memory / kv:\n${opts.sharedMemory}\n` : ""}
 Training docs (authoritative — retrieve & obey; do not fabricate beyond these):
 ${kb || "(none loaded — escalate rather than invent)"}
 `;
+}
+
+/**
+ * Extra role focus injected into the shared system envelope.
+ * @param {string} role
+ * @param {string} purpose
+ */
+function buildRoleFocus(role, purpose) {
+  const r = String(role || "").toLowerCase();
+  const p = String(purpose || "").toLowerCase();
+
+  if (
+    r === "creative" ||
+    r === "marketing" ||
+    r === "content" ||
+    /creative|ugc|caption|storyboard|content|campaign/i.test(p)
+  ) {
+    return `
+Creative / Marketing conversion focus:
+- Optimize for viral, high-converting jewellery creative on Meta, Instagram, TikTok, and WhatsApp.
+- Hook in the first line / first second; one desire; soft CTA (Shop / DM / WhatsApp).
+- Authentic UGC tone — Gulf-light quiet luxury; no fake urgency, fake reviews, or invented discounts.
+- Propose drafts only; human approval before publish. Share briefs in shared memory for QC/Compliance.
+`;
+  }
+
+  if (r === "follow_up" || /follow.?up|abandon|after.?sale/i.test(p)) {
+    return `
+Follow-up focus:
+- One friendly reminder after quiet time; never spam. Confirm opt-in via Compliance notes when unsure.
+- Continue Support / Leads shared context. Soft CTA only — no scarcity or invented offers.
+`;
+  }
+
+  if (r.includes("quality") || /quality_review|qc/i.test(p)) {
+    return `
+Quality Control focus:
+- Return PASS / NEEDS FIXES / BLOCK with concrete bullets.
+- Flag invented claims, fake scarcity, off-brand tone, and missing disclosures. Write notes to shared memory.
+`;
+  }
+
+  if (r.includes("compliance") || /compliance_review/i.test(p)) {
+    return `
+Compliance focus:
+- ALLOW / HOLD / BLOCK with reason. WhatsApp only to opted-in customers. Broadcasts need human approval.
+`;
+  }
+
+  if (r.includes("lead") || r === "sales" || /qualif/i.test(p)) {
+    return `
+Leads Qualification focus:
+- Score only explicit purchase/service signals. Route hot / wholesale / custom to Escalation with a clear owner.
+`;
+  }
+
+  if (r.includes("escalat") || r === "sales_ops" || /escalation/i.test(p)) {
+    return `
+Escalation focus:
+- Summarize ask → verified facts → risks → human owner → next action. Never invent quotes or promises.
+`;
+  }
+
+  if (r === "support" || /draft_reply|support/i.test(p)) {
+    return `
+Support focus:
+- Answer from Training Docs / catalog only. Hand off unverifiable price, stock, custom, wholesale, or complaint threads.
+`;
+  }
+
+  return "";
 }
 
 /**
