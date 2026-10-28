@@ -68,6 +68,7 @@ class WorkflowDefinition
         'sync_shopify',
         'publish_channel_template',
         'send_whatsapp_template',
+        'send_whatsapp_media',
         'check_whatsapp_opt_out',
         'whatsapp_window_follow_up',
         'generate_content_image',

@@ -217,21 +217,151 @@ export function NodeConfigPanel({
                 }
               />
             ) : null}
-            <Input
-              label="Message / template"
-              name="message"
-              value={config.message || config.template || config.title || ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (action === "draft_reply" || action === "ai_reply") {
-                  onChange({ config: { ...config, template: v } });
-                } else if (action === "create_task") {
-                  onChange({ config: { ...config, title: v } });
-                } else {
-                  onChange({ config: { ...config, message: v } });
-                }
-              }}
-            />
+            {action === "send_whatsapp_template" ||
+            action === "whatsapp_window_follow_up" ? (
+              <>
+                <Input
+                  label="Template name"
+                  name="template_name"
+                  value={config.template_name || ""}
+                  onChange={(e) =>
+                    onChange({
+                      config: { ...config, template_name: e.target.value },
+                    })
+                  }
+                />
+                <Input
+                  label="Language"
+                  name="language"
+                  value={config.language || "en"}
+                  onChange={(e) =>
+                    onChange({
+                      config: { ...config, language: e.target.value },
+                    })
+                  }
+                />
+                <label className="block space-y-1.5">
+                  <span className="block text-[13px] font-medium text-ink">
+                    Header media type
+                  </span>
+                  <select
+                    className={fieldClass}
+                    value={config.header_media_type || config.media_type || ""}
+                    onChange={(e) =>
+                      onChange({
+                        config: {
+                          ...config,
+                          header_media_type: e.target.value || undefined,
+                          media_type: e.target.value || undefined,
+                        },
+                      })
+                    }
+                  >
+                    <option value="">None</option>
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                  </select>
+                </label>
+                <Input
+                  label="Header media id (Meta)"
+                  name="header_media_id"
+                  value={config.header_media_id || config.media_id || ""}
+                  onChange={(e) =>
+                    onChange({
+                      config: {
+                        ...config,
+                        header_media_id: e.target.value,
+                        media_id: e.target.value,
+                      },
+                    })
+                  }
+                />
+                <Input
+                  label="Or media URL (upload on send)"
+                  name="media_url"
+                  value={config.media_url || config.header_media_url || ""}
+                  onChange={(e) =>
+                    onChange({
+                      config: {
+                        ...config,
+                        media_url: e.target.value,
+                        header_media_url: e.target.value,
+                      },
+                    })
+                  }
+                />
+              </>
+            ) : null}
+            {action === "send_whatsapp_media" ? (
+              <>
+                <label className="block space-y-1.5">
+                  <span className="block text-[13px] font-medium text-ink">
+                    Media type
+                  </span>
+                  <select
+                    className={fieldClass}
+                    value={config.media_type || "image"}
+                    onChange={(e) =>
+                      onChange({
+                        config: { ...config, media_type: e.target.value },
+                      })
+                    }
+                  >
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                  </select>
+                </label>
+                <Input
+                  label="Media id (Meta)"
+                  name="media_id"
+                  value={config.media_id || ""}
+                  onChange={(e) =>
+                    onChange({
+                      config: { ...config, media_id: e.target.value },
+                    })
+                  }
+                />
+                <Input
+                  label="Or media URL (upload on send)"
+                  name="media_url"
+                  value={config.media_url || ""}
+                  onChange={(e) =>
+                    onChange({
+                      config: { ...config, media_url: e.target.value },
+                    })
+                  }
+                />
+                <Input
+                  label="Caption"
+                  name="caption"
+                  value={config.caption || ""}
+                  onChange={(e) =>
+                    onChange({
+                      config: { ...config, caption: e.target.value },
+                    })
+                  }
+                />
+              </>
+            ) : null}
+            {action !== "send_whatsapp_template" &&
+            action !== "send_whatsapp_media" &&
+            action !== "whatsapp_window_follow_up" ? (
+              <Input
+                label="Message / template"
+                name="message"
+                value={config.message || config.template || config.title || ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (action === "draft_reply" || action === "ai_reply") {
+                    onChange({ config: { ...config, template: v } });
+                  } else if (action === "create_task") {
+                    onChange({ config: { ...config, title: v } });
+                  } else {
+                    onChange({ config: { ...config, message: v } });
+                  }
+                }}
+              />
+            ) : null}
           </>
         ) : null}
 

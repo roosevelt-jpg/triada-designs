@@ -69,6 +69,11 @@ import {
   whatsappTemplateStatus,
 } from "@/lib/integrations/whatsapp-cloud-templates";
 import {
+  extractWhatsAppMediaInput,
+  sendWhatsAppMediaMessage,
+  uploadWhatsAppMedia,
+} from "@/lib/integrations/whatsapp-cloud-media";
+import {
   hasGeminiEnv,
   hasMetaPageToken,
   hasWhatsAppPhoneId,
@@ -995,6 +1000,51 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk(result, result.ok ? 201 : 422);
   }
 
+  if (path === "integrations/whatsapp/upload-media" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const media = extractWhatsAppMediaInput(input);
+    if (!media.media_url && !media.media_base64) {
+      return jsonErr("media_url or media_base64 is required.", 422);
+    }
+    const result = await uploadWhatsAppMedia({
+      media_url: media.media_url,
+      media_base64: media.media_base64,
+      mime_type: media.mime_type,
+      media_type: media.media_type,
+      filename: media.filename,
+    });
+    return jsonOk(result, result.ok ? 200 : 422);
+  }
+
+  if (path === "integrations/whatsapp/send-media" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    if (!input.to) {
+      return jsonErr("to is required.", 422);
+    }
+    const media = extractWhatsAppMediaInput(input);
+    if (!media.media_id && !media.media_url && !media.media_base64 && !media.media_link) {
+      return jsonErr("media_id, media_url, media_link, or media_base64 is required.", 422);
+    }
+    if (input.marketing_opt_out === true && input.purpose !== "transactional") {
+      return {
+        status: 422,
+        body: { ok: false, error: "marketing_opt_out", eligibility: { eligible: false } },
+      };
+    }
+    const result = await sendWhatsAppMediaMessage({
+      to: String(input.to),
+      ...media,
+      caption: media.caption ? String(media.caption) : undefined,
+    });
+    return jsonOk(result, result.ok ? 200 : 422);
+  }
+
   if (path === "integrations/whatsapp/send-template" && m === "POST") {
     const input =
       body && typeof body === "object"
@@ -1009,11 +1059,13 @@ export async function dispatchV1(method, segments, request, body) {
         body: { ok: false, error: "marketing_opt_out", eligibility: { eligible: false } },
       };
     }
+    const media = extractWhatsAppMediaInput(input);
     const result = await sendWhatsAppTemplateMessage({
       to: String(input.to),
       template_name: String(input.template_name),
       language: input.language ? String(input.language) : "en",
       components: Array.isArray(input.components) ? input.components : [],
+      ...media,
     });
     return jsonOk(result, result.ok ? 200 : 422);
   }
@@ -1349,11 +1401,13 @@ export async function dispatchV1(method, segments, request, body) {
         });
         continue;
       }
+      const media = extractWhatsAppMediaInput(input);
       const send = await sendWhatsAppTemplateMessage({
         to,
         template_name: templateName,
         language: input.language ? String(input.language) : "en",
         components: Array.isArray(input.components) ? input.components : [],
+        ...media,
       });
       results.push({
         contact_id: contact.id,
@@ -1363,14 +1417,23 @@ export async function dispatchV1(method, segments, request, body) {
         ok: send.ok,
         mode: send.mode,
         provider_message_id: send.provider_message_id,
+        media_id: send.media_id || null,
+        media_type: send.media_type || null,
         error: send.error,
       });
     }
 
+    const mediaMeta = extractWhatsAppMediaInput(input);
     return jsonOk({
       ok: results.every((r) => r.ok),
       mode: listed.mode,
       template_name: templateName,
+      media_attached: Boolean(
+        mediaMeta.media_id ||
+          mediaMeta.media_url ||
+          mediaMeta.media_link ||
+          mediaMeta.media_base64,
+      ),
       attempted: results.length,
       sent: results.filter((r) => r.ok).length,
       failed: results.filter((r) => !r.ok).length,
@@ -1499,13 +1562,145 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path.match(/^automations\/[^/]+\/(dry-run|run)$/) && m === "POST") {
+    const wf = runtimeState.workflows.find((w) => w.id === segments[1]);
+    if (!wf) return jsonErr("Automation not found.", 404);
+    const dryRun = segments[2] === "dry-run";
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const context = {
+      ...(input.context && typeof input.context === "object"
+        ? /** @type {Record<string, unknown>} */ (input.context)
+        : {}),
+      to: input.to || input.wa_id || input.external_user_id,
+      external_user_id: input.external_user_id || input.wa_id || input.to,
+      marketing_opt_out: input.marketing_opt_out === true,
+    };
+    const steps = [];
+    const definition =
+      wf.definition && typeof wf.definition === "object" ? wf.definition : {};
+    const nodes =
+      definition.nodes && typeof definition.nodes === "object"
+        ? definition.nodes
+        : {};
+
+    for (const [nodeKey, rawNode] of Object.entries(nodes)) {
+      const node = rawNode && typeof rawNode === "object" ? rawNode : {};
+      if (String(node.type || "") !== "action") continue;
+      const config =
+        node.config && typeof node.config === "object" ? node.config : {};
+      const actionType = String(config.action_type || "");
+      if (
+        actionType !== "send_whatsapp_template" &&
+        actionType !== "send_whatsapp_media" &&
+        actionType !== "whatsapp_window_follow_up"
+      ) {
+        continue;
+      }
+
+      const to = String(
+        config.to ||
+          context.to ||
+          context.external_user_id ||
+          context.wa_id ||
+          "",
+      ).trim();
+      const media = extractWhatsAppMediaInput({ ...context, ...config });
+
+      if (dryRun) {
+        steps.push({
+          node: nodeKey,
+          action_type: actionType,
+          dry_run: true,
+          would_send_to: to || null,
+          template_name: config.template_name || null,
+          media_attached: Boolean(
+            media.media_id || media.media_url || media.media_link || media.media_base64,
+          ),
+          ok: true,
+        });
+        continue;
+      }
+
+      if (!to) {
+        steps.push({
+          node: nodeKey,
+          action_type: actionType,
+          ok: false,
+          error: "recipient_required",
+        });
+        continue;
+      }
+
+      if (
+        context.marketing_opt_out === true &&
+        String(config.purpose || "marketing") === "marketing"
+      ) {
+        steps.push({
+          node: nodeKey,
+          action_type: actionType,
+          ok: true,
+          skipped: true,
+          reason: "marketing_opt_out",
+        });
+        continue;
+      }
+
+      if (actionType === "send_whatsapp_media") {
+        const sent = await sendWhatsAppMediaMessage({
+          to,
+          ...media,
+          caption: media.caption ? String(media.caption) : undefined,
+        });
+        steps.push({
+          node: nodeKey,
+          action_type: actionType,
+          ok: sent.ok,
+          mode: sent.mode,
+          provider_message_id: sent.provider_message_id,
+          media_id: sent.media_id,
+          media_type: sent.media_type,
+          error: sent.error,
+        });
+        continue;
+      }
+
+      const templateName = String(
+        config.template_name ||
+          context.template_name ||
+          "jewellery_follow_up",
+      );
+      const sent = await sendWhatsAppTemplateMessage({
+        to,
+        template_name: templateName,
+        language: config.language ? String(config.language) : "en",
+        components: Array.isArray(config.components) ? config.components : [],
+        ...media,
+      });
+      steps.push({
+        node: nodeKey,
+        action_type: actionType,
+        ok: sent.ok,
+        mode: sent.mode,
+        template_name: templateName,
+        provider_message_id: sent.provider_message_id,
+        media_id: sent.media_id || null,
+        media_type: sent.media_type || null,
+        error: sent.error,
+      });
+    }
+
+    const failed = steps.some((s) => s.ok === false);
     return jsonOk({
-      ok: true,
+      ok: !failed,
       run: {
         id: `run-${Date.now()}`,
         workflow_id: segments[1],
-        status: "completed",
-        mode: segments[2] === "dry-run" ? "dry_run" : "live",
+        status: failed ? "failed" : "completed",
+        mode: dryRun ? "dry_run" : "live",
+        steps,
+        media_path: true,
       },
     });
   }

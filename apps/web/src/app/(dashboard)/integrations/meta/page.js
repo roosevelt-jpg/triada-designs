@@ -61,6 +61,13 @@ export default function MetaIntegrationsPage() {
     body: "",
     category: "MARKETING",
   });
+  const [waMediaForm, setWaMediaForm] = useState({
+    to: "",
+    template_name: "jewellery_follow_up",
+    media_type: "image",
+    media_url: "",
+    caption: "",
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -176,6 +183,65 @@ export default function MetaIntegrationsPage() {
       setWaTemplates(wa);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function sendWaTemplateWithMedia(event) {
+    event.preventDefault();
+    setBusy("wa-media");
+    setNotice("");
+    setError("");
+    try {
+      const payload = {
+        to: waMediaForm.to,
+        template_name: waMediaForm.template_name,
+        media_type: waMediaForm.media_type,
+        media_url: waMediaForm.media_url || undefined,
+        purpose: "marketing",
+        consent: true,
+      };
+      const result = await apiFetch("/v1/integrations/whatsapp/send-template", {
+        method: "POST",
+        body: payload,
+      });
+      setNotice(
+        `Template send ${result.ok ? "ok" : "failed"} (${result.mode})` +
+          (result.media_id ? ` · media ${result.media_id}` : "") +
+          (result.provider_message_id ? ` · msg ${result.provider_message_id}` : ""),
+      );
+    } catch (err) {
+      setError(err.message || "WhatsApp media send failed");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function sendWaSessionMedia(event) {
+    event.preventDefault();
+    setBusy("wa-session-media");
+    setNotice("");
+    setError("");
+    try {
+      const result = await apiFetch("/v1/integrations/whatsapp/send-media", {
+        method: "POST",
+        body: {
+          to: waMediaForm.to,
+          media_type: waMediaForm.media_type,
+          media_url: waMediaForm.media_url || undefined,
+          caption: waMediaForm.caption || undefined,
+          purpose: "transactional",
+          consent: true,
+        },
+      });
+      setNotice(
+        `Media send ${result.ok ? "ok" : "failed"} (${result.mode})` +
+          (result.media_id ? ` · media ${result.media_id}` : "") +
+          (result.provider_message_id ? ` · msg ${result.provider_message_id}` : ""),
+      );
+    } catch (err) {
+      setError(err.message || "WhatsApp session media send failed");
     } finally {
       setBusy("");
     }
@@ -540,6 +606,70 @@ export default function MetaIntegrationsPage() {
               <div>
                 <Button type="submit" disabled={busy === "wa-create"}>
                   Create & submit to Meta
+                </Button>
+              </div>
+            </form>
+            <form
+              className="mt-4 grid gap-3 border-t border-line pt-4 md:grid-cols-2"
+              onSubmit={sendWaTemplateWithMedia}
+            >
+              <p className="md:col-span-2 text-sm font-medium text-ink">
+                Attach image or video on outbound send
+              </p>
+              <Input
+                label="Recipient (E.164)"
+                name="wa-media-to"
+                value={waMediaForm.to}
+                onChange={(e) => setWaMediaForm((prev) => ({ ...prev, to: e.target.value }))}
+              />
+              <Input
+                label="Template name"
+                name="wa-media-template"
+                value={waMediaForm.template_name}
+                onChange={(e) =>
+                  setWaMediaForm((prev) => ({ ...prev, template_name: e.target.value }))
+                }
+              />
+              <label className="text-sm">
+                <span className="mb-1 block text-muted">Media type</span>
+                <select
+                  className="w-full rounded-md border border-line bg-ivory px-3 py-2"
+                  value={waMediaForm.media_type}
+                  onChange={(e) =>
+                    setWaMediaForm((prev) => ({ ...prev, media_type: e.target.value }))
+                  }
+                >
+                  <option value="image">Image</option>
+                  <option value="video">Video</option>
+                </select>
+              </label>
+              <Input
+                label="Media URL"
+                name="wa-media-url"
+                value={waMediaForm.media_url}
+                onChange={(e) =>
+                  setWaMediaForm((prev) => ({ ...prev, media_url: e.target.value }))
+                }
+              />
+              <Input
+                label="Caption (session media)"
+                name="wa-media-caption"
+                value={waMediaForm.caption}
+                onChange={(e) =>
+                  setWaMediaForm((prev) => ({ ...prev, caption: e.target.value }))
+                }
+              />
+              <div className="flex flex-wrap items-end gap-2">
+                <Button type="submit" disabled={busy === "wa-media" || !waMediaForm.to}>
+                  {busy === "wa-media" ? "Sending…" : "Send template + media"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={busy === "wa-session-media" || !waMediaForm.to || !waMediaForm.media_url}
+                  onClick={sendWaSessionMedia}
+                >
+                  {busy === "wa-session-media" ? "Sending…" : "Send session media"}
                 </Button>
               </div>
             </form>

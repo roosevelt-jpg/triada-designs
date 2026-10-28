@@ -144,11 +144,74 @@ class WhatsAppCloudApiTest extends TestCase
         $send = $executor->execute(
             $this->workspace,
             'send_whatsapp_template',
-            ['template_name' => 'jewellery_follow_up', 'to' => '15550109999'],
+            [
+                'template_name' => 'jewellery_follow_up',
+                'to' => '15550109999',
+                'header_media_id' => 'local-media-image-demo',
+                'header_media_type' => 'image',
+            ],
             $context,
             true
         );
         $this->assertTrue($send['ok']);
         $this->assertTrue($send['dry_run'] ?? false);
+        $this->assertTrue($send['result']['media_attached'] ?? false);
+
+        $media = $executor->execute(
+            $this->workspace,
+            'send_whatsapp_media',
+            [
+                'to' => '15550109999',
+                'media_type' => 'image',
+                'media_id' => 'local-media-image-demo',
+                'caption' => 'Aura ring preview',
+            ],
+            $context,
+            true
+        );
+        $this->assertTrue($media['ok']);
+        $this->assertTrue($media['dry_run'] ?? false);
+    }
+
+    public function test_upload_and_send_media_local_sim(): void
+    {
+        $uploaded = $this->withToken($this->token)
+            ->postJson('/api/v1/integrations/whatsapp/upload-media', [
+                'media_type' => 'image',
+                'mime_type' => 'image/jpeg',
+                'media_base64' => base64_encode('fake-jpeg-bytes'),
+                'filename' => 'aura.jpg',
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('mode', 'local_sim')
+            ->json();
+
+        $this->assertNotEmpty($uploaded['media_id'] ?? null);
+
+        $this->withToken($this->token)
+            ->postJson('/api/v1/integrations/whatsapp/send-media', [
+                'to' => '15550102345',
+                'media_id' => $uploaded['media_id'],
+                'media_type' => 'image',
+                'caption' => 'Triada Designs piece',
+                'purpose' => 'transactional',
+                'consent' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $this->withToken($this->token)
+            ->postJson('/api/v1/integrations/whatsapp/send-template', [
+                'to' => '15550102345',
+                'template_name' => 'jewellery_follow_up',
+                'purpose' => 'marketing',
+                'consent' => true,
+                'header_media_id' => $uploaded['media_id'],
+                'header_media_type' => 'image',
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('media_id', $uploaded['media_id']);
     }
 }

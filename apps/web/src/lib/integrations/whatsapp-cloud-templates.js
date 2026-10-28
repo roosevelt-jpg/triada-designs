@@ -9,6 +9,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { integrationRuntimeMode } from "@/lib/integrations/env-presence";
 import { resolveWhatsAppCloudCredentials } from "@/lib/integrations/meta-credentials";
+import { prepareWhatsAppTemplateComponentsWithMedia } from "@/lib/integrations/whatsapp-cloud-media";
 import { getLocalDataDir } from "@/lib/local-data-dir";
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || "v21.0";
@@ -1131,7 +1132,22 @@ export async function seedWhatsAppAutomationTemplates(opts = {}) {
 
 /**
  * Send a template message via Cloud API (or local sim).
- * @param {{ to: string, template_name: string, language?: string, components?: unknown[] }} input
+ * Optional media: media_id / header_media_id, media_url (uploaded), or media_link.
+ * @param {{
+ *   to: string,
+ *   template_name: string,
+ *   language?: string,
+ *   components?: unknown[],
+ *   media_id?: string,
+ *   header_media_id?: string,
+ *   media_url?: string,
+ *   media_link?: string,
+ *   media_type?: string,
+ *   header_media_type?: string,
+ *   mime_type?: string,
+ *   media_base64?: string,
+ *   filename?: string,
+ * }} input
  */
 export async function sendWhatsAppTemplateMessage(input) {
   const creds = await resolveWhatsAppCloudCredentials();
@@ -1142,16 +1158,35 @@ export async function sendWhatsAppTemplateMessage(input) {
     creds.sendReady &&
     integrationRuntimeMode(creds.sendReady) === "live";
 
+  const prepared = await prepareWhatsAppTemplateComponentsWithMedia(
+    Array.isArray(input.components) ? input.components : [],
+    input,
+  );
+  if (!prepared.ok) {
+    return {
+      ok: false,
+      mode: live ? "live" : "local",
+      provider_message_id: null,
+      media_id: null,
+      error: prepared.error || "media_attach_failed",
+      raw: {},
+    };
+  }
+
   if (!live) {
     return {
       ok: true,
       mode: "local",
       provider_message_id: `local-wa-${Date.now().toString(36)}`,
+      media_id: prepared.media_id,
+      media_type: prepared.media_type,
       error: null,
       raw: {
         to: input.to,
         simulated: true,
         template: input.template_name,
+        components: prepared.components,
+        media_attached: Boolean(prepared.media_id || prepared.components?.length),
       },
     };
   }
@@ -1160,8 +1195,8 @@ export async function sendWhatsAppTemplateMessage(input) {
     name: input.template_name,
     language: { code: input.language || "en" },
   };
-  if (Array.isArray(input.components) && input.components.length) {
-    template.components = input.components;
+  if (prepared.components.length) {
+    template.components = prepared.components;
   }
 
   const response = await fetch(
@@ -1189,6 +1224,8 @@ export async function sendWhatsAppTemplateMessage(input) {
       ok: false,
       mode: "live",
       provider_message_id: null,
+      media_id: prepared.media_id,
+      media_type: prepared.media_type,
       error: raw?.error?.message || `HTTP ${response.status}`,
       raw: { error: raw?.error || undefined },
     };
@@ -1199,7 +1236,9 @@ export async function sendWhatsAppTemplateMessage(input) {
     ok: true,
     mode: "live",
     provider_message_id: messages[0]?.id ? String(messages[0].id) : null,
+    media_id: prepared.media_id,
+    media_type: prepared.media_type,
     error: null,
-    raw: { messages },
+    raw: { messages, media_attached: Boolean(prepared.media_id) },
   };
 }

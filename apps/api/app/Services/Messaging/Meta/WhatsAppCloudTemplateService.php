@@ -311,6 +311,7 @@ class WhatsAppCloudTemplateService
             'ok' => (bool) ($result['ok'] ?? false),
             'mode' => (string) ($result['mode'] ?? 'local'),
             'provider_message_id' => $result['provider_message_id'] ?? null,
+            'media_id' => $result['media_id'] ?? null,
             'error' => $result['error_message'] ?? null,
             'raw' => $result['raw'] ?? [],
         ];

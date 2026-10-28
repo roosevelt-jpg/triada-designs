@@ -129,6 +129,8 @@ Route::prefix('v1')->group(function () {
         Route::put('/integrations/whatsapp/templates/{templateId}', [WhatsAppIntegrationController::class, 'updateTemplate']);
         Route::patch('/integrations/whatsapp/templates/{templateId}', [WhatsAppIntegrationController::class, 'updateTemplate']);
         Route::post('/integrations/whatsapp/send-template', [WhatsAppIntegrationController::class, 'sendTemplate']);
+        Route::post('/integrations/whatsapp/upload-media', [WhatsAppIntegrationController::class, 'uploadMedia']);
+        Route::post('/integrations/whatsapp/send-media', [WhatsAppIntegrationController::class, 'sendMedia']);
 
         Route::get('/integrations/shopify/status', [ShopifyIntegrationController::class, 'status']);
         Route::post('/integrations/shopify/connect', [ShopifyIntegrationController::class, 'connect']);

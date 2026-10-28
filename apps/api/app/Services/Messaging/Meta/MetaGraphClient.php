@@ -322,21 +322,187 @@ class MetaGraphClient
     }
 
     /**
+     * Upload media to Meta Cloud API (POST /{phone-number-id}/media).
+     *
+     * @param  array{path?:string,contents?:string,url?:string,mime_type?:string,media_type?:string,filename?:string}  $input
+     * @return array{ok:bool,mode:string,media_id:?string,media_type:string,error:?string,raw:array<string,mixed>}
+     */
+    public function uploadWhatsAppMedia(array $input = []): array
+    {
+        $kind = $this->normalizeWhatsAppMediaKind($input['media_type'] ?? $input['mime_type'] ?? 'image');
+        $mime = (string) ($input['mime_type'] ?? ($kind === 'video' ? 'video/mp4' : 'image/jpeg'));
+        $filename = (string) ($input['filename'] ?? ($kind === 'video' ? 'triada-media.mp4' : 'triada-media.jpg'));
+        $contents = null;
+
+        if (! empty($input['contents'])) {
+            $contents = (string) $input['contents'];
+        } elseif (! empty($input['path']) && is_readable((string) $input['path'])) {
+            $contents = (string) file_get_contents((string) $input['path']);
+        } elseif (! empty($input['url'])) {
+            $fetched = Http::timeout((int) config('integrations.meta.timeout', 15))
+                ->get((string) $input['url']);
+            if (! $fetched->successful()) {
+                return [
+                    'ok' => false,
+                    'mode' => $this->usesWhatsAppSendLocalFallback() ? 'local_sim' : 'live',
+                    'media_id' => null,
+                    'media_type' => $kind,
+                    'error' => 'media_url_fetch_failed',
+                    'raw' => [],
+                ];
+            }
+            $contents = $fetched->body();
+            if (empty($input['mime_type']) && $fetched->header('Content-Type')) {
+                $mime = (string) $fetched->header('Content-Type');
+            }
+        }
+
+        if ($this->usesWhatsAppSendLocalFallback()) {
+            return [
+                'ok' => true,
+                'mode' => 'local_sim',
+                'media_id' => 'local-media-'.$kind.'-'.Str::lower((string) Str::ulid()),
+                'media_type' => $kind,
+                'error' => null,
+                'raw' => [
+                    'simulated' => true,
+                    'filename' => $filename,
+                    'bytes' => $contents !== null ? strlen($contents) : 0,
+                ],
+            ];
+        }
+
+        if ($contents === null || $contents === '') {
+            return [
+                'ok' => false,
+                'mode' => 'live',
+                'media_id' => null,
+                'media_type' => $kind,
+                'error' => 'media_bytes_required',
+                'raw' => [],
+            ];
+        }
+
+        $phoneId = (string) config('integrations.meta.whatsapp_phone_number_id');
+        $token = (string) (config('integrations.meta.whatsapp_access_token') ?: config('integrations.meta.page_access_token'));
+
+        $response = Http::timeout((int) config('integrations.meta.timeout', 30))
+            ->withToken($token)
+            ->attach('file', $contents, $filename)
+            ->post($this->graphUrl('/'.$phoneId.'/media'), [
+                'messaging_product' => 'whatsapp',
+                'type' => $mime,
+            ]);
+
+        if (! $response->successful() || empty($response->json('id'))) {
+            return [
+                'ok' => false,
+                'mode' => 'live',
+                'media_id' => null,
+                'media_type' => $kind,
+                'error' => (string) ($response->json('error.message') ?? ('HTTP '.$response->status())),
+                'raw' => $response->json() ?? [],
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'mode' => 'live',
+            'media_id' => (string) $response->json('id'),
+            'media_type' => $kind,
+            'error' => null,
+            'raw' => ['id' => $response->json('id')],
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $options
-     * @return array{ok:bool,mode:string,provider_message_id:?string,raw:array<string,mixed>,error_code?:string,error_message?:string}
+     * @return list<array<string, mixed>>
+     */
+    public function mergeWhatsAppTemplateMediaComponents(array $components, array $options = []): array
+    {
+        $mediaId = (string) ($options['media_id'] ?? $options['header_media_id'] ?? '');
+        $mediaLink = (string) ($options['media_link'] ?? $options['header_media_link'] ?? $options['media_url'] ?? '');
+        if ($mediaId === '' && $mediaLink === '') {
+            return $components;
+        }
+
+        $kind = $this->normalizeWhatsAppMediaKind(
+            $options['media_type'] ?? $options['header_media_type'] ?? 'image'
+        );
+        $payload = $mediaId !== '' ? ['id' => $mediaId] : ['link' => $mediaLink];
+        $header = [
+            'type' => 'HEADER',
+            'parameters' => [[
+                'type' => $kind,
+                $kind => $payload,
+            ]],
+        ];
+
+        $replaced = false;
+        $next = [];
+        foreach ($components as $component) {
+            if (strtoupper((string) ($component['type'] ?? '')) === 'HEADER') {
+                $next[] = $header;
+                $replaced = true;
+            } else {
+                $next[] = $component;
+            }
+        }
+
+        return $replaced ? $next : array_merge([$header], $next);
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     * @return array{ok:bool,mode:string,provider_message_id:?string,media_id:?string,raw:array<string,mixed>,error_code?:string,error_message?:string}
      */
     public function sendWhatsApp(string $to, string $body, array $options = []): array
     {
+        $components = is_array($options['components'] ?? null) ? $options['components'] : [];
+        $resolvedMediaId = (string) ($options['media_id'] ?? $options['header_media_id'] ?? '');
+        $mediaUrl = (string) ($options['media_url'] ?? $options['header_media_url'] ?? '');
+        $mediaLink = (string) ($options['media_link'] ?? $options['header_media_link'] ?? '');
+
+        if ($resolvedMediaId === '' && $mediaUrl !== '') {
+            $uploaded = $this->uploadWhatsAppMedia([
+                'url' => $mediaUrl,
+                'mime_type' => $options['mime_type'] ?? null,
+                'media_type' => $options['media_type'] ?? $options['header_media_type'] ?? 'image',
+                'filename' => $options['filename'] ?? null,
+            ]);
+            if (! ($uploaded['ok'] ?? false)) {
+                return [
+                    'ok' => false,
+                    'mode' => (string) ($uploaded['mode'] ?? 'live'),
+                    'provider_message_id' => null,
+                    'media_id' => null,
+                    'error_code' => 'media_upload_failed',
+                    'error_message' => (string) ($uploaded['error'] ?? 'media_upload_failed'),
+                    'raw' => $uploaded['raw'] ?? [],
+                ];
+            }
+            $resolvedMediaId = (string) ($uploaded['media_id'] ?? '');
+            $options['media_type'] = $uploaded['media_type'] ?? ($options['media_type'] ?? 'image');
+        }
+
+        $components = $this->mergeWhatsAppTemplateMediaComponents($components, array_merge($options, [
+            'media_id' => $resolvedMediaId !== '' ? $resolvedMediaId : null,
+            'media_link' => $mediaLink !== '' ? $mediaLink : null,
+        ]));
+
         if ($this->usesWhatsAppSendLocalFallback()) {
             return [
                 'ok' => true,
                 'mode' => 'local',
                 'provider_message_id' => 'local-wa-'.Str::ulid(),
+                'media_id' => $resolvedMediaId !== '' ? $resolvedMediaId : null,
                 'raw' => [
                     'to' => $to,
                     'simulated' => true,
                     'template' => $options['template_name'] ?? null,
-                    'components' => $options['components'] ?? [],
+                    'components' => $components,
+                    'media_attached' => $resolvedMediaId !== '' || $mediaLink !== '',
                 ],
             ];
         }
@@ -356,14 +522,28 @@ class MetaGraphClient
                 'name' => $options['template_name'],
                 'language' => ['code' => $options['language'] ?? 'en'],
             ];
-            if (! empty($options['components']) && is_array($options['components'])) {
-                $template['components'] = $options['components'];
+            if ($components !== []) {
+                $template['components'] = $components;
             }
             $payload = [
                 'messaging_product' => 'whatsapp',
                 'to' => $to,
                 'type' => 'template',
                 'template' => $template,
+            ];
+        } elseif (! empty($options['media_message']) || ($resolvedMediaId !== '' || $mediaLink !== '')) {
+            $kind = $this->normalizeWhatsAppMediaKind($options['media_type'] ?? 'image');
+            $mediaPayload = $resolvedMediaId !== ''
+                ? ['id' => $resolvedMediaId]
+                : ['link' => $mediaLink !== '' ? $mediaLink : $mediaUrl];
+            if (! empty($options['caption'])) {
+                $mediaPayload['caption'] = (string) $options['caption'];
+            }
+            $payload = [
+                'messaging_product' => 'whatsapp',
+                'to' => $to,
+                'type' => $kind,
+                $kind => $mediaPayload,
             ];
         }
 
@@ -376,6 +556,7 @@ class MetaGraphClient
                 'ok' => false,
                 'mode' => 'live',
                 'provider_message_id' => null,
+                'media_id' => $resolvedMediaId !== '' ? $resolvedMediaId : null,
                 'error_code' => 'graph_send_failed',
                 'error_message' => 'HTTP '.$response->status(),
                 'raw' => $response->json() ?? [],
@@ -388,8 +569,22 @@ class MetaGraphClient
             'ok' => true,
             'mode' => 'live',
             'provider_message_id' => (string) ($messages[0]['id'] ?? Str::ulid()),
+            'media_id' => $resolvedMediaId !== '' ? $resolvedMediaId : null,
             'raw' => $response->json() ?? [],
         ];
+    }
+
+    protected function normalizeWhatsAppMediaKind(mixed $value): string
+    {
+        $raw = strtolower(trim((string) $value));
+        if ($raw === '' || str_starts_with($raw, 'image') || in_array($raw, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+            return 'image';
+        }
+        if (str_starts_with($raw, 'video') || in_array($raw, ['mp4', '3gp'], true)) {
+            return 'video';
+        }
+
+        return 'image';
     }
 
     /**

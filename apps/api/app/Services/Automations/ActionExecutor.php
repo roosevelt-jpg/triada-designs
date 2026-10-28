@@ -14,6 +14,7 @@ use App\Services\Creative\CreativeMediaService;
 use App\Services\CRM\Zoho\ZohoCrmClient;
 use App\Services\Messaging\DTOs\OutboundMessage;
 use App\Services\Messaging\Meta\MetaChannelRegistry;
+use App\Services\Messaging\Meta\MetaGraphClient;
 use App\Services\Messaging\Meta\OutboundEligibility;
 use App\Services\Messaging\Meta\WhatsAppCloudTemplateService;
 use Illuminate\Support\Str;
@@ -56,6 +57,7 @@ class ActionExecutor
             'sync_shopify' => $this->syncShopify($workspace, $config, $context, $dryRun),
             'publish_channel_template' => $this->publishChannelTemplate($workspace, $config, $context, $dryRun),
             'send_whatsapp_template' => $this->sendWhatsAppTemplate($workspace, $config, $context, $dryRun),
+            'send_whatsapp_media' => $this->sendWhatsAppMedia($workspace, $config, $context, $dryRun),
             'check_whatsapp_opt_out' => $this->checkWhatsAppOptOut($config, $context, $dryRun),
             'whatsapp_window_follow_up' => $this->whatsappWindowFollowUp($workspace, $config, $context, $dryRun),
             'generate_content_image' => $this->generateContentCreative($workspace, 'image', $config, $context, $dryRun),
@@ -618,6 +620,17 @@ class ActionExecutor
             return ['ok' => false, 'error' => 'send_whatsapp_template requires recipient (to / external_user_id)'];
         }
 
+        $mediaOptions = [
+            'media_id' => $config['media_id'] ?? $config['header_media_id'] ?? $context['media_id'] ?? null,
+            'header_media_id' => $config['header_media_id'] ?? $config['media_id'] ?? null,
+            'media_url' => $config['media_url'] ?? $config['header_media_url'] ?? $context['media_url'] ?? null,
+            'media_link' => $config['media_link'] ?? $config['header_media_link'] ?? null,
+            'media_type' => $config['media_type'] ?? $config['header_media_type'] ?? $context['media_type'] ?? null,
+            'header_media_type' => $config['header_media_type'] ?? $config['media_type'] ?? null,
+            'mime_type' => $config['mime_type'] ?? null,
+            'filename' => $config['filename'] ?? null,
+        ];
+
         if ($dryRun) {
             return [
                 'ok' => true,
@@ -625,15 +638,18 @@ class ActionExecutor
                 'result' => [
                     'would_send_template' => $templateName,
                     'to' => $to,
+                    'media_attached' => filled($mediaOptions['media_id'] ?? null)
+                        || filled($mediaOptions['media_url'] ?? null)
+                        || filled($mediaOptions['media_link'] ?? null),
                     'eligibility' => $check,
                 ],
             ];
         }
 
         $wa = app(WhatsAppCloudTemplateService::class);
-        $sent = $wa->sendTemplate($to, $templateName, $language, [
+        $sent = $wa->sendTemplate($to, $templateName, $language, array_merge([
             'components' => $config['components'] ?? [],
-        ]);
+        ], $mediaOptions));
 
         $context['whatsapp_template_send'] = $sent;
 
@@ -641,6 +657,72 @@ class ActionExecutor
             'ok' => (bool) ($sent['ok'] ?? false),
             'result' => array_merge($sent, ['eligibility' => $check]),
             'error' => $sent['error'] ?? null,
+        ];
+    }
+
+    /**
+     * Send an in-session WhatsApp image/video (Cloud API media_id or upload URL).
+     *
+     * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>  $context
+     * @return array{ok:bool,dry_run?:bool,result?:array<string,mixed>,error?:string,skipped?:bool}
+     */
+    protected function sendWhatsAppMedia(Workspace $workspace, array $config, array &$context, bool $dryRun): array
+    {
+        if (($context['marketing_opt_out'] ?? false) === true && ($config['purpose'] ?? 'marketing') === 'marketing') {
+            return [
+                'ok' => true,
+                'skipped' => true,
+                'result' => ['reason' => 'marketing_opt_out'],
+            ];
+        }
+
+        $to = (string) ($config['to'] ?? $context['external_user_id'] ?? $context['wa_id'] ?? '');
+        if ($to === '') {
+            return ['ok' => false, 'error' => 'send_whatsapp_media requires recipient (to / external_user_id)'];
+        }
+
+        $mediaId = (string) ($config['media_id'] ?? $context['media_id'] ?? '');
+        $mediaUrl = (string) ($config['media_url'] ?? $context['media_url'] ?? '');
+        $mediaLink = (string) ($config['media_link'] ?? '');
+        $mediaType = (string) ($config['media_type'] ?? $context['media_type'] ?? 'image');
+
+        if ($mediaId === '' && $mediaUrl === '' && $mediaLink === '') {
+            return ['ok' => false, 'error' => 'send_whatsapp_media requires media_id, media_url, or media_link'];
+        }
+
+        if ($dryRun) {
+            return [
+                'ok' => true,
+                'dry_run' => true,
+                'result' => [
+                    'would_send_media' => $mediaType,
+                    'to' => $to,
+                    'media_id' => $mediaId !== '' ? $mediaId : null,
+                    'media_url' => $mediaUrl !== '' ? $mediaUrl : null,
+                ],
+            ];
+        }
+
+        /** @var MetaGraphClient $graph */
+        $graph = app(MetaGraphClient::class);
+        $sent = $graph->sendWhatsApp($to, '', [
+            'media_message' => true,
+            'media_id' => $mediaId !== '' ? $mediaId : null,
+            'media_url' => $mediaUrl !== '' ? $mediaUrl : null,
+            'media_link' => $mediaLink !== '' ? $mediaLink : null,
+            'media_type' => $mediaType,
+            'mime_type' => $config['mime_type'] ?? null,
+            'filename' => $config['filename'] ?? null,
+            'caption' => $config['caption'] ?? $context['caption'] ?? null,
+        ]);
+
+        $context['whatsapp_media_send'] = $sent;
+
+        return [
+            'ok' => (bool) ($sent['ok'] ?? false),
+            'result' => $sent,
+            'error' => $sent['error_message'] ?? null,
         ];
     }
 
