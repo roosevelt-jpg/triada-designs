@@ -8,11 +8,15 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import { creativeModeLabel } from "@/lib/integrations/brand-labels";
 import { nowDate, syncSystemTime } from "@/lib/system-time";
 
 function modeTone(mode) {
-  if (mode === "live") return "success";
-  if (mode === "local_sim" || mode === "local") return "warning";
+  const label = creativeModeLabel(mode);
+  if (label === "Live AI" || mode === "live" || mode === "gemini" || mode === "anthropic") {
+    return "success";
+  }
+  if (mode === "local_sim" || mode === "local" || mode === "local_seed") return "warning";
   return "neutral";
 }
 
@@ -138,7 +142,7 @@ export default function ContentPage() {
         },
       });
       setNotice(
-        `Image generated (${result.mode}). Status badge shows local_sim vs live — approval still required before publish.`
+        `Image generated (${creativeModeLabel(result.mode)}). Approval is still required before publish.`
       );
       await refreshMedia(item.id);
     } catch (err) {
@@ -229,7 +233,7 @@ export default function ContentPage() {
       });
       const variantCount = result.variants?.variants?.length || result.variants?.length || 0;
       setNotice(
-        `Full creative pack ready (${result.mode}): image + ${variantCount} variants + video + animation.`
+        `Full creative pack ready (${creativeModeLabel(result.mode)}): image + ${variantCount} variants + video + animation.`
       );
       await refreshMedia(item.id);
     } catch (err) {
@@ -255,11 +259,16 @@ export default function ContentPage() {
         <section className="mb-6 surface-card space-y-3 p-5">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="ops-section-title">Creative AI</h2>
-            <Badge tone={modeTone(imageMode)}>Image: {imageMode}</Badge>
-            <Badge tone={modeTone(videoMode)}>Video/anim: {videoMode}</Badge>
-            <Badge tone="neutral">Resize: {creativeStatus.resize_engine}</Badge>
+            <Badge tone={modeTone(imageMode)}>
+              Image: {creativeStatus.image?.mode_label || creativeModeLabel(imageMode)}
+            </Badge>
+            <Badge tone={modeTone(videoMode)}>
+              Video: {creativeStatus.video?.mode_label || creativeModeLabel(videoMode)}
+            </Badge>
           </div>
-          <p className="max-w-3xl text-sm text-muted">{creativeStatus.honesty}</p>
+          <p className="max-w-3xl text-sm text-muted">
+            {creativeStatus.summary || creativeStatus.honesty}
+          </p>
           <p className="max-w-3xl text-sm text-muted">
             {creativeStatus.image?.message} {creativeStatus.video?.message}
           </p>

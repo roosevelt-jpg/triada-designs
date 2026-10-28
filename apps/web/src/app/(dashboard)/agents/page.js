@@ -9,6 +9,10 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import {
+  aiStatusSummary,
+  connectionLabel,
+} from "@/lib/integrations/brand-labels";
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState([]);
@@ -112,14 +116,23 @@ export default function AgentsPage() {
     }
   }
 
-  const providerLabel = llm?.configured_provider || llm?.provider || "—";
   const statusTone =
-    llm?.status === "live" ? "success" : llm?.status === "awaiting_credentials" ? "warning" : "neutral";
+    llm?.status === "live" || llm?.has_credentials
+      ? "success"
+      : llm?.status === "awaiting_credentials"
+        ? "warning"
+        : "neutral";
+  const statusLabel =
+    llm?.status_label ||
+    connectionLabel(llm?.status || (llm?.live ? "live" : "local"), {
+      live: llm?.status === "live",
+      hasCredentials: llm?.has_credentials,
+    });
 
   return (
     <DashboardShell
       title="AI agents"
-      description="Support, sales, marketing, content, lead qualification, and sales ops. Add Anthropic API key on Integrations to enable live agents."
+      description="Support, sales, marketing, content, lead qualification, and sales ops. Connect Claude on Integrations to enable live agents."
     >
       {loading ? (
         <div className="space-y-3">
@@ -132,41 +145,21 @@ export default function AgentsPage() {
       {llm ? (
         <div className="mb-6 space-y-3">
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Badge tone={statusTone}>{llm.status || (llm.live ? "live" : "local")}</Badge>
-            <Badge tone="brand">provider={providerLabel}</Badge>
-            <span className="text-muted">
-              active={llm.provider} · {llm.model}
-            </span>
+            <Badge tone={statusTone}>{statusLabel}</Badge>
           </div>
-          <p className="max-w-3xl text-sm text-muted">{llm.honesty}</p>
+          <p className="max-w-3xl text-sm text-muted">
+            {llm.summary || aiStatusSummary(llm)}
+          </p>
           {llm.status === "awaiting_credentials" ? (
             <div className="surface-card max-w-3xl space-y-2 p-4 text-sm">
-              <p className="font-medium text-ink">
-                {providerLabel === "gemini"
-                  ? "Add GEMINI_API_KEY to enable live agents"
-                  : "Add Anthropic API key to enable live agents"}
-              </p>
+              <p className="font-medium text-ink">Connect Claude to enable live agents</p>
               <p className="text-muted">
-                Prefer pasting Anthropic on{" "}
+                Paste your API key on{" "}
                 <a className="text-brown-dark underline" href="/integrations">
                   Integrations
                 </a>
-                , or set env in <code className="text-ink">apps/api/.env</code>:
+                . Until then, agents stay on local assistance.
               </p>
-              <pre className="overflow-x-auto rounded-md border border-line bg-stone/50 p-3 text-xs text-ink">
-{providerLabel === "gemini"
-  ? `LLM_PROVIDER=gemini
-GEMINI_API_KEY=your-key-here
-GEMINI_MODEL=gemini-2.0-flash`
-  : `LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=your-key-here
-ANTHROPIC_MODEL=claude-sonnet-4-20250514`}
-              </pre>
-              <p className="text-muted">
-                Restart the API after env changes. Without credentials status stays{" "}
-                <code className="text-ink">awaiting_credentials</code>.
-              </p>
-              {llm.env_hint ? <p className="text-xs text-muted">{llm.env_hint}</p> : null}
             </div>
           ) : null}
         </div>

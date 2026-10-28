@@ -10,6 +10,22 @@ import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
+import {
+  aiStatusSummary,
+  connectionLabel,
+  modelNickname,
+} from "@/lib/integrations/brand-labels";
+
+const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
+
+function toneForStatus(status, hasCredentials) {
+  if (hasCredentials || status === "live" || status === "connected" || status === "healthy") {
+    return "success";
+  }
+  if (status === "awaiting_credentials") return "warning";
+  if (status === "error") return "danger";
+  return "neutral";
+}
 
 export default function IntegrationsPage() {
   const [health, setHealth] = useState(null);
@@ -19,7 +35,7 @@ export default function IntegrationsPage() {
   const [draftTitle, setDraftTitle] = useState("Quiet materials, considered care");
   const [draftStatus, setDraftStatus] = useState("");
   const [anthropicKey, setAnthropicKey] = useState("");
-  const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4-20250514");
+  const [anthropicModel, setAnthropicModel] = useState(DEFAULT_ANTHROPIC_MODEL);
   const [anthropicStatus, setAnthropicStatus] = useState("");
   const [zohoClientId, setZohoClientId] = useState("");
   const [zohoClientSecret, setZohoClientSecret] = useState("");
@@ -63,7 +79,7 @@ export default function IntegrationsPage() {
           content: "<p>Editorial draft awaiting human review before publish.</p>",
         },
       });
-      setDraftStatus(`Draft created (${result.source || "wordpress"}): ${result.id}`);
+      setDraftStatus(`Draft created: ${result.id}`);
     } catch (err) {
       setDraftStatus(err.message);
     }
@@ -83,8 +99,8 @@ export default function IntegrationsPage() {
       setAnthropicKey("");
       setAnthropicStatus(
         result.anthropic?.has_credentials
-          ? "Anthropic key stored. Agents use Claude; creative intelligence follows Anthropic path. local_sim until keyed was cleared."
-          : result.anthropic?.honesty || "Saved."
+          ? "Claude connected. Agents and creative intelligence will use this key."
+          : result.anthropic?.summary || result.anthropic?.honesty || "Saved."
       );
       load();
     } catch (err) {
@@ -96,7 +112,7 @@ export default function IntegrationsPage() {
     setAnthropicStatus("");
     try {
       await apiFetch("/v1/integrations/anthropic/clear", { method: "POST" });
-      setAnthropicStatus("Cleared Integrations-stored Anthropic key (env key unaffected).");
+      setAnthropicStatus("Stored Claude key cleared.");
       load();
     } catch (err) {
       setAnthropicStatus(err.message);
@@ -122,9 +138,9 @@ export default function IntegrationsPage() {
       setZohoStatus(
         result.zoho?.has_credentials
           ? result.zoho?.has_books_org
-            ? "Zoho OAuth + Books organization saved. CRM sync + invoice/PDF path ready when INTEGRATION_MODE=live."
-            : "Zoho OAuth saved. Add Books organization ID for invoice PDF / UAE e-invoice. local_sim until live."
-          : result.zoho?.honesty || "Saved."
+            ? "Zoho CRM and Books organization saved."
+            : "Zoho CRM saved. Add a Books organization ID for invoices when ready."
+          : result.zoho?.summary || result.zoho?.honesty || "Saved."
       );
       load();
     } catch (err) {
@@ -137,17 +153,29 @@ export default function IntegrationsPage() {
     try {
       await apiFetch("/v1/integrations/zoho/clear", { method: "POST" });
       setZohoOrgId("");
-      setZohoStatus("Cleared Integrations-stored Zoho credentials (env ZOHO_* unaffected).");
+      setZohoStatus("Stored Zoho credentials cleared.");
       load();
     } catch (err) {
       setZohoStatus(err.message);
     }
   }
 
+  const llmLabel =
+    health?.llm?.status_label ||
+    connectionLabel(health?.llm?.status, {
+      live: health?.llm?.status === "live",
+      hasCredentials: health?.llm?.has_credentials,
+    });
+  const anthropicLabel =
+    health?.anthropic?.status_label ||
+    connectionLabel(health?.anthropic?.status, {
+      hasCredentials: health?.anthropic?.has_credentials,
+    });
+
   return (
     <DashboardShell
       title="Integrations"
-      description="Anthropic (primary AI), WordPress, Zoho, Meta, Shopify, and messaging channels. Local seed / local_sim without credentials; never shown as healthy without tokens."
+      description="Connect Claude, Meta, Shopify, email, and sales channels. Status reflects credentials on this host — never shown as healthy without tokens."
       actions={
         <div className="flex flex-wrap gap-2">
           <Link href="/integrations/meta">
@@ -182,7 +210,9 @@ export default function IntegrationsPage() {
       {!loading && !error ? (
         <div className="space-y-5">
           <div className="flex flex-wrap items-center gap-3">
-            <Badge tone="brand">Mode: {health?.mode || "local"}</Badge>
+            <Badge tone={health?.mode === "live" ? "success" : "brand"}>
+              {health?.mode_label || (health?.mode === "live" ? "Live" : "Local")}
+            </Badge>
             <Button size="sm" variant="secondary" onClick={load}>
               Re-check health
             </Button>
@@ -192,30 +222,19 @@ export default function IntegrationsPage() {
             <section className="surface-card overflow-hidden">
               <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
                 <div>
-                  <h2 className="ops-section-title">Active LLM</h2>
+                  <h2 className="ops-section-title">AI</h2>
                   <p className="mt-1 text-sm text-muted">
-                    Runtime provider from LLM_PROVIDER / credentials. Gemini is env-only (
-                    <code className="text-ink">GEMINI_API_KEY</code>); Anthropic can also be pasted below.
+                    Claude is primary for agents. Gemini powers creative tools when keyed on the host.
                   </p>
                 </div>
                 <Badge
-                  tone={
-                    health.llm.status === "live" || health.llm.has_credentials
-                      ? "success"
-                      : health.llm.status === "awaiting_credentials"
-                        ? "warning"
-                        : "neutral"
-                  }
+                  tone={toneForStatus(health.llm.status, health.llm.has_credentials)}
                 >
-                  {health.llm.status || "local"}
+                  {llmLabel}
                 </Badge>
               </div>
               <div className="space-y-1 px-5 py-4 text-sm text-muted">
-                <p>
-                  configured={health.llm.configured_provider} · active={health.llm.provider} ·{" "}
-                  {health.llm.model}
-                </p>
-                <p>{health.llm.honesty}</p>
+                <p>{health.llm.summary || aiStatusSummary(health.llm)}</p>
               </div>
             </section>
           ) : null}
@@ -223,41 +242,49 @@ export default function IntegrationsPage() {
           <section className="surface-card overflow-hidden">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
               <div>
-                <h2 className="ops-section-title">Anthropic (Claude) — primary AI</h2>
+                <h2 className="ops-section-title">Claude — primary AI</h2>
                 <p className="mt-1 text-sm text-muted">
-                  Paste your API key here for agents and creative intelligence. Without a key the stack stays on
-                  local_sim / local heuristic — never reports live Claude success.
+                  Paste your API key for agents and creative intelligence. Without a key, Triada stays on local
+                  assistance and never reports live Claude success.
                 </p>
               </div>
               <Badge
-                tone={
-                  health?.anthropic?.has_credentials
-                    ? "success"
-                    : health?.anthropic?.status === "awaiting_credentials"
-                      ? "neutral"
-                      : "neutral"
-                }
+                tone={toneForStatus(
+                  health?.anthropic?.status,
+                  health?.anthropic?.has_credentials,
+                )}
               >
-                {health?.anthropic?.status || "awaiting_credentials"}
+                {anthropicLabel}
               </Badge>
             </div>
             <div className="space-y-3 px-5 py-4">
-              <p className="text-sm text-muted">{health?.anthropic?.honesty}</p>
+              <p className="text-sm text-muted">
+                {health?.anthropic?.summary ||
+                  (health?.anthropic?.has_credentials
+                    ? "Claude is connected."
+                    : "Add your Claude API key to enable live agents.")}
+              </p>
               <p className="text-xs text-muted">
-                Model: {health?.anthropic?.model || anthropicModel} · Provider default: anthropic
+                Model preference:{" "}
+                {health?.anthropic?.model_label ||
+                  modelNickname(health?.anthropic?.model || anthropicModel)}
               </p>
               <form className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-end" onSubmit={saveAnthropic}>
                 <Input
-                  label="Anthropic API key"
+                  label="Claude API key"
                   name="anthropic_api_key"
                   type="password"
                   autoComplete="off"
-                  placeholder={health?.anthropic?.has_credentials ? "•••• stored — paste to replace" : "sk-ant-…"}
+                  placeholder={
+                    health?.anthropic?.has_credentials
+                      ? "•••• stored — paste to replace"
+                      : "Paste API key"
+                  }
                   value={anthropicKey}
                   onChange={(e) => setAnthropicKey(e.target.value)}
                 />
                 <Input
-                  label="Model"
+                  label="Model preference"
                   name="anthropic_model"
                   value={anthropicModel}
                   onChange={(e) => setAnthropicModel(e.target.value)}
@@ -274,6 +301,46 @@ export default function IntegrationsPage() {
               {anthropicStatus ? <p className="text-sm text-muted">{anthropicStatus}</p> : null}
             </div>
           </section>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {[
+              {
+                key: "gemini",
+                title: "Gemini",
+                row: health?.gemini,
+                fallback: "Creative AI on this host.",
+              },
+              {
+                key: "resend",
+                title: "Email",
+                row: health?.resend,
+                fallback: "Transactional email delivery.",
+              },
+              {
+                key: "supabase",
+                title: "Supabase",
+                row: health?.supabase,
+                fallback: "Auth and data for the ops dashboard.",
+              },
+            ].map((card) => (
+              <section key={card.key} className="surface-card px-5 py-4">
+                <div className="flex items-start justify-between gap-2">
+                  <h2 className="ops-section-title">{card.title}</h2>
+                  <Badge
+                    tone={toneForStatus(card.row?.status, card.row?.has_credentials)}
+                  >
+                    {card.row?.status_label ||
+                      connectionLabel(card.row?.status, {
+                        hasCredentials: card.row?.has_credentials,
+                      })}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-sm text-muted">
+                  {card.row?.summary || card.fallback}
+                </p>
+              </section>
+            ))}
+          </div>
 
           {health?.meta ? (
             <section className="surface-card overflow-hidden">
@@ -299,15 +366,14 @@ export default function IntegrationsPage() {
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-medium capitalize text-ink">{key}</p>
                         <Badge
-                          tone={
-                            ch?.health?.status === "healthy"
-                              ? "success"
-                              : ch?.health?.status === "error"
-                                ? "danger"
-                                : "neutral"
-                          }
+                          tone={toneForStatus(
+                            ch?.health?.status || ch?.status,
+                            ch?.status === "connected",
+                          )}
                         >
-                          {ch?.status || ch?.health?.status || "—"}
+                          {ch?.status_label ||
+                            ch?.health?.status_label ||
+                            connectionLabel(ch?.status || ch?.health?.status)}
                         </Badge>
                       </div>
                       <p className="mt-2 text-xs leading-relaxed text-muted">
@@ -329,17 +395,9 @@ export default function IntegrationsPage() {
                     CMS knowledge source and draft publishing path via REST API.
                   </p>
                 </div>
-                <Badge
-                  tone={
-                    health?.wordpress?.status === "healthy"
-                      ? "success"
-                      : health?.wordpress?.status === "seeded" ||
-                          health?.wordpress?.status === "local"
-                        ? "neutral"
-                        : "danger"
-                  }
-                >
-                  {health?.wordpress?.status}
+                <Badge tone={toneForStatus(health?.wordpress?.status)}>
+                  {health?.wordpress?.status_label ||
+                    connectionLabel(health?.wordpress?.status)}
                 </Badge>
               </div>
               <p className="mt-3 text-sm text-muted">{health?.wordpress?.message}</p>
@@ -373,22 +431,11 @@ export default function IntegrationsPage() {
                 <div>
                   <h2 className="ops-section-title">Zoho CRM + Books</h2>
                   <p className="mt-1 text-sm text-muted">
-                    CRM for contacts/leads. Zoho Books (not CRM alone) for invoice PDF and UAE
-                    e-invoice. local_sim until keyed.
+                    CRM for contacts and leads. Zoho Books for invoice PDF and UAE e-invoice.
                   </p>
                 </div>
-                <Badge
-                  tone={
-                    health?.zoho?.status === "healthy"
-                      ? "success"
-                      : health?.zoho?.status === "seeded" ||
-                          health?.zoho?.status === "local" ||
-                          health?.zoho?.status === "awaiting_credentials"
-                        ? "neutral"
-                        : "danger"
-                  }
-                >
-                  {health?.zoho?.status}
+                <Badge tone={toneForStatus(health?.zoho?.status, health?.zoho?.credentials?.has_credentials)}>
+                  {health?.zoho?.status_label || connectionLabel(health?.zoho?.status)}
                 </Badge>
               </div>
               <p className="mt-3 text-sm text-muted">{health?.zoho?.message}</p>
@@ -401,7 +448,11 @@ export default function IntegrationsPage() {
                   name="zoho_client_id"
                   type="password"
                   autoComplete="off"
-                  placeholder={health?.zoho?.credentials?.has_credentials ? "•••• stored — paste to replace" : "Zoho API console client ID"}
+                  placeholder={
+                    health?.zoho?.credentials?.has_credentials
+                      ? "•••• stored — paste to replace"
+                      : "Zoho API console client ID"
+                  }
                   value={zohoClientId}
                   onChange={(e) => setZohoClientId(e.target.value)}
                 />
@@ -468,20 +519,9 @@ export default function IntegrationsPage() {
                 >
                   <div>
                     <p className="font-medium text-ink">{item.display_name}</p>
-                    <p className="text-sm capitalize text-muted">{item.provider}</p>
                   </div>
-                  <Badge
-                    tone={
-                      item.status === "connected"
-                        ? "success"
-                        : item.status === "seeded" || item.status === "local"
-                          ? "neutral"
-                          : item.status === "error"
-                            ? "danger"
-                            : "neutral"
-                    }
-                  >
-                    {item.status}
+                  <Badge tone={toneForStatus(item.status)}>
+                    {item.status_label || connectionLabel(item.status)}
                   </Badge>
                 </div>
               ))}

@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import { connectionLabel } from "@/lib/integrations/brand-labels";
 
 /** Jewellery multi-channel list — credential paste + local simulator until live tokens. */
 const CHANNELS = [
@@ -77,7 +78,7 @@ export default function ChannelsIntegrationsPage() {
       setStatus(data);
       setTokens((prev) => ({ ...prev, [channel]: "" }));
       setNotice(
-        `${channel} saved. Status stays awaiting_credentials / local until live tokens + INTEGRATION_MODE=live — never faked as healthy live.`
+        `${channel} saved. Connection stays local until live tokens are present on the host.`
       );
     } catch (err) {
       setError(err.message);
@@ -141,7 +142,9 @@ export default function ChannelsIntegrationsPage() {
 
       {!loading && status ? (
         <div className="space-y-6">
-          <p className="text-sm text-muted">{status.honesty}</p>
+          {status.summary || status.honesty ? (
+            <p className="text-sm text-muted">{status.summary || status.honesty}</p>
+          ) : null}
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {CHANNELS.map((ch) => {
               const row = status.channels?.[ch.key] || {};
@@ -149,8 +152,9 @@ export default function ChannelsIntegrationsPage() {
                 <Card key={ch.key} className="p-5">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="font-display text-2xl">{ch.title}</h2>
-                    <Badge tone={tone(row.status)}>{row.status || "disconnected"}</Badge>
-                    <Badge tone="neutral">{row.mode || "local"}</Badge>
+                    <Badge tone={tone(row.status)}>
+                      {row.status_label || connectionLabel(row.status || "disconnected")}
+                    </Badge>
                   </div>
                   <p className="mt-2 text-xs text-muted">Webhook: {row.webhook_path}</p>
                   {row.hub && row.hub !== "/integrations/channels" ? (

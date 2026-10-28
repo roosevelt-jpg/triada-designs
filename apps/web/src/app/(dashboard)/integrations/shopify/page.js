@@ -60,8 +60,8 @@ export default function ShopifyIntegrationsPage() {
       setAccessToken("");
       setNotice(
         accessToken
-          ? "Token stored encrypted. Status stays awaiting_credentials until INTEGRATION_MODE=live."
-          : "Shopify record saved as awaiting_credentials (no token pasted)."
+          ? "Token stored. Live sync starts once the host is in live mode with this credential."
+          : "Shopify record saved. Add an Admin API token to connect."
       );
     } catch (err) {
       setError(err.message);
@@ -121,14 +121,23 @@ export default function ShopifyIntegrationsPage() {
           <Card className="p-5">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-display text-2xl">Connection</h2>
-              <Badge tone={tone(status.status)}>{status.status}</Badge>
-              <Badge tone="neutral">{status.mode}</Badge>
+              <Badge tone={tone(status.status)}>
+                {status.status_label ||
+                  (status.status === "connected" || status.connected
+                    ? "Connected"
+                    : status.status === "awaiting_credentials"
+                      ? "Needs setup"
+                      : status.status === "local" || status.mode === "local"
+                        ? "Local"
+                        : "Needs setup")}
+              </Badge>
             </div>
-            <p className="mt-2 text-sm text-muted">{status.honesty}</p>
-            <p className="mt-1 text-sm text-muted">{status.health?.message}</p>
+            <p className="mt-2 text-sm text-muted">
+              {status.summary || status.honesty || status.health?.message}
+            </p>
             <p className="mt-2 text-xs text-muted">
-              Products in workspace: {status.product_count ?? 0} · Token present:{" "}
-              {status.has_access_token ? "yes" : "no"}
+              Products in workspace: {status.product_count ?? 0}
+              {status.has_access_token ? " · Token on file" : ""}
             </p>
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">

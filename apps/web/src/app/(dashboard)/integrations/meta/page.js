@@ -11,6 +11,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import { connectionLabel } from "@/lib/integrations/brand-labels";
 
 const CHANNELS = [
   {
@@ -108,8 +109,8 @@ export default function MetaIntegrationsPage() {
       setStatus(data);
       setNotice(
         tokens[channel]
-          ? `${channel} token stored. Live Graph requires INTEGRATION_MODE=live.`
-          : `${channel} connected for dashboard ops (awaiting credentials for live Graph).`
+          ? `${channel} token stored. Live Graph messaging starts once the host is in live mode.`
+          : `${channel} connected for dashboard ops. Add live Graph credentials when ready.`
       );
       setTokens((prev) => ({ ...prev, [channel]: "" }));
     } catch (err) {
@@ -311,11 +312,24 @@ export default function MetaIntegrationsPage() {
         <div className="space-y-6">
           <section className="surface-card space-y-4 p-5">
             <div className="flex flex-wrap items-center gap-3">
-              <Badge tone="brand">Mode: {status.mode}</Badge>
+              <Badge tone={status.connected || status.mode === "live" ? "success" : "brand"}>
+                {status.connected || status.mode === "live" ? "Live" : "Local"}
+              </Badge>
               <Badge tone="neutral">Dashboard control plane</Badge>
             </div>
-            <p className="max-w-3xl text-sm text-muted">{status.honesty?.day_to_day}</p>
-            <p className="max-w-3xl text-sm text-muted">{status.honesty?.one_time_meta_developer_setup}</p>
+            {status.honesty?.day_to_day ? (
+              <p className="max-w-3xl text-sm text-muted">{status.honesty.day_to_day}</p>
+            ) : (
+              <p className="max-w-3xl text-sm text-muted">
+                Day-to-day Facebook, Instagram, and WhatsApp messaging stays in Triada after
+                one-time Meta Developer setup.
+              </p>
+            )}
+            {status.honesty?.one_time_meta_developer_setup ? (
+              <p className="max-w-3xl text-sm text-muted">
+                {status.honesty.one_time_meta_developer_setup}
+              </p>
+            ) : null}
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-md border border-line px-3 py-3">
                 <p className="text-xs uppercase tracking-wide text-muted">Meta webhook URL</p>
@@ -356,7 +370,9 @@ export default function MetaIntegrationsPage() {
                       <p className="mt-1 text-sm text-muted">{ch.blurb}</p>
                     </div>
                     <Badge tone={healthTone(info.status || health.status)}>
-                      {info.status || health.status || "unknown"}
+                      {info.status_label ||
+                        health.status_label ||
+                        connectionLabel(info.status || health.status)}
                     </Badge>
                   </div>
                   <p className="mt-3 text-sm text-muted">{health.message}</p>
@@ -410,14 +426,16 @@ export default function MetaIntegrationsPage() {
               <div>
                 <h2 className="font-display text-2xl">WhatsApp Cloud templates</h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted">
-                  Manage jewellery message templates in-dashboard. Live Cloud API submit/sync when{" "}
-                  <code className="text-xs">META_WA_*</code> credentials +{" "}
-                  <code className="text-xs">INTEGRATION_MODE=live</code>; otherwise local sim catalog.
+                  Manage jewellery message templates in the dashboard. Live Cloud API submit and sync
+                  use host WhatsApp credentials; otherwise Triada uses the local jewellery catalog.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone={healthTone(waTemplates?.status?.status)}>
-                  {waTemplates?.status?.mode || "local_sim"}
+                  {waTemplates?.status?.mode === "live_ready" ||
+                  waTemplates?.status?.mode === "live"
+                    ? "Live"
+                    : "Local"}
                 </Badge>
                 <Button onClick={syncWaTemplates} disabled={busy === "wa-sync"}>
                   Sync from Cloud / sim
@@ -436,13 +454,23 @@ export default function MetaIntegrationsPage() {
                 <div key={tpl.id} className="rounded-md border border-line px-3 py-3">
                   <div className="flex items-start justify-between gap-2">
                     <p className="font-medium text-ink">{tpl.name}</p>
-                    <Badge tone={healthTone(tpl.status === "approved" || tpl.status === "published" ? "healthy" : "awaiting_credentials")}>
-                      {tpl.status}
+                    <Badge
+                      tone={healthTone(
+                        tpl.status === "approved" || tpl.status === "published"
+                          ? "healthy"
+                          : "awaiting_credentials",
+                      )}
+                    >
+                      {tpl.status === "approved" || tpl.status === "published"
+                        ? "Approved"
+                        : tpl.status === "rejected"
+                          ? "Rejected"
+                          : "Draft"}
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm text-muted line-clamp-3">{tpl.body}</p>
                   <p className="mt-2 text-xs uppercase tracking-wide text-muted">
-                    {tpl.category} · {tpl.publish_mode || "draft"} · {tpl.external_template_id || "no external id"}
+                    {tpl.category} · {tpl.publish_mode === "live" ? "Live" : "Draft"}
                   </p>
                   <div className="mt-3">
                     <Button variant="ghost" onClick={() => beginEditWaTemplate(tpl)}>

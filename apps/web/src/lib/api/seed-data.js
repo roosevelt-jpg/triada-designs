@@ -3,6 +3,28 @@
  * when Laravel API_ORIGIN is down. Prefer live/seeded language — never "demo".
  */
 
+import {
+  credentialsPresenceMatrix,
+  envPresent,
+  hasGeminiEnv,
+  hasMetaMessagingEnv,
+  hasResendEnv,
+  hasShopifyEnv,
+  hasSupabaseEnv,
+  hasTelegramEnv,
+  hasWhatsAppToken,
+  hasZohoBooksOrg,
+  hasZohoEnv,
+  integrationRuntimeMode,
+} from "@/lib/integrations/env-presence";
+import {
+  connectionLabel,
+  modelNickname,
+  providerNickname,
+} from "@/lib/integrations/brand-labels";
+
+export { envPresent } from "@/lib/integrations/env-presence";
+
 export const WORKSPACE = {
   id: "triada-ops",
   name: "Triada Designs",
@@ -208,24 +230,23 @@ export const SERVICES = [
   },
 ];
 
-/** Presence-only env check — never returns secret values. */
-export function envPresent(name) {
-  const v = process.env[name];
-  return Boolean(v && String(v).trim());
-}
-
 /**
  * @param {{ anthropicHasCredentials?: boolean, anthropicModel?: string }} [opts]
  */
 export function buildIntegrationsList(opts = {}) {
-  const metaReady =
-    envPresent("META_PAGE_ACCESS_TOKEN") ||
-    envPresent("META_WA_ACCESS_TOKEN") ||
-    envPresent("META_APP_ID");
-  const gemini = envPresent("GEMINI_API_KEY");
-  const resend = envPresent("RESEND_API_KEY");
+  const metaReady = hasMetaMessagingEnv();
+  const waReady = hasWhatsAppToken();
+  const gemini = hasGeminiEnv();
+  const resend = hasResendEnv();
   const anthropicReady =
     Boolean(opts.anthropicHasCredentials) || envPresent("ANTHROPIC_API_KEY");
+  const shopifyReady = hasShopifyEnv();
+  const telegramReady = hasTelegramEnv();
+  const zohoReady = hasZohoEnv();
+  const anthropicModel =
+    opts.anthropicModel ||
+    (process.env.ANTHROPIC_MODEL || "").trim() ||
+    "claude-sonnet-4-20250514";
 
   const rows = [
     {
@@ -233,6 +254,7 @@ export function buildIntegrationsList(opts = {}) {
       provider: "wordpress",
       display_name: "WordPress CMS",
       status: "seeded",
+      status_label: connectionLabel("seeded"),
       external_account_id: "wordpress-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
@@ -242,7 +264,8 @@ export function buildIntegrationsList(opts = {}) {
       id: "int-zoho",
       provider: "zoho",
       display_name: "Zoho CRM + Books",
-      status: "awaiting_credentials",
+      status: zohoReady ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(zohoReady ? "connected" : "awaiting_credentials"),
       external_account_id: "zoho-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
@@ -253,6 +276,7 @@ export function buildIntegrationsList(opts = {}) {
       provider: "webchat",
       display_name: "Website Live Chat",
       status: "local",
+      status_label: connectionLabel("local"),
       external_account_id: "webchat-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
@@ -263,6 +287,7 @@ export function buildIntegrationsList(opts = {}) {
       provider: "facebook",
       display_name: "Facebook Messenger",
       status: metaReady ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(metaReady ? "connected" : "awaiting_credentials"),
       external_account_id: "facebook-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
@@ -273,6 +298,7 @@ export function buildIntegrationsList(opts = {}) {
       provider: "instagram",
       display_name: "Instagram Messaging",
       status: metaReady ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(metaReady ? "connected" : "awaiting_credentials"),
       external_account_id: "instagram-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
@@ -282,7 +308,8 @@ export function buildIntegrationsList(opts = {}) {
       id: "int-whatsapp",
       provider: "whatsapp",
       display_name: "WhatsApp Cloud API",
-      status: envPresent("META_WA_ACCESS_TOKEN") ? "connected" : "awaiting_credentials",
+      status: waReady ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(waReady ? "connected" : "awaiting_credentials"),
       external_account_id: "whatsapp-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
@@ -292,7 +319,8 @@ export function buildIntegrationsList(opts = {}) {
       id: "int-shopify",
       provider: "shopify",
       display_name: "Shopify",
-      status: "awaiting_credentials",
+      status: shopifyReady ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(shopifyReady ? "connected" : "awaiting_credentials"),
       external_account_id: "shopify-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
@@ -303,7 +331,8 @@ export function buildIntegrationsList(opts = {}) {
       id: "int-telegram",
       provider: "telegram",
       display_name: "Telegram",
-      status: "awaiting_credentials",
+      status: telegramReady ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(telegramReady ? "connected" : "awaiting_credentials"),
       external_account_id: "telegram-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
@@ -314,6 +343,7 @@ export function buildIntegrationsList(opts = {}) {
       provider: "tiktok",
       display_name: "TikTok",
       status: "awaiting_credentials",
+      status_label: connectionLabel("awaiting_credentials"),
       external_account_id: "tiktok-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
@@ -324,6 +354,7 @@ export function buildIntegrationsList(opts = {}) {
       provider: "email",
       display_name: "Email (Resend)",
       status: resend ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(resend ? "connected" : "awaiting_credentials"),
       external_account_id: "email-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
@@ -334,16 +365,29 @@ export function buildIntegrationsList(opts = {}) {
       provider: "linkedin",
       display_name: "LinkedIn",
       status: "awaiting_credentials",
+      status_label: connectionLabel("awaiting_credentials"),
       external_account_id: "linkedin-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
       capabilities: ["posts.draft"],
     },
     {
+      id: "int-supabase",
+      provider: "supabase",
+      display_name: "Supabase",
+      status: hasSupabaseEnv() ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(hasSupabaseEnv() ? "connected" : "awaiting_credentials"),
+      external_account_id: "supabase-primary",
+      last_health_check_at: nowIso(),
+      last_error_code: null,
+      capabilities: ["auth", "database"],
+    },
+    {
       id: "int-gemini",
       provider: "gemini",
       display_name: "Google Gemini",
       status: gemini ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(gemini ? "connected" : "awaiting_credentials"),
       external_account_id: "gemini-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
@@ -354,12 +398,14 @@ export function buildIntegrationsList(opts = {}) {
       provider: "anthropic",
       display_name: "Anthropic Claude",
       status: anthropicReady ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(anthropicReady ? "connected" : "awaiting_credentials"),
       external_account_id: "anthropic-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
       capabilities: ["llm.generate", "llm.chat", "agents", "creative_prompts"],
       metadata: {
-        model: opts.anthropicModel || "claude-sonnet-4-20250514",
+        model: anthropicModel,
+        model_label: modelNickname(anthropicModel),
         has_api_key: anthropicReady,
       },
     },
@@ -372,97 +418,162 @@ export function buildIntegrationsList(opts = {}) {
  * @param {{ anthropic?: Record<string, unknown> }} [opts]
  */
 export function buildIntegrationsHealth(opts = {}) {
-  const metaReady =
-    envPresent("META_PAGE_ACCESS_TOKEN") || envPresent("META_APP_ID");
-  const waReady = envPresent("META_WA_ACCESS_TOKEN");
-  const gemini = envPresent("GEMINI_API_KEY");
-  const anthropicFromStore = opts.anthropic && typeof opts.anthropic === "object"
-    ? opts.anthropic
-    : null;
+  const metaReady = hasMetaMessagingEnv();
+  const waReady = hasWhatsAppToken();
+  const gemini = hasGeminiEnv();
+  const resend = hasResendEnv();
+  const supabase = hasSupabaseEnv();
+  const zohoReady = hasZohoEnv();
+  const zohoBooks = hasZohoBooksOrg();
+  const anthropicFromStore =
+    opts.anthropic && typeof opts.anthropic === "object" ? opts.anthropic : null;
   const anthropicReady = Boolean(
     anthropicFromStore?.has_credentials || envPresent("ANTHROPIC_API_KEY"),
   );
   const anthropicModel =
     (typeof anthropicFromStore?.model === "string" && anthropicFromStore.model) ||
+    (process.env.ANTHROPIC_MODEL || "").trim() ||
     "claude-sonnet-4-20250514";
+  const geminiModel =
+    (process.env.GEMINI_MODEL || "").trim() || "gemini-2.0-flash";
+
   const channelHealth = (key, ready) => ({
     status: ready ? "connected" : "awaiting_credentials",
+    status_label: connectionLabel(ready ? "connected" : "awaiting_credentials"),
     health: {
       status: ready ? "healthy" : "awaiting_credentials",
+      status_label: connectionLabel(ready ? "healthy" : "awaiting_credentials"),
       message: ready
-        ? `${key} credentials present on host (Next dual-run).`
-        : `Awaiting ${key} credentials on Integrations.`,
+        ? `${providerNickname(key)} is connected.`
+        : `${providerNickname(key)} needs setup on Integrations.`,
     },
   });
 
-  const anthropic = anthropicFromStore || {
+  const anthropicBase = anthropicFromStore || {
     provider: "anthropic",
     has_credentials: anthropicReady,
     status: anthropicReady ? "connected" : "awaiting_credentials",
     model: anthropicModel,
-    honesty: anthropicReady
-      ? "Anthropic API key present on host."
-      : "Anthropic key not stored on this host yet — paste on Integrations to enable live Claude.",
+  };
+  const anthropic = {
+    ...anthropicBase,
+    model: anthropicBase.model || anthropicModel,
+    model_label: modelNickname(anthropicBase.model || anthropicModel),
+    status_label: connectionLabel(
+      anthropicBase.status || (anthropicReady ? "connected" : "awaiting_credentials"),
+      { hasCredentials: anthropicReady },
+    ),
+    // Brand-safe summary for UI — avoid raw key/format dumps.
+    summary: anthropicReady
+      ? "Claude is connected for agents and creative intelligence."
+      : "Add your Claude API key to enable live agents.",
   };
 
-  const llmProvider = anthropicReady
-    ? "anthropic"
+  const llmProvider = anthropicReady ? "anthropic" : gemini ? "gemini" : "local";
+  const llmModel = anthropicReady
+    ? anthropicModel
     : gemini
-      ? "gemini"
-      : "local";
+      ? geminiModel
+      : "local-heuristic";
   const llmLive = anthropicReady || gemini;
+  const liveCredentials =
+    anthropicReady || gemini || resend || metaReady || waReady || supabase;
+  const presence = credentialsPresenceMatrix({ anthropic: anthropicReady });
 
   return {
-    mode: "local",
+    mode: integrationRuntimeMode(liveCredentials),
+    mode_label: integrationRuntimeMode(liveCredentials) === "live" ? "Live" : "Local",
+    credentials: presence,
     wordpress: {
       status: "seeded",
-      message: "WordPress posts served from seeded Next dual-run catalog.",
+      status_label: connectionLabel("seeded"),
+      message: "WordPress posts served from the seeded Triada catalog.",
     },
     zoho: {
-      status: "awaiting_credentials",
-      message: "Zoho OAuth not configured on this host.",
+      status: zohoReady ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(zohoReady ? "connected" : "awaiting_credentials"),
+      message: zohoReady
+        ? "Zoho CRM credentials are present on this host."
+        : "Zoho CRM needs setup on Integrations.",
       credentials: {
-        has_credentials: false,
-        status: "awaiting_credentials",
-        honesty: "No Zoho client/refresh tokens on this host.",
+        has_credentials: zohoReady,
+        status: zohoReady ? "connected" : "awaiting_credentials",
+        status_label: connectionLabel(zohoReady ? "connected" : "awaiting_credentials"),
       },
       books: {
-        status: "awaiting_credentials",
-        message: "Zoho Books awaiting credentials.",
+        status: zohoBooks ? "connected" : "awaiting_credentials",
+        status_label: connectionLabel(zohoBooks ? "connected" : "awaiting_credentials"),
+        message: zohoBooks
+          ? "Zoho Books organization is configured."
+          : "Add a Zoho Books organization when you are ready for invoices.",
       },
     },
     zoho_books: {
-      status: "awaiting_credentials",
-      message: "Zoho Books awaiting credentials.",
+      status: zohoBooks ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(zohoBooks ? "connected" : "awaiting_credentials"),
+      message: zohoBooks
+        ? "Zoho Books organization is configured."
+        : "Zoho Books needs an organization ID for invoices.",
     },
     meta: {
       connected: metaReady || waReady,
+      status_label: connectionLabel(
+        metaReady || waReady ? "connected" : "awaiting_credentials",
+      ),
       channels: {
         facebook: channelHealth("facebook", metaReady),
         instagram: channelHealth("instagram", metaReady),
         whatsapp: channelHealth("whatsapp", waReady),
       },
     },
+    gemini: {
+      provider: "gemini",
+      has_credentials: gemini,
+      status: gemini ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(gemini ? "connected" : "awaiting_credentials"),
+      model: geminiModel,
+      model_label: modelNickname(geminiModel),
+      summary: gemini
+        ? "Gemini is connected for creative generation."
+        : "Gemini is not configured on this host yet.",
+    },
+    resend: {
+      provider: "resend",
+      has_credentials: resend,
+      status: resend ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(resend ? "connected" : "awaiting_credentials"),
+      summary: resend
+        ? "Email delivery is connected."
+        : "Email delivery needs a Resend key on this host.",
+    },
+    supabase: {
+      provider: "supabase",
+      has_credentials: supabase,
+      status: supabase ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(supabase ? "connected" : "awaiting_credentials"),
+      summary: supabase
+        ? "Supabase Auth and data are connected."
+        : "Supabase needs URL and keys on this host.",
+    },
     anthropic,
     llm: {
       configured_provider: llmProvider,
-      provider: anthropicReady
-        ? "anthropic"
-        : gemini
-          ? "gemini"
-          : "local_sim",
-      model: anthropicReady
-        ? anthropicModel
-        : gemini
-          ? "gemini-2.0-flash"
-          : "local-heuristic",
+      provider: anthropicReady ? "anthropic" : gemini ? "gemini" : "local_sim",
+      provider_label: providerNickname(
+        anthropicReady ? "anthropic" : gemini ? "gemini" : "local",
+      ),
+      model: llmModel,
+      model_label: modelNickname(llmModel),
       status: llmLive ? "live" : "awaiting_credentials",
+      status_label: connectionLabel(llmLive ? "live" : "awaiting_credentials", {
+        live: llmLive,
+      }),
       has_credentials: llmLive,
-      honesty: anthropicReady
-        ? "Anthropic credentials present — primary AI path."
-        : gemini
-          ? "Gemini credentials present; Anthropic remains primary when keyed."
-          : "No live LLM credentials — local heuristic responses only.",
+      summary: llmLive
+        ? anthropicReady
+          ? "AI connected · Claude Sonnet"
+          : `AI connected · ${modelNickname(llmModel)}`
+        : "Add an AI key on Integrations to go live.",
     },
     wordpress_posts: [
       {

@@ -47,7 +47,7 @@ export default function UgcPage() {
         method: "POST",
         body: { platform: "instagram", external_post_url: url },
       });
-      setStatus("Tag recorded + Telegram alert (local_sim) + repost candidate queued.");
+      setStatus("Tag recorded + Telegram alert + repost candidate queued.");
       load();
     } catch (err) {
       setStatus(err.message);

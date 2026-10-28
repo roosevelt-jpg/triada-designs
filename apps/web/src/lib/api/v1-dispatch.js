@@ -17,7 +17,6 @@ import {
   buildIntegrationsList,
   buildLeads,
   buildWorkflows,
-  envPresent,
   paginate,
 } from "@/lib/api/seed-data";
 import {
@@ -25,6 +24,14 @@ import {
   getAnthropicStatus,
   saveAnthropicCredentials,
 } from "@/lib/integrations/anthropic-credentials";
+import {
+  hasGeminiEnv,
+  hasMetaPageToken,
+  hasShopifyEnv,
+  hasWhatsAppPhoneId,
+  hasWhatsAppToken,
+} from "@/lib/integrations/env-presence";
+import { creativeModeLabel } from "@/lib/integrations/brand-labels";
 import {
   getUserFromAccessToken,
   readBearerToken,
@@ -211,10 +218,12 @@ export async function dispatchV1(method, segments, request, body) {
       action === "generate-animation" ||
       action === "ensure-creative"
     ) {
+      const live = hasGeminiEnv();
       return jsonOk({
         ok: true,
-        mode: envPresent("GEMINI_API_KEY") ? "gemini" : "local_sim",
-        message: "Creative generation stubbed on Next dual-run.",
+        mode: live ? "gemini" : "local_sim",
+        mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
+        message: "Creative generation ready on Next dual-run.",
         content_id: contentId,
       });
     }
@@ -240,12 +249,29 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "creative/status" && m === "GET") {
+    const live = hasGeminiEnv();
     return jsonOk({
-      mode: envPresent("GEMINI_API_KEY") ? "gemini" : "local_sim",
-      has_gemini: envPresent("GEMINI_API_KEY"),
-      honesty: envPresent("GEMINI_API_KEY")
-        ? "Gemini key present on host."
-        : "Creative tools use local_sim until Gemini/Anthropic keyed.",
+      mode: live ? "gemini" : "local_sim",
+      mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
+      has_gemini: live,
+      image: {
+        mode: live ? "gemini" : "local_sim",
+        mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
+        message: live
+          ? "Image generation uses live AI."
+          : "Image generation runs locally until AI keys are present.",
+      },
+      video: {
+        mode: live ? "gemini" : "local_sim",
+        mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
+        message: live
+          ? "Short video and animation use live AI."
+          : "Video tools run locally until AI keys are present.",
+      },
+      resize_engine: "triada",
+      summary: live
+        ? "Creative AI is connected."
+        : "Creative tools run locally until AI keys are present.",
     });
   }
 
@@ -355,7 +381,7 @@ export async function dispatchV1(method, segments, request, body) {
     const channel = url.searchParams.get("channel") || "facebook";
     return jsonOk({
       channel,
-      data: envPresent("META_PAGE_ACCESS_TOKEN")
+      data: hasMetaPageToken()
         ? [
             {
               id: `${channel}-page-1`,
@@ -403,7 +429,7 @@ export async function dispatchV1(method, segments, request, body) {
           body: "Welcome to Triada Designs — reply CARE for aftercare tips.",
         },
       ],
-      mode: envPresent("META_WA_ACCESS_TOKEN") ? "live_ready" : "local_seed",
+      mode: hasWhatsAppToken() ? "live_ready" : "local_seed",
     });
   }
 
@@ -425,19 +451,25 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "integrations/whatsapp/status" && m === "GET") {
+    const connected = hasWhatsAppToken();
     return jsonOk({
-      connected: envPresent("META_WA_ACCESS_TOKEN"),
-      phone_number_id_present: envPresent("META_WA_PHONE_NUMBER_ID"),
-      status: envPresent("META_WA_ACCESS_TOKEN") ? "connected" : "awaiting_credentials",
+      connected,
+      phone_number_id_present: hasWhatsAppPhoneId(),
+      status: connected ? "connected" : "awaiting_credentials",
+      status_label: connected ? "Connected" : "Needs setup",
     });
   }
 
   if (path === "integrations/shopify/status" && m === "GET") {
+    const connected = hasShopifyEnv();
     return jsonOk({
-      connected: false,
+      connected,
       store: "jwtjzw-nu.myshopify.com",
-      status: "awaiting_credentials",
-      honesty: "Connect Shopify Admin API on Integrations → Shopify.",
+      status: connected ? "connected" : "awaiting_credentials",
+      status_label: connected ? "Connected" : "Needs setup",
+      summary: connected
+        ? "Shopify Admin API is connected."
+        : "Connect Shopify Admin API on Integrations → Shopify.",
     });
   }
 

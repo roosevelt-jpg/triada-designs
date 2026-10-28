@@ -3,6 +3,7 @@ import {
   hasSupabaseAdminCredentials,
 } from "@/lib/supabase/config";
 import { ADMIN_EMAIL } from "@/lib/auth/supabase-auth";
+import { connectionLabel, modelNickname } from "./brand-labels";
 import { decryptSecret, encryptSecret } from "./credential-crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -35,22 +36,26 @@ function envAnthropicModel() {
  */
 export function anthropicStatusPayload(opts) {
   const has = Boolean(opts.has_credentials);
+  const model = opts.model || envAnthropicModel();
+  const status = has ? "connected" : "awaiting_credentials";
+  const summary = has
+    ? "Claude is connected for agents and creative intelligence."
+    : "Add your Claude API key to enable live agents.";
   return {
     provider: PROVIDER,
     configured_provider: has ? "anthropic" : "local",
     display_name: "Anthropic (Claude)",
-    status: has ? "connected" : "awaiting_credentials",
+    status,
+    status_label: connectionLabel(status, { hasCredentials: has }),
     has_credentials: has,
-    model: opts.model || envAnthropicModel(),
-    mode: "local",
+    model,
+    model_label: modelNickname(model),
+    mode: has ? "live" : "local",
     source: opts.source || (has ? "stored" : "none"),
-    honesty:
-      opts.honesty ||
-      (has
-        ? "Anthropic API key is stored (Integrations encrypted store or env). Agents use Claude when keyed."
-        : "No Anthropic key yet — paste a sk-ant-… key on Integrations. local_sim until keyed."),
-    ui_hint:
-      "Paste your Anthropic API key on Integrations. Optional model override (default claude-sonnet-4-20250514).",
+    summary,
+    // Kept for older clients; UI should prefer summary / status_label.
+    honesty: opts.honesty || summary,
+    ui_hint: "Paste your Claude API key on Integrations. Optional model preference below.",
   };
 }
 
@@ -191,8 +196,7 @@ export async function getAnthropicStatus() {
       has_credentials: true,
       model: envAnthropicModel(),
       source: "env",
-      honesty:
-        "ANTHROPIC_API_KEY present on host env. Agents use Claude; Integrations paste can override in encrypted store.",
+      honesty: "Claude is connected for agents and creative intelligence.",
     });
   }
 
@@ -202,8 +206,7 @@ export async function getAnthropicStatus() {
       has_credentials: true,
       model: stored.model || envAnthropicModel(),
       source: stored.storage,
-      honesty:
-        "Anthropic API key stored encrypted via Integrations (Next dual-run). Presence only — value never returned to the browser.",
+      honesty: "Claude is connected for agents and creative intelligence.",
     });
   }
 
@@ -225,8 +228,7 @@ export async function saveAnthropicCredentials(input) {
     return {
       ok: false,
       status: 422,
-      message:
-        "Invalid Anthropic API key format. Expected a key starting with sk-ant-…",
+      message: "Invalid Claude API key format. Please paste a valid Anthropic key.",
     };
   }
 
@@ -235,7 +237,7 @@ export async function saveAnthropicCredentials(input) {
     return {
       ok: false,
       status: 422,
-      message: "Provide an Anthropic API key (sk-ant-…) to connect.",
+      message: "Provide a Claude API key to connect.",
     };
   }
 
@@ -250,8 +252,7 @@ export async function saveAnthropicCredentials(input) {
       has_credentials: true,
       model,
       source: "env",
-      honesty:
-        "Model updated; ANTHROPIC_API_KEY remains authoritative from host env.",
+      honesty: "Claude model preference updated. Host credentials remain in place.",
     });
     return { ok: true, anthropic: status, storage: "env" };
   }
@@ -260,7 +261,7 @@ export async function saveAnthropicCredentials(input) {
     return {
       ok: false,
       status: 422,
-      message: "Provide an Anthropic API key (sk-ant-…) to connect.",
+      message: "Provide a Claude API key to connect.",
     };
   }
 
@@ -320,10 +321,7 @@ export async function saveAnthropicCredentials(input) {
     has_credentials: true,
     model,
     source: storage,
-    honesty:
-      storage === "local_mock"
-        ? "Key stored in local dual-run mock (Supabase unavailable). Apply integration_secrets migration for Production durability."
-        : "Anthropic API key stored encrypted. Agents use Claude; creative intelligence follows Anthropic path.",
+    honesty: "Claude is connected for agents and creative intelligence.",
   });
 
   return { ok: true, anthropic: status, storage };
@@ -365,8 +363,8 @@ export async function clearAnthropicCredentials() {
       model: envAnthropicModel(),
       source: envStill ? "env" : "none",
       honesty: envStill
-        ? "Cleared Integrations-stored key; ANTHROPIC_API_KEY env still present."
-        : "Cleared Integrations-stored Anthropic key (env key unaffected).",
+        ? "Stored key cleared. Host credentials remain connected."
+        : "Stored Claude key cleared.",
     }),
     storage,
   };
