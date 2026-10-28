@@ -360,11 +360,20 @@ export async function dispatchV1(method, segments, request, body) {
 
   // ---- dashboard / catalog ----
   if (path === "dashboard" && m === "GET") {
-    const anthropic = await getAnthropicStatus();
+    // Same Meta store overlay as integrations/list — otherwise overview
+    // falsely shows FB/IG/WA as awaiting when credentials live in app_metadata.
+    const [anthropic, meta] = await Promise.all([
+      getAnthropicStatus(),
+      getMetaStatus(),
+    ]);
     return jsonOk(
       buildDashboard({
         anthropicHasCredentials: anthropic.has_credentials,
         anthropicModel: anthropic.model,
+        metaFacebookReady: meta.facebook_ready,
+        metaMessengerReady: meta.messenger_ready,
+        metaInstagramReady: meta.instagram_ready,
+        metaWhatsAppReady: meta.whatsapp_ready,
       }),
     );
   }

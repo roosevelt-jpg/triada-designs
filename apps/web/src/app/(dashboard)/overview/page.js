@@ -11,7 +11,17 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { formatDateLong, formatDateTime } from "@/lib/formatters";
+import { connectionLabel } from "@/lib/integrations/brand-labels";
 import { nowDate, syncSystemTime } from "@/lib/system-time";
+
+function channelHealthTone(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "connected" || s === "healthy" || s === "live") return "success";
+  if (s === "seeded" || s === "local" || s === "local_sim") return "neutral";
+  if (s === "error" || s === "disconnected") return "danger";
+  if (s === "awaiting_credentials") return "warning";
+  return "neutral";
+}
 
 export default function OverviewPage() {
   const [data, setData] = useState(null);
@@ -124,18 +134,8 @@ export default function OverviewPage() {
                       Last check: {formatDateTime(item.last_health_check_at)}
                     </p>
                   </div>
-                  <Badge
-                    tone={
-                      item.status === "connected"
-                        ? "success"
-                        : item.status === "seeded" || item.status === "local"
-                          ? "neutral"
-                          : item.status === "error"
-                            ? "danger"
-                            : "neutral"
-                    }
-                  >
-                    {item.status}
+                  <Badge tone={channelHealthTone(item.status)}>
+                    {item.status_label || connectionLabel(item.status)}
                   </Badge>
                 </div>
               ))}

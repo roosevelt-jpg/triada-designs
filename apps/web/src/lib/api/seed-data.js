@@ -929,7 +929,14 @@ export function buildAiInsights(metrics = {}) {
 }
 
 /**
- * @param {{ anthropicHasCredentials?: boolean, anthropicModel?: string }} [opts]
+ * @param {{
+ *   anthropicHasCredentials?: boolean,
+ *   anthropicModel?: string,
+ *   metaFacebookReady?: boolean,
+ *   metaInstagramReady?: boolean,
+ *   metaMessengerReady?: boolean,
+ *   metaWhatsAppReady?: boolean,
+ * }} [opts]
  */
 export function buildDashboard(opts = {}) {
   const integrations = buildIntegrationsList(opts);
@@ -954,6 +961,7 @@ export function buildDashboard(opts = {}) {
       provider: i.provider,
       display_name: i.display_name,
       status: i.status,
+      status_label: i.status_label || connectionLabel(i.status),
       last_health_check_at: i.last_health_check_at,
       last_error_code: i.last_error_code,
     })),
