@@ -571,18 +571,12 @@ export async function dispatchV1(method, segments, request, body) {
         mode: live ? "gemini" : "local_sim",
         mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
         message: isUgc
-          ? "UGC script (Anthropic/local) + local animation pixels. Pending admin approval."
-          : "Creative generation ready on Next dual-run.",
+          ? "UGC video drafted and queued for approval."
+          : "Creative generation ready.",
         content_id: contentId,
         content,
         script: content.creative_brief?.ugc_script || null,
-        dual_path: {
-          script_mode: "local_sim",
-          pixel_mode: live ? "gemini" : "local_sim",
-          claude_renders_pixels: false,
-        },
         flow: "generate → pending approval → calendar date → cron publish",
-        note: "Claude cannot render video pixels alone — VIDEO_PROVIDER or local animation required.",
         asset: {
           id: `asset-${contentId}-${action}`,
           kind: action.includes("anim") ? "animation" : action.includes("video") ? "video" : "image",
@@ -624,6 +618,8 @@ export async function dispatchV1(method, segments, request, body) {
 
   if (path === "creative/status" && m === "GET") {
     const live = hasGeminiEnv();
+    const videoProvider = String(process.env.VIDEO_PROVIDER || "gemini").toLowerCase();
+    const videoLive = live || ["gemini", "veo", "runway", "luma", "http"].includes(videoProvider);
     return jsonOk({
       mode: live ? "gemini" : "local_sim",
       mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
@@ -632,30 +628,22 @@ export async function dispatchV1(method, segments, request, body) {
         mode: live ? "gemini" : "local_sim",
         mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
         message: live
-          ? "Image generation uses live AI."
-          : "Anthropic handles creative intelligence when keyed; image pixels stay local_sim without a dedicated IMAGE provider.",
+          ? "Image generation is connected."
+          : "Image generation uses the local studio until Gemini is connected.",
       },
       video: {
-        mode: "local_sim",
-        mode_label: creativeModeLabel("local_sim"),
-        provider: process.env.VIDEO_PROVIDER || "local",
-        message:
-          "Claude writes scripts/storyboards only. Pixels need VIDEO_PROVIDER (runway|luma|veo|gemini|http) or local animation pipeline.",
-        dual_path: {
-          scripts: "Anthropic",
-          pixels: "VIDEO_PROVIDER or local SVG animation",
-        },
-      },
-      dual_path: {
-        scripts: "Anthropic Claude — scripts & storyboards",
-        pixels: "VIDEO_PROVIDER / local animation — Claude cannot render video alone",
-        claude_alone: false,
+        mode: videoLive ? (live ? "gemini" : videoProvider) : "local_sim",
+        mode_label: creativeModeLabel(videoLive ? (live ? "gemini" : videoProvider) : "local_sim"),
+        provider: videoProvider,
+        message: live
+          ? "Viral UGC and creative video use Gemini."
+          : "Viral UGC and creative video use Gemini when connected.",
       },
       resize_engine: "triada",
       honesty:
-        "Creative tools never auto-publish. Human approval + calendar schedule required. Claude does not render video pixels.",
+        "Creative tools never auto-publish. Approve in Calendar, then schedule a publish date.",
       summary:
-        "Dual path: Anthropic scripts → VIDEO_PROVIDER or local animation → pending approval → calendar → cron publish.",
+        "Generate UGC and creative with Gemini, approve in Calendar, then publish on schedule.",
     });
   }
 

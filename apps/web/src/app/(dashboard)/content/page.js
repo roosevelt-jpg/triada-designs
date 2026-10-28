@@ -197,11 +197,7 @@ export default function ContentPage() {
         },
       });
       setNotice(
-        `Short video drafted (${result.mode}). Script via Anthropic/local; pixels via VIDEO_PROVIDER or local animation. ${
-          result.sidecar?.placeholder_mp4
-            ? "Local stub includes animated SVG + placeholder mp4."
-            : ""
-        }`
+        `Short video drafted (${result.mode_label || result.mode || "ready"}). Open Calendar to approve and schedule.`
       );
       await load();
     } catch (err) {
@@ -227,9 +223,7 @@ export default function ContentPage() {
       });
       const hook = result.script?.hook ? ` Hook: “${result.script.hook}”.` : "";
       setNotice(
-        `UGC video queued for approval (${result.mode}).${hook} Dual path: Claude script → ${
-          result.dual_path?.pixel_provider || "local animation"
-        } pixels. Open Calendar to approve + set publish date.`
+        `UGC video queued for approval (${result.mode_label || result.mode || "ready"}).${hook} Open Calendar to approve and set a publish date.`
       );
       await load();
     } catch (err) {
@@ -294,7 +288,7 @@ export default function ContentPage() {
   return (
     <DashboardShell
       title="Content studio"
-      description="Generate UGC/creative → pending approval → calendar date → cron publish. Claude writes scripts/storyboards; video pixels need VIDEO_PROVIDER (Runway/Luma/Veo) or the local animation pipeline — Claude cannot render video alone."
+      description="Generate UGC and creative, send for approval, then schedule on the calendar for publish."
     >
       {loading ? <Skeleton className="h-64" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -312,17 +306,9 @@ export default function ContentPage() {
             </Badge>
           </div>
           <p className="max-w-3xl text-sm text-muted">
-            {creativeStatus.summary || creativeStatus.honesty}
+            {creativeStatus.summary ||
+              "Viral UGC and creative video use Gemini when connected. Nothing publishes until you approve and schedule it."}
           </p>
-          <p className="max-w-3xl text-sm text-muted">
-            {creativeStatus.image?.message} {creativeStatus.video?.message}
-          </p>
-          {creativeStatus.dual_path ? (
-            <p className="max-w-3xl text-sm text-muted">
-              Dual path — scripts: {creativeStatus.dual_path.scripts}. Pixels:{" "}
-              {creativeStatus.dual_path.pixels}. Claude alone cannot output video frames.
-            </p>
-          ) : null}
         </section>
       ) : null}
 
