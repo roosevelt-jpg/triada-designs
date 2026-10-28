@@ -12,15 +12,38 @@ export const dynamic = "force-dynamic";
  *   https://api.triada-designs.com/api/webhooks/meta
  */
 
-/** Production Meta Verify Token default when Vercel env is unset. */
+/**
+ * Meta App Verify Token used in Production Subscribe.
+ * Always accepted so a stale Vercel META_VERIFY_TOKEN (e.g. legacy
+ * triada-local-verify) cannot block Meta Verify and Save.
+ */
 const DEFAULT_META_VERIFY_TOKEN = "triada-meta-verify-2026";
 
-function resolveVerifyToken() {
-  return (
-    process.env.META_VERIFY_TOKEN?.trim() ||
-    process.env.META_HUB_VERIFY_TOKEN?.trim() ||
-    DEFAULT_META_VERIFY_TOKEN
-  );
+/**
+ * Allowed hub.verify_token values: META_VERIFY_TOKEN, META_HUB_VERIFY_TOKEN,
+ * plus the Production Meta App default (covers unset or stale Vercel env).
+ * @returns {string[]}
+ */
+function resolveAllowedVerifyTokens() {
+  /** @type {Set<string>} */
+  const tokens = new Set();
+  const primary = process.env.META_VERIFY_TOKEN?.trim();
+  const hubAlias = process.env.META_HUB_VERIFY_TOKEN?.trim();
+  if (primary) tokens.add(primary);
+  if (hubAlias) tokens.add(hubAlias);
+  tokens.add(DEFAULT_META_VERIFY_TOKEN);
+  return [...tokens];
+}
+
+/**
+ * @param {string} provided
+ * @param {string[]} allowed
+ */
+function matchesAnyVerifyToken(provided, allowed) {
+  for (const expected of allowed) {
+    if (timingSafeEqual(provided, expected)) return true;
+  }
+  return false;
 }
 
 /**
@@ -50,9 +73,14 @@ function readHubParams(searchParams) {
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const { mode, token, challenge } = readHubParams(searchParams);
-  const expected = resolveVerifyToken();
+  const allowed = resolveAllowedVerifyTokens();
 
-  if (mode === "subscribe" && token && challenge && timingSafeEqual(token, expected)) {
+  if (
+    mode === "subscribe" &&
+    token &&
+    challenge &&
+    matchesAnyVerifyToken(token, allowed)
+  ) {
     return new NextResponse(challenge, {
       status: 200,
       headers: { "Content-Type": "text/plain; charset=utf-8" },
