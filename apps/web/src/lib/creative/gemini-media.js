@@ -1,7 +1,6 @@
 /**
  * Gemini media pixel path for Content Studio (server-side only).
- * Images: top Gemini image models (Nano Banana Pro → 2.1 → Imagen).
- * Videos: Gemini Omni Flash (current top media video model after Veo sunset).
+ * Same path Gemini apps use: Interactions API with Nano Banana / Omni models.
  * Never report live Gemini success with SVG placeholders.
  */
 
@@ -9,22 +8,16 @@ import { hasGeminiEnv } from "@/lib/integrations/env-presence";
 
 const DEFAULT_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
-/** Premium → workhorse → lite image cascade (Interactions API). */
+/** Top Gemini image models (Nano Banana family) — Interactions API first. */
 export const GEMINI_IMAGE_MODELS = [
-  "gemini-3-pro-image",
   "gemini-nano-banana-2.1",
+  "gemini-3-pro-image",
   "gemini-3.1-flash-image",
+  "gemini-3.1-flash-lite-image",
   "gemini-2.5-flash-image",
 ];
 
-/** Imagen predict cascade (Gemini API Imagen). */
-export const IMAGEN_MODELS = [
-  "imagen-4.0-generate-001",
-  "imagen-4.0-ultra-generate-001",
-  "imagen-3.0-generate-002",
-];
-
-/** Current top Gemini video model (Veo preview shut down). */
+/** Current top Gemini video model (Veo / Imagen media paths retired). */
 export const GEMINI_VIDEO_MODELS = ["gemini-omni-1.1-flash"];
 
 /**
@@ -49,6 +42,30 @@ export function geminiBaseUrl() {
     (process.env.GEMINI_BASE_URL || "").trim() ||
     DEFAULT_BASE
   ).replace(/\/$/, "");
+}
+
+/**
+ * Ignore stale Vercel IMAGE_MODEL=claude-… / text-LLM values.
+ * @param {string} model
+ * @param {"image"|"video"} kind
+ */
+export function isMediaModel(model, kind = "image") {
+  const m = String(model || "")
+    .trim()
+    .toLowerCase();
+  if (!m) return false;
+  if (m.includes("claude") || m.includes("anthropic") || m.includes("gpt")) return false;
+  if (kind === "video") {
+    return m.includes("omni") || m.startsWith("veo-") || m.includes("video");
+  }
+  return (
+    m.includes("nano-banana") ||
+    m.includes("flash-image") ||
+    m.includes("pro-image") ||
+    m.includes("lite-image") ||
+    m.startsWith("imagen-") ||
+    (m.startsWith("gemini-") && m.includes("image"))
+  );
 }
 
 /**
@@ -96,7 +113,7 @@ function extractInteractionMedia(interaction, kind) {
     const content = Array.isArray(step?.content) ? step.content : [];
     for (const part of content) {
       const type = String(part?.type || "").toLowerCase();
-      if (kind === "video" && (type === "video" || part?.mime_type?.startsWith("video/"))) {
+      if (kind === "video" && (type === "video" || part?.mime_type?.startsWith?.("video/"))) {
         if (part?.data) {
           return {
             data: String(part.data),
@@ -104,7 +121,7 @@ function extractInteractionMedia(interaction, kind) {
           };
         }
       }
-      if (kind === "image" && (type === "image" || part?.mime_type?.startsWith("image/"))) {
+      if (kind === "image" && (type === "image" || part?.mime_type?.startsWith?.("image/"))) {
         if (part?.data) {
           return {
             data: String(part.data),
@@ -118,7 +135,7 @@ function extractInteractionMedia(interaction, kind) {
 }
 
 /**
- * Gemini Interactions API — same path Gemini consumer apps use for media.
+ * Gemini Interactions API — same auth + shape as Gemini developer docs.
  * @param {{
  *   apiKey: string,
  *   model: string,
@@ -137,16 +154,20 @@ async function callInteractions(opts) {
   try {
     const body = {
       model: opts.model,
-      input: opts.prompt,
+      // Docs accept string or typed parts; typed parts are the canonical form.
+      input: [{ type: "text", text: opts.prompt }],
       response_format: {
         type: opts.kind,
         aspect_ratio: opts.aspectRatio,
       },
     };
 
-    const response = await fetch(`${base}/interactions?key=${encodeURIComponent(opts.apiKey)}`, {
+    const response = await fetch(`${base}/interactions`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": opts.apiKey,
+      },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -155,7 +176,7 @@ async function callInteractions(opts) {
     if (!response.ok) {
       return {
         ok: false,
-        error: `Interactions HTTP ${response.status}: ${String(json?.error?.message || json?.message || "").slice(0, 200)}`,
+        error: `Interactions HTTP ${response.status}: ${String(json?.error?.message || json?.message || "").slice(0, 240)}`,
         model: opts.model,
       };
     }
@@ -189,7 +210,7 @@ async function callInteractions(opts) {
 }
 
 /**
- * Native generateContent image generation (responseModalities IMAGE).
+ * Legacy generateContent image path (still used by some Nano Banana models).
  * @param {{
  *   apiKey: string,
  *   model: string,
@@ -206,10 +227,13 @@ async function callGenerateContentImage(opts) {
 
   try {
     const response = await fetch(
-      `${base}/models/${encodeURIComponent(opts.model)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`,
+      `${base}/models/${encodeURIComponent(opts.model)}:generateContent`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": opts.apiKey,
+        },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
           generationConfig: {
@@ -225,7 +249,7 @@ async function callGenerateContentImage(opts) {
     if (!response.ok) {
       return {
         ok: false,
-        error: `generateContent HTTP ${response.status}: ${String(json?.error?.message || "").slice(0, 200)}`,
+        error: `generateContent HTTP ${response.status}: ${String(json?.error?.message || "").slice(0, 240)}`,
         model: opts.model,
       };
     }
@@ -262,90 +286,14 @@ async function callGenerateContentImage(opts) {
 }
 
 /**
- * Imagen :predict endpoint.
- * @param {{
- *   apiKey: string,
- *   model: string,
- *   prompt: string,
- *   aspectRatio: string,
- *   timeoutMs?: number,
- * }} opts
- */
-async function callImagenPredict(opts) {
-  const base = geminiBaseUrl();
-  const timeoutMs = Number(opts.timeoutMs || 90000);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(
-      `${base}/models/${encodeURIComponent(opts.model)}:predict`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-goog-api-key": opts.apiKey,
-        },
-        body: JSON.stringify({
-          instances: [{ prompt: opts.prompt }],
-          parameters: {
-            sampleCount: 1,
-            aspectRatio: opts.aspectRatio,
-          },
-        }),
-        signal: controller.signal,
-      },
-    );
-
-    const json = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      return {
-        ok: false,
-        error: `Imagen HTTP ${response.status}: ${String(json?.error?.message || "").slice(0, 200)}`,
-        model: opts.model,
-      };
-    }
-
-    const b64 =
-      json?.predictions?.[0]?.bytesBase64Encoded ||
-      json?.predictions?.[0]?.image?.imageBytes ||
-      json?.predictions?.[0]?.bytes;
-
-    if (!b64 || typeof b64 !== "string") {
-      return {
-        ok: false,
-        error: `Imagen ${opts.model} returned no image bytes`,
-        model: opts.model,
-      };
-    }
-
-    return {
-      ok: true,
-      bytesBase64: b64,
-      mimeType: "image/png",
-      model: opts.model,
-      provider: "imagen",
-      path: "predict",
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error?.name === "AbortError" ? "Imagen timed out" : String(error?.message || error),
-      model: opts.model,
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/**
  * @param {string} preferred
  * @param {string[]} cascade
+ * @param {"image"|"video"} kind
  */
-function modelList(preferred, cascade) {
-  const pref = String(preferred || "").trim();
+function modelList(preferred, cascade, kind = "image") {
   const list = [];
-  if (pref) list.push(pref);
+  const pref = String(preferred || "").trim();
+  if (pref && isMediaModel(pref, kind)) list.push(pref);
   for (const model of cascade) {
     if (!list.includes(model)) list.push(model);
   }
@@ -353,7 +301,6 @@ function modelList(preferred, cascade) {
 }
 
 /**
- * Generate a photoreal jewellery image via best available Gemini/Imagen models.
  * @param {{
  *   prompt: string,
  *   width?: number,
@@ -376,16 +323,15 @@ export async function generateGeminiImage(input) {
     (process.env.GEMINI_IMAGE_MODEL || "").trim();
   const errors = [];
 
-  // 1) Interactions API with top Gemini image models (same path as Gemini apps).
-  for (const model of modelList(preferred, GEMINI_IMAGE_MODELS)) {
-    if (model.startsWith("imagen-")) continue;
+  for (const model of modelList(preferred, GEMINI_IMAGE_MODELS, "image")) {
+    // Primary: Interactions (Gemini apps path)
     const result = await callInteractions({
       apiKey,
       model,
       prompt: input.prompt,
       kind: "image",
       aspectRatio,
-      timeoutMs: Number(process.env.IMAGE_TIMEOUT || 90000),
+      timeoutMs: Number(process.env.IMAGE_TIMEOUT || 120000),
     });
     if (result.ok) {
       return {
@@ -397,7 +343,7 @@ export async function generateGeminiImage(input) {
     }
     errors.push(`${model}: ${result.error}`);
 
-    // generateContent fallback for native image models
+    // Secondary: generateContent for models that still expose it
     const gc = await callGenerateContentImage({
       apiKey,
       model,
@@ -416,39 +362,15 @@ export async function generateGeminiImage(input) {
     errors.push(`gc:${model}: ${gc.error}`);
   }
 
-  // 2) Imagen predict cascade.
-  for (const model of modelList(
-    preferred.startsWith("imagen-") ? preferred : "",
-    IMAGEN_MODELS,
-  )) {
-    const result = await callImagenPredict({
-      apiKey,
-      model,
-      prompt: input.prompt,
-      aspectRatio,
-      timeoutMs: Number(process.env.IMAGE_TIMEOUT || 90000),
-    });
-    if (result.ok) {
-      return {
-        ...result,
-        mode: "gemini",
-        kind: "image",
-        dataUrl: `data:${result.mimeType};base64,${result.bytesBase64}`,
-      };
-    }
-    errors.push(`${model}: ${result.error}`);
-  }
-
   return {
     ok: false,
-    error: errors.slice(0, 6).join(" | ") || "Gemini image generation failed",
+    error: errors.slice(0, 8).join(" | ") || "Gemini image generation failed",
     mode: "error",
     attempts: errors.length,
   };
 }
 
 /**
- * Generate a photoreal jewellery video via Gemini Omni Flash.
  * @param {{
  *   prompt: string,
  *   width?: number,
@@ -472,15 +394,13 @@ export async function generateGeminiVideo(input) {
     (process.env.GEMINI_VIDEO_MODEL || "").trim();
   const errors = [];
 
-  for (const model of modelList(preferred, GEMINI_VIDEO_MODELS)) {
-    // Skip dead Veo ids unless explicitly forced — Omni is the current top path.
-    if (model.startsWith("veo-") && !preferred.startsWith("veo-")) {
-      continue;
-    }
+  for (const model of modelList(preferred, GEMINI_VIDEO_MODELS, "video")) {
+    // Dead Veo ids → Omni (current top Gemini video model)
+    const modelId = String(model).startsWith("veo-") ? "gemini-omni-1.1-flash" : model;
 
     const result = await callInteractions({
       apiKey,
-      model: model.startsWith("veo-") ? "gemini-omni-1.1-flash" : model,
+      model: modelId,
       prompt: input.prompt,
       kind: "video",
       aspectRatio: aspectRatio === "1:1" ? "9:16" : aspectRatio,
@@ -496,11 +416,10 @@ export async function generateGeminiVideo(input) {
         duration_ms: Number(input.durationMs || 8000),
       };
     }
-    errors.push(`${model}: ${result.error}`);
+    errors.push(`${modelId}: ${result.error}`);
   }
 
-  // If video fails but key is live, still produce a photoreal hero still (not SVG)
-  // so preview is never an empty abstract placeholder.
+  // Keyed but video failed: still return a photoreal Gemini still (not SVG).
   const still = await generateGeminiImage({
     prompt: `${input.prompt}\n\nStill frame: photoreal 3D anamorphic jewellery product hero for video poster — real piece, not abstract.`,
     width: input.width || 1080,
