@@ -175,6 +175,28 @@ Gates: human approval + approval_version check before publish. UI: Content Studi
 
 See `docs/meta/APP_REVIEW_CHECKLIST.md`.
 
+## Google Places (popup locations)
+
+**Status-only** on Integrations (`Connected` / `Waiting credentials`). Keys are never entered in the dashboard — set on Vercel.
+
+**Env (first non-empty wins)**
+
+```bash
+GOOGLE_PLACES_API_KEY=
+GOOGLE_MAPS_API_KEY=
+# Optional browser mirrors (prefer referrer-restricted keys):
+NEXT_PUBLIC_GOOGLE_PLACES_API_KEY=
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
+```
+
+**Routes**
+
+- `GET /api/v1/integrations/health` → `google_places` status (no secret)
+- `GET /api/v1/integrations/google-places` → status + `browser_key` when Connected (for Maps JS Autocomplete)
+- Pop-ups form (`/popups`) uses Places Autocomplete for country / city / town and a draggable map pin (`lat` / `lng`)
+
+Enable **Maps JavaScript API** + **Places API** on the Google Cloud key. Restrict by HTTP referrer for browser use.
+
 ## Honesty policy
 
 Local fallback responses are labeled `source: seeded` / `local` / `awaiting_credentials`. Live failures surface as `status: error` with a message—never silent fake success presented as production connectivity. Meta/Shopify/LLM never report healthy without credentials and `INTEGRATION_MODE=live`.

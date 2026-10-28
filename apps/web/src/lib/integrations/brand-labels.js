@@ -42,6 +42,9 @@ export function providerNickname(provider) {
   if (p === "local" || p === "local_sim") return "Local assistant";
   if (p === "resend" || p === "email") return "Email";
   if (p === "messenger") return "Messenger";
+  if (p === "google_places" || p === "google-places" || p === "places") {
+    return "Google Places";
+  }
   if (p === "meta" || p === "facebook" || p === "instagram" || p === "whatsapp") {
     return p.charAt(0).toUpperCase() + p.slice(1);
   }

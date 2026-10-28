@@ -216,7 +216,9 @@ class JewelleryOpsSeeder extends Seeder
             ],
             [
                 'venue' => 'd3',
+                'country' => 'United Arab Emirates',
                 'city' => 'Dubai',
+                'town' => 'Design District',
                 'emirate' => 'Dubai',
                 'market_type' => 'market',
                 'starts_on' => now()->addMonths(2)->toDateString(),
@@ -227,6 +229,13 @@ class JewelleryOpsSeeder extends Seeder
                 'contact_name' => 'Triada markets',
                 'status' => 'watching',
                 'notes' => 'd3 placement for Salt & Spirit sculptural jewellery.',
+                'place_id' => null,
+                'formatted_address' => 'Dubai Design District - Dubai - United Arab Emirates',
+                'lat' => 25.1885,
+                'lng' => 55.2804,
+                'metadata' => [
+                    'location_source' => 'google_places_seed',
+                ],
             ]
         );
 

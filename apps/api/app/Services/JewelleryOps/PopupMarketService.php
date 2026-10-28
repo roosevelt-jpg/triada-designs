@@ -25,8 +25,10 @@ class PopupMarketService
             ],
             [
                 'venue' => $input['venue'] ?? null,
+                'country' => $input['country'] ?? null,
                 'city' => $input['city'] ?? 'Dubai',
-                'emirate' => $input['emirate'] ?? 'Dubai',
+                'town' => $input['town'] ?? null,
+                'emirate' => $input['emirate'] ?? ($input['city'] ?? 'Dubai'),
                 'market_type' => $input['market_type'] ?? 'popup',
                 'starts_on' => $input['starts_on'] ?? null,
                 'ends_on' => $input['ends_on'] ?? null,
@@ -36,7 +38,21 @@ class PopupMarketService
                 'contact_name' => $input['contact_name'] ?? null,
                 'status' => $input['status'] ?? 'watching',
                 'notes' => $input['notes'] ?? null,
-                'metadata' => $input['metadata'] ?? [],
+                'place_id' => $input['place_id'] ?? null,
+                'formatted_address' => $input['formatted_address'] ?? null,
+                'lat' => $input['lat'] ?? $input['latitude'] ?? null,
+                'lng' => $input['lng'] ?? $input['longitude'] ?? null,
+                'metadata' => array_merge(
+                    is_array($input['metadata'] ?? null) ? $input['metadata'] : [],
+                    array_filter([
+                        'location_source' => 'google_places',
+                        'place_id' => $input['place_id'] ?? null,
+                        'country' => $input['country'] ?? null,
+                        'town' => $input['town'] ?? null,
+                        'lat' => $input['lat'] ?? $input['latitude'] ?? null,
+                        'lng' => $input['lng'] ?? $input['longitude'] ?? null,
+                    ], static fn ($v) => $v !== null && $v !== '')
+                ),
             ]
         );
 
@@ -66,7 +82,16 @@ class PopupMarketService
                 $workspace,
                 'popup',
                 'Pop-up / market opportunity: '.$market->name,
-                trim(($market->venue ?: '').' · '.$market->city.' · deadline '.$market->application_deadline),
+                trim(implode(' · ', array_filter([
+                    $market->venue,
+                    $market->town,
+                    $market->city,
+                    $market->country,
+                    $market->lat !== null && $market->lng !== null
+                        ? $market->lat.','.$market->lng
+                        : null,
+                    'deadline '.$market->application_deadline,
+                ]))),
                 ['popup_market_id' => $market->id]
             );
             $market->forceFill(['status' => 'alerted'])->save();

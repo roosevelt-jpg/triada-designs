@@ -171,3 +171,12 @@
     transform: scale(1.06) translate3d(-1.5%, -1%, 0);
   }
 }
+
+/* Google Places Autocomplete dropdown above dashboard cards / shell */
+.pac-container {
+  z-index: 10000;
+  border-radius: 6px;
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-card);
+  font-family: var(--font-sans);
+}
