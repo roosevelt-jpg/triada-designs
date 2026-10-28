@@ -110,7 +110,7 @@ function seedAdminMember() {
   };
 }
 
-function useSupabase() {
+function hasSupabaseBackend() {
   return hasSupabaseAdminCredentials();
 }
 
@@ -278,7 +278,7 @@ function publicRole(role) {
 }
 
 export async function listRoles() {
-  if (useSupabase()) {
+  if (hasSupabaseBackend()) {
     await ensureSupabaseSeeded();
     const admin = createAdminSupabaseClient();
     const { data, error } = await admin
@@ -326,7 +326,7 @@ export async function createRole(input) {
     updated_at: at,
   };
 
-  if (useSupabase()) {
+  if (hasSupabaseBackend()) {
     const admin = createAdminSupabaseClient();
     const { error } = await admin.from(ROLES_TABLE).insert(shapeRoleForDb(role));
     if (error) throw new Error(error.message);
@@ -347,7 +347,7 @@ export async function createRole(input) {
  * @param {{ name?: string, description?: string, permissions?: object }} patch
  */
 export async function updateRole(roleId, patch) {
-  if (useSupabase()) {
+  if (hasSupabaseBackend()) {
     const admin = createAdminSupabaseClient();
     const { data: existing, error: findErr } = await admin
       .from(ROLES_TABLE)
@@ -404,7 +404,7 @@ export async function listMembers() {
   const rolesResult = await listRoles();
   const roleMap = Object.fromEntries(rolesResult.data.map((r) => [r.id, r]));
 
-  if (useSupabase()) {
+  if (hasSupabaseBackend()) {
     await ensureSupabaseSeeded();
     const admin = createAdminSupabaseClient();
     const { data, error } = await admin
@@ -501,7 +501,7 @@ export async function updateMember(memberId, patch) {
     patch.role_id != null ? await getRole(patch.role_id) : null;
   if (patch.role_id != null && !role) throw new Error("Role not found.");
 
-  if (useSupabase()) {
+  if (hasSupabaseBackend()) {
     const admin = createAdminSupabaseClient();
     const { data: existing, error: findErr } = await admin
       .from(MEMBERS_TABLE)
@@ -561,7 +561,7 @@ export async function updateMember(memberId, patch) {
 }
 
 export async function listInvites({ status = "pending" } = {}) {
-  if (useSupabase()) {
+  if (hasSupabaseBackend()) {
     await ensureSupabaseSeeded();
     const admin = createAdminSupabaseClient();
     let query = admin
@@ -630,7 +630,7 @@ export async function createInvite(input) {
   };
 
   // Revoke prior pending invites for same email
-  if (useSupabase()) {
+  if (hasSupabaseBackend()) {
     const admin = createAdminSupabaseClient();
     await admin
       .from(INVITES_TABLE)
@@ -655,14 +655,14 @@ export async function createInvite(input) {
     data: publicInvite(invite, { includeToken: true, token }),
     token,
     role,
-    source: useSupabase() ? "supabase" : "local",
+    source: hasSupabaseBackend() ? "supabase" : "local",
   };
 }
 
 /** @param {string} token */
 export async function findInviteByToken(token) {
   const hash = hashInviteToken(token);
-  if (useSupabase()) {
+  if (hasSupabaseBackend()) {
     const admin = createAdminSupabaseClient();
     const { data, error } = await admin
       .from(INVITES_TABLE)
@@ -706,7 +706,7 @@ export async function getPublicInvite(token) {
 /** @param {string} inviteId */
 export async function revokeInvite(inviteId) {
   const at = nowIso();
-  if (useSupabase()) {
+  if (hasSupabaseBackend()) {
     const admin = createAdminSupabaseClient();
     const { data, error } = await admin
       .from(INVITES_TABLE)
@@ -742,7 +742,7 @@ export async function authenticateLocalMember(email, password) {
   const normalized = String(email || "").trim().toLowerCase();
   if (!normalized || !password) return { ok: false };
 
-  if (useSupabase()) {
+  if (hasSupabaseBackend()) {
     // Local password hashes are dual-run only.
     return { ok: false };
   }
@@ -818,12 +818,12 @@ export async function acceptInvite(token, profile) {
     invited_by: invite.invited_by,
     created_at: at,
     updated_at: at,
-    ...(profile.local_password && !useSupabase()
+    ...(profile.local_password && !hasSupabaseBackend()
       ? { local_password_hash: hashLocalPassword(profile.local_password) }
       : {}),
   };
 
-  if (useSupabase()) {
+  if (hasSupabaseBackend()) {
     const admin = createAdminSupabaseClient();
     // Soft-remove prior membership for same email
     await admin
@@ -872,7 +872,7 @@ export async function acceptInvite(token, profile) {
   return {
     data: publicMember(member, role),
     invite: publicInvite({ ...invite, status: "accepted", accepted_at: at, name }),
-    source: useSupabase() ? "supabase" : "local",
+    source: hasSupabaseBackend() ? "supabase" : "local",
   };
 }
 
