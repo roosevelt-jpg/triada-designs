@@ -846,7 +846,7 @@ export function buildAgents() {
       id: "agent-creative",
       workspace_id: WORKSPACE.id,
       name: "Creative media",
-      description: "Post-aligned images/variants when Gemini/Anthropic keyed.",
+      description: "Post-aligned images and platform variants when creative AI is connected.",
       status: "paused",
       config: {},
     },

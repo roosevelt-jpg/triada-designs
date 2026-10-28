@@ -230,25 +230,22 @@ export default function AgentsPage() {
                   value={testMessage}
                   onChange={(e) => setTestMessage(e.target.value)}
                   hint={
-                    llm?.live
-                      ? "Test run will call Anthropic (Claude) with your configured model."
-                      : "No Anthropic key — test run uses the local heuristic adapter."
+                    llm?.status === "live" || llm?.has_credentials
+                      ? "Dry run uses the connected AI path."
+                      : "Without an AI key, dry runs stay on local assistance."
                   }
                 />
                 <Button size="sm" variant="secondary" disabled={busy === "test"} onClick={runTest}>
                   {busy === "test" ? "Running…" : "Test run (dry)"}
                 </Button>
                 {testResult ? (
-                  <dl className="space-y-1.5 rounded-md border border-line bg-stone/40 p-3 text-xs">
-                    {Object.entries(testResult).map(([k, v]) => (
-                      <div key={k} className="flex gap-2">
-                        <dt className="shrink-0 font-medium text-ink">{k}</dt>
-                        <dd className="min-w-0 break-words text-muted">
-                          {typeof v === "object" ? JSON.stringify(v) : String(v)}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
+                  <div className="space-y-1.5 rounded-md border border-line bg-stone/40 p-3 text-sm text-muted">
+                    <p>
+                      {typeof testResult.output === "string"
+                        ? testResult.output
+                        : "Dry run completed."}
+                    </p>
+                  </div>
                 ) : null}
               </div>
             ) : null}

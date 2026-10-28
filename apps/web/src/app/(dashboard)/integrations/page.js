@@ -18,6 +18,13 @@ import {
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
 
+/** Friendly options — values stay API model ids; UI never labels with raw ids. */
+const ANTHROPIC_MODEL_OPTIONS = [
+  { value: "claude-sonnet-4-20250514", label: "Claude Sonnet" },
+  { value: "claude-opus-4-20250514", label: "Claude Opus" },
+  { value: "claude-haiku-4-20250514", label: "Claude Haiku" },
+];
+
 function toneForStatus(status, hasCredentials) {
   if (hasCredentials || status === "live" || status === "connected" || status === "healthy") {
     return "success";
@@ -264,11 +271,6 @@ export default function IntegrationsPage() {
                     ? "Claude is connected."
                     : "Add your Claude API key to enable live agents.")}
               </p>
-              <p className="text-xs text-muted">
-                Model preference:{" "}
-                {health?.anthropic?.model_label ||
-                  modelNickname(health?.anthropic?.model || anthropicModel)}
-              </p>
               <form className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-end" onSubmit={saveAnthropic}>
                 <Input
                   label="Claude API key"
@@ -283,12 +285,25 @@ export default function IntegrationsPage() {
                   value={anthropicKey}
                   onChange={(e) => setAnthropicKey(e.target.value)}
                 />
-                <Input
-                  label="Model preference"
-                  name="anthropic_model"
-                  value={anthropicModel}
-                  onChange={(e) => setAnthropicModel(e.target.value)}
-                />
+                <label className="block space-y-1.5">
+                  <span className="block text-[13px] font-medium text-ink">Model preference</span>
+                  <select
+                    name="anthropic_model"
+                    className="h-11 w-full rounded-sm border border-line bg-white px-3 text-sm text-ink transition-colors duration-150 focus:border-brown focus:outline-none"
+                    value={
+                      ANTHROPIC_MODEL_OPTIONS.some((o) => o.value === anthropicModel)
+                        ? anthropicModel
+                        : DEFAULT_ANTHROPIC_MODEL
+                    }
+                    onChange={(e) => setAnthropicModel(e.target.value)}
+                  >
+                    {ANTHROPIC_MODEL_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="flex gap-2">
                   <Button type="submit" size="sm">
                     Save key
