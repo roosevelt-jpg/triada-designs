@@ -182,10 +182,28 @@ export async function requireMembership(request) {
   try {
     membership = await resolveMembershipForUser(auth.user);
   } catch (err) {
-    return {
-      ok: false,
-      status: 500,
-      message: err instanceof Error ? err.message : "Membership lookup failed.",
+    // Missing team_* tables (migration pending) must not 500 the whole dashboard.
+    const msg = err instanceof Error ? err.message : String(err || "");
+    const missingTeamTable =
+      /Could not find the table|schema cache|PGRST205|team_roles|team_members|team_invites/i.test(
+        msg,
+      );
+    if (!missingTeamTable) {
+      return {
+        ok: false,
+        status: 500,
+        message: err instanceof Error ? err.message : "Membership lookup failed.",
+      };
+    }
+    const { ADMIN_EMAIL } = await import("@/lib/auth/supabase-auth");
+    const { allPermissions } = await import("@/lib/team/permissions");
+    const email = String(auth.user?.email || "").trim().toLowerCase();
+    const isAdmin = email === String(ADMIN_EMAIL || "").toLowerCase();
+    membership = {
+      member: null,
+      role: null,
+      permissions: isAdmin ? allPermissions(true) : null,
+      isAdmin,
     };
   }
   return {

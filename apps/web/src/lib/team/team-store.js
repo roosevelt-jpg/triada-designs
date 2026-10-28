@@ -110,8 +110,31 @@ function seedAdminMember() {
   };
 }
 
+/** @type {boolean|null} null=unknown, true=tables exist, false=missing (use local) */
+let supabaseTeamSchemaOk = null;
+
+function isMissingTeamTableError(err) {
+  const msg = String(
+    (err && typeof err === "object" && (err.message || err.details || err.hint)) ||
+      err ||
+      "",
+  );
+  return /Could not find the table|schema cache|PGRST205|relation ["'].*["'] does not exist|does not exist/i.test(
+    msg,
+  );
+}
+
 function hasSupabaseBackend() {
+  if (supabaseTeamSchemaOk === false) return false;
   return hasSupabaseAdminCredentials();
+}
+
+function markTeamTablesMissing(err) {
+  if (isMissingTeamTableError(err)) {
+    supabaseTeamSchemaOk = false;
+    return true;
+  }
+  return false;
 }
 
 async function ensureLocalSeeded() {
@@ -132,27 +155,51 @@ async function ensureLocalSeeded() {
 async function ensureSupabaseSeeded() {
   const admin = createAdminSupabaseClient();
   if (!admin) return;
+  if (supabaseTeamSchemaOk === false) return;
 
-  const { data: roles } = await admin
+  const { data: roles, error: rolesErr } = await admin
     .from(ROLES_TABLE)
     .select("id")
     .eq("workspace_id", WORKSPACE_ID)
     .limit(1);
 
+  if (rolesErr) {
+    if (markTeamTablesMissing(rolesErr)) return;
+    throw new Error(rolesErr.message);
+  }
+  supabaseTeamSchemaOk = true;
+
   if (!roles?.length) {
     const defs = defaultRoleDefinitions();
-    await admin.from(ROLES_TABLE).upsert(defs.map(shapeRoleForDb));
+    const { error: upsertRolesErr } = await admin
+      .from(ROLES_TABLE)
+      .upsert(defs.map(shapeRoleForDb));
+    if (upsertRolesErr) {
+      if (markTeamTablesMissing(upsertRolesErr)) return;
+      throw new Error(upsertRolesErr.message);
+    }
   }
 
-  const { data: members } = await admin
+  const { data: members, error: membersErr } = await admin
     .from(MEMBERS_TABLE)
     .select("id")
     .eq("workspace_id", WORKSPACE_ID)
     .ilike("email", ADMIN_EMAIL)
     .limit(1);
 
+  if (membersErr) {
+    if (markTeamTablesMissing(membersErr)) return;
+    throw new Error(membersErr.message);
+  }
+
   if (!members?.length) {
-    await admin.from(MEMBERS_TABLE).upsert(shapeMemberForDb(seedAdminMember()));
+    const { error: upsertMemberErr } = await admin
+      .from(MEMBERS_TABLE)
+      .upsert(shapeMemberForDb(seedAdminMember()));
+    if (upsertMemberErr) {
+      if (markTeamTablesMissing(upsertMemberErr)) return;
+      throw new Error(upsertMemberErr.message);
+    }
   }
 }
 
@@ -279,15 +326,24 @@ function publicRole(role) {
 
 export async function listRoles() {
   if (hasSupabaseBackend()) {
-    await ensureSupabaseSeeded();
-    const admin = createAdminSupabaseClient();
-    const { data, error } = await admin
-      .from(ROLES_TABLE)
-      .select("*")
-      .eq("workspace_id", WORKSPACE_ID)
-      .order("name", { ascending: true });
-    if (error) throw new Error(error.message);
-    return { data: (data || []).map(publicRole), source: "supabase" };
+    try {
+      await ensureSupabaseSeeded();
+      if (hasSupabaseBackend()) {
+        const admin = createAdminSupabaseClient();
+        const { data, error } = await admin
+          .from(ROLES_TABLE)
+          .select("*")
+          .eq("workspace_id", WORKSPACE_ID)
+          .order("name", { ascending: true });
+        if (error) {
+          if (!markTeamTablesMissing(error)) throw new Error(error.message);
+        } else {
+          return { data: (data || []).map(publicRole), source: "supabase" };
+        }
+      }
+    } catch (err) {
+      if (!markTeamTablesMissing(err)) throw err;
+    }
   }
   const state = await ensureLocalSeeded();
   return { data: state.roles.map(publicRole), source: "local" };
@@ -405,20 +461,33 @@ export async function listMembers() {
   const roleMap = Object.fromEntries(rolesResult.data.map((r) => [r.id, r]));
 
   if (hasSupabaseBackend()) {
-    await ensureSupabaseSeeded();
-    const admin = createAdminSupabaseClient();
-    const { data, error } = await admin
-      .from(MEMBERS_TABLE)
-      .select("*")
-      .eq("workspace_id", WORKSPACE_ID)
-      .order("created_at", { ascending: true });
-    if (error) throw new Error(error.message);
-    return {
-      data: (data || []).map((m) =>
-        publicMember(m, roleMap[m.role_id] || rolesResult.data.find((r) => r.slug === m.role_slug)),
-      ),
-      source: "supabase",
-    };
+    try {
+      await ensureSupabaseSeeded();
+      if (hasSupabaseBackend()) {
+        const admin = createAdminSupabaseClient();
+        const { data, error } = await admin
+          .from(MEMBERS_TABLE)
+          .select("*")
+          .eq("workspace_id", WORKSPACE_ID)
+          .order("created_at", { ascending: true });
+        if (error) {
+          if (!markTeamTablesMissing(error)) throw new Error(error.message);
+        } else {
+          return {
+            data: (data || []).map((m) =>
+              publicMember(
+                m,
+                roleMap[m.role_id] ||
+                  rolesResult.data.find((r) => r.slug === m.role_slug),
+              ),
+            ),
+            source: "supabase",
+          };
+        }
+      }
+    } catch (err) {
+      if (!markTeamTablesMissing(err)) throw err;
+    }
   }
 
   const state = await ensureLocalSeeded();
@@ -508,31 +577,37 @@ export async function updateMember(memberId, patch) {
       .select("*")
       .eq("id", memberId)
       .maybeSingle();
-    if (findErr) throw new Error(findErr.message);
-    if (!existing) throw new Error("Member not found.");
-
-    const next = {
-      ...existing,
-      role_id: role ? role.id : existing.role_id,
-      role_slug: role ? role.slug : existing.role_slug,
-      status: patch.status != null ? String(patch.status) : existing.status,
-      name: patch.name != null ? String(patch.name).trim() : existing.name,
-      phone: patch.phone != null ? String(patch.phone).trim() : existing.phone,
-      role_title:
-        patch.role_title != null
-          ? String(patch.role_title).trim()
-          : existing.role_title,
-      updated_at: nowIso(),
-    };
-    const { error } = await admin
-      .from(MEMBERS_TABLE)
-      .update(shapeMemberForDb(next))
-      .eq("id", memberId);
-    if (error) throw new Error(error.message);
-    return {
-      data: publicMember(next, role || (await getRole(next.role_id))),
-      source: "supabase",
-    };
+    if (findErr) {
+      if (!markTeamTablesMissing(findErr)) throw new Error(findErr.message);
+    } else if (!existing) {
+      throw new Error("Member not found.");
+    } else {
+      const next = {
+        ...existing,
+        role_id: role ? role.id : existing.role_id,
+        role_slug: role ? role.slug : existing.role_slug,
+        status: patch.status != null ? String(patch.status) : existing.status,
+        name: patch.name != null ? String(patch.name).trim() : existing.name,
+        phone: patch.phone != null ? String(patch.phone).trim() : existing.phone,
+        role_title:
+          patch.role_title != null
+            ? String(patch.role_title).trim()
+            : existing.role_title,
+        updated_at: nowIso(),
+      };
+      const { error } = await admin
+        .from(MEMBERS_TABLE)
+        .update(shapeMemberForDb(next))
+        .eq("id", memberId);
+      if (error) {
+        if (!markTeamTablesMissing(error)) throw new Error(error.message);
+      } else {
+        return {
+          data: publicMember(next, role || (await getRole(next.role_id))),
+          source: "supabase",
+        };
+      }
+    }
   }
 
   const state = await ensureLocalSeeded();
@@ -562,17 +637,29 @@ export async function updateMember(memberId, patch) {
 
 export async function listInvites({ status = "pending" } = {}) {
   if (hasSupabaseBackend()) {
-    await ensureSupabaseSeeded();
-    const admin = createAdminSupabaseClient();
-    let query = admin
-      .from(INVITES_TABLE)
-      .select("*")
-      .eq("workspace_id", WORKSPACE_ID)
-      .order("created_at", { ascending: false });
-    if (status) query = query.eq("status", status);
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
-    return { data: (data || []).map((i) => publicInvite(i)), source: "supabase" };
+    try {
+      await ensureSupabaseSeeded();
+      if (hasSupabaseBackend()) {
+        const admin = createAdminSupabaseClient();
+        let query = admin
+          .from(INVITES_TABLE)
+          .select("*")
+          .eq("workspace_id", WORKSPACE_ID)
+          .order("created_at", { ascending: false });
+        if (status) query = query.eq("status", status);
+        const { data, error } = await query;
+        if (error) {
+          if (!markTeamTablesMissing(error)) throw new Error(error.message);
+        } else {
+          return {
+            data: (data || []).map((i) => publicInvite(i)),
+            source: "supabase",
+          };
+        }
+      }
+    } catch (err) {
+      if (!markTeamTablesMissing(err)) throw err;
+    }
   }
 
   const state = await ensureLocalSeeded();
@@ -630,17 +717,34 @@ export async function createInvite(input) {
   };
 
   // Revoke prior pending invites for same email
+  let source = "local";
   if (hasSupabaseBackend()) {
-    const admin = createAdminSupabaseClient();
-    await admin
-      .from(INVITES_TABLE)
-      .update({ status: "revoked", updated_at: at })
-      .eq("workspace_id", WORKSPACE_ID)
-      .eq("email", email)
-      .eq("status", "pending");
-    const { error } = await admin.from(INVITES_TABLE).insert(shapeInviteForDb(invite));
-    if (error) throw new Error(error.message);
-  } else {
+    try {
+      const admin = createAdminSupabaseClient();
+      const { error: revokeErr } = await admin
+        .from(INVITES_TABLE)
+        .update({ status: "revoked", updated_at: at })
+        .eq("workspace_id", WORKSPACE_ID)
+        .eq("email", email)
+        .eq("status", "pending");
+      if (revokeErr && !markTeamTablesMissing(revokeErr)) {
+        throw new Error(revokeErr.message);
+      }
+      if (hasSupabaseBackend()) {
+        const { error } = await admin
+          .from(INVITES_TABLE)
+          .insert(shapeInviteForDb(invite));
+        if (error) {
+          if (!markTeamTablesMissing(error)) throw new Error(error.message);
+        } else {
+          source = "supabase";
+        }
+      }
+    } catch (err) {
+      if (!markTeamTablesMissing(err)) throw err;
+    }
+  }
+  if (source === "local") {
     const state = await ensureLocalSeeded();
     state.invites = state.invites.map((i) =>
       i.email === email && i.status === "pending"
@@ -655,7 +759,7 @@ export async function createInvite(input) {
     data: publicInvite(invite, { includeToken: true, token }),
     token,
     role,
-    source: hasSupabaseBackend() ? "supabase" : "local",
+    source,
   };
 }
 
@@ -663,14 +767,21 @@ export async function createInvite(input) {
 export async function findInviteByToken(token) {
   const hash = hashInviteToken(token);
   if (hasSupabaseBackend()) {
-    const admin = createAdminSupabaseClient();
-    const { data, error } = await admin
-      .from(INVITES_TABLE)
-      .select("*")
-      .eq("token_hash", hash)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return data || null;
+    try {
+      const admin = createAdminSupabaseClient();
+      const { data, error } = await admin
+        .from(INVITES_TABLE)
+        .select("*")
+        .eq("token_hash", hash)
+        .maybeSingle();
+      if (error) {
+        if (!markTeamTablesMissing(error)) throw new Error(error.message);
+      } else {
+        return data || null;
+      }
+    } catch (err) {
+      if (!markTeamTablesMissing(err)) throw err;
+    }
   }
   const state = await ensureLocalSeeded();
   return state.invites.find((i) => i.token_hash === hash) || null;
