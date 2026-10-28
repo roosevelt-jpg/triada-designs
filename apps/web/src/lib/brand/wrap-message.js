@@ -64,8 +64,9 @@ export function wrapWhatsAppMessage(opts) {
 }
 
 /**
- * Build Meta WhatsApp template components with logo HEADER + branded BODY + FOOTER.
- * @param {{ body: string, greetingKind?: string, customerName?: string, language?: string }} opts
+ * Build Meta WhatsApp template components with brand TEXT HEADER + branded BODY + FOOTER.
+ * IMAGE headers require a Meta Resumable Upload handle (not a public logo URL).
+ * @param {{ body: string, greetingKind?: string, customerName?: string, language?: string, variables?: string[] }} opts
  */
 export function brandedWhatsAppTemplateComponents(opts) {
   const wrapped = wrapWhatsAppMessage({
@@ -75,24 +76,42 @@ export function brandedWhatsAppTemplateComponents(opts) {
     includeFooter: false,
     includeGreeting: true,
   });
+  const text = wrapped.text;
+  const variables = Array.isArray(opts.variables) ? opts.variables.map(String) : [];
+  /** @type {Record<string, unknown>} */
+  const bodyComponent = { type: "BODY", text };
+  const placeholders = [...String(text).matchAll(/\{\{(\d+)\}\}/g)];
+  if (placeholders.length) {
+    let max = 0;
+    for (const m of placeholders) max = Math.max(max, Number(m[1]) || 0);
+    const samples = [];
+    for (let i = 1; i <= max; i += 1) {
+      const key = String(variables[i - 1] || "").toLowerCase();
+      samples.push(
+        key === "name" || key === "customer_name"
+          ? opts.customerName || "Alex"
+          : key === "order_number"
+            ? "TD-1042"
+            : `Sample ${i}`,
+      );
+    }
+    bodyComponent.example = { body_text: [samples] };
+  }
   return {
-    language: opts.language || "en",
+    language: opts.language || "en_US",
     components: [
       {
         type: "HEADER",
-        format: "IMAGE",
-        example: { header_handle: [brandLogoUrl()] },
+        format: "TEXT",
+        text: "Triada Designs",
       },
-      {
-        type: "BODY",
-        text: wrapped.text,
-      },
+      bodyComponent,
       {
         type: "FOOTER",
         text: brandAddressOneLine().slice(0, 60),
       },
     ],
-    preview_text: `${wrapped.text}\n\n${brandAddressOneLine()}`,
+    preview_text: `${text}\n\n${brandAddressOneLine()}`,
     logo_url: brandLogoUrl(),
   };
 }

@@ -1615,7 +1615,7 @@ export async function dispatchV1(method, segments, request, body) {
         name: input.name,
         body: branded.body,
         category: mapTemplateCategoryToMeta(category),
-        language: input.language || "en",
+        language: input.language || "en_US",
         variables: input.variables,
         components: input.components || branded.components,
       });

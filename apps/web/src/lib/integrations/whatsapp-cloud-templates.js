@@ -42,6 +42,173 @@ function templateApiName(name) {
   return n || "jewellery_update";
 }
 
+/** Meta requires locale codes like en_US (plain `en` is rejected). */
+function graphLanguage(language) {
+  const raw = String(language || "en_US").trim() || "en_US";
+  if (/^[a-z]{2}$/i.test(raw)) {
+    const base = raw.toLowerCase();
+    if (base === "en") return "en_US";
+    return `${base}_${base.toUpperCase()}`;
+  }
+  return raw;
+}
+
+const BODY_EXAMPLE_BY_VAR = {
+  name: "Alex",
+  order_number: "TD-1042",
+  status: "in production",
+  tracking: "TRK123456",
+  piece: "Aura ring",
+  product: "Aura ring",
+};
+
+/**
+ * Collect max positional {{n}} index in template body text.
+ * @param {string} text
+ */
+function maxBodyPlaceholderIndex(text) {
+  let max = 0;
+  for (const match of String(text || "").matchAll(/\{\{(\d+)\}\}/g)) {
+    const n = Number(match[1]);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max;
+}
+
+/**
+ * Meta requires example.body_text when BODY has {{n}} placeholders.
+ * @param {string} text
+ * @param {string[]} [variables]
+ */
+function bodyTextExample(text, variables = []) {
+  const max = maxBodyPlaceholderIndex(text);
+  if (max < 1) return undefined;
+  const samples = [];
+  for (let i = 1; i <= max; i += 1) {
+    const key = String(variables[i - 1] || "").toLowerCase();
+    samples.push(BODY_EXAMPLE_BY_VAR[key] || `Sample ${i}`);
+  }
+  return { body_text: [samples] };
+}
+
+/**
+ * True when header_handle looks like a Meta Resumable Upload handle (not a URL).
+ * @param {unknown} handle
+ */
+function isMetaMediaHandle(handle) {
+  const s = String(handle || "");
+  if (!s || /^https?:\/\//i.test(s)) return false;
+  // Typical handle: "4::aW...:image/jpeg:..."
+  return s.includes("::") || /^[0-9]+:/.test(s);
+}
+
+/**
+ * Normalize components for Graph message_templates create.
+ * - Drop IMAGE headers that use public URLs (Invalid parameter) → TEXT brand header
+ * - Ensure BODY examples for positional variables
+ * @param {unknown[]} components
+ * @param {{ body?: string, variables?: string[] }} [opts]
+ */
+export function normalizeWhatsAppGraphComponents(components, opts = {}) {
+  const variables = Array.isArray(opts.variables) ? opts.variables.map(String) : [];
+  const fallbackBody = String(opts.body || "");
+  const input = Array.isArray(components) ? components : [];
+  const next = [];
+
+  for (const raw of input) {
+    if (!raw || typeof raw !== "object") continue;
+    const component = /** @type {Record<string, unknown>} */ ({ ...raw });
+    const type = String(component.type || "").toUpperCase();
+    component.type = type;
+
+    if (type === "HEADER") {
+      const format = String(component.format || "TEXT").toUpperCase();
+      if (format === "IMAGE" || format === "VIDEO" || format === "DOCUMENT" || format === "GIF") {
+        const example =
+          component.example && typeof component.example === "object"
+            ? /** @type {Record<string, unknown>} */ (component.example)
+            : {};
+        const handles = Array.isArray(example.header_handle)
+          ? example.header_handle
+          : [];
+        const valid = handles.filter(isMetaMediaHandle);
+        if (!valid.length) {
+          // Public logo URLs / SVG are not valid header_handle values.
+          next.push({
+            type: "HEADER",
+            format: "TEXT",
+            text: "Triada Designs",
+          });
+          continue;
+        }
+        component.format = format;
+        component.example = { header_handle: valid.map(String) };
+        next.push(component);
+        continue;
+      }
+      component.format = "TEXT";
+      if (!component.text) component.text = "Triada Designs";
+      next.push(component);
+      continue;
+    }
+
+    if (type === "BODY") {
+      const text = String(component.text || fallbackBody || "");
+      component.text = text;
+      const existing =
+        component.example && typeof component.example === "object"
+          ? /** @type {Record<string, unknown>} */ (component.example)
+          : null;
+      const hasExample =
+        existing &&
+        ((Array.isArray(existing.body_text) && existing.body_text.length > 0) ||
+          (Array.isArray(existing.body_text_named_params) &&
+            existing.body_text_named_params.length > 0));
+      if (!hasExample) {
+        const example = bodyTextExample(text, variables);
+        if (example) component.example = example;
+        else delete component.example;
+      }
+      next.push(component);
+      continue;
+    }
+
+    if (type === "FOOTER") {
+      const text = String(component.text || "").slice(0, 60);
+      if (text) next.push({ type: "FOOTER", text });
+      continue;
+    }
+
+    next.push(component);
+  }
+
+  if (!next.some((c) => String(c.type).toUpperCase() === "BODY")) {
+    const text = fallbackBody || "Warm greetings from Triada Designs.";
+    const body = { type: "BODY", text };
+    const example = bodyTextExample(text, variables);
+    if (example) body.example = example;
+    next.unshift(body);
+  }
+
+  return next;
+}
+
+/**
+ * Graph error message with user-facing detail when present.
+ * @param {any} raw
+ * @param {number} status
+ */
+function graphErrorMessage(raw, status) {
+  const err = raw?.error && typeof raw.error === "object" ? raw.error : null;
+  if (!err) return `HTTP ${status}`;
+  return (
+    err.error_user_msg ||
+    err.error_user_title ||
+    err.message ||
+    `HTTP ${status}`
+  );
+}
+
 function mapMetaStatus(status) {
   switch (String(status || "").toUpperCase()) {
     case "APPROVED":
@@ -87,26 +254,31 @@ function extractBody(row) {
 function seedRow(def) {
   const logoUrl =
     "https://triada-designs.com/wp-content/uploads/2025/07/TM_Schriftzug_vulcano.svg";
+  const variables = def.variables || [];
+  const bodyComponent = { type: "BODY", text: def.body };
+  const bodyExample = bodyTextExample(def.body, variables);
+  if (bodyExample) bodyComponent.example = bodyExample;
   return {
     id: def.id,
     name: def.name,
     status: def.status || "APPROVED",
     category: def.category,
-    language: "en",
+    // Meta Graph rejects bare `en`; use en_US for Cloud API create.
+    language: "en_US",
     body: def.body,
-    variables: def.variables || [],
-    components: [
-      {
-        type: "HEADER",
-        format: "IMAGE",
-        example: { header_handle: [logoUrl] },
-      },
-      { type: "BODY", text: def.body },
-      {
-        type: "FOOTER",
-        text: "Triada Designs · Timisoara · triada-designs.com",
-      },
-    ],
+    variables,
+    // TEXT header — IMAGE requires a Resumable Upload media handle, not a public URL.
+    components: normalizeWhatsAppGraphComponents(
+      [
+        { type: "HEADER", format: "TEXT", text: "Triada Designs" },
+        bodyComponent,
+        {
+          type: "FOOTER",
+          text: "Triada Designs · Timisoara · triada-designs.com",
+        },
+      ],
+      { body: def.body, variables },
+    ),
     branded: true,
     logo_url: logoUrl,
     source: "seeded",
@@ -430,9 +602,20 @@ export async function submitWhatsAppMessageTemplate(payload) {
       mode: "live",
       external_template_id: null,
       error_code: "template_submit_failed",
-      error_message:
-        raw?.error?.message || `HTTP ${response.status}`,
-      raw,
+      error_message: graphErrorMessage(raw, response.status),
+      error_subcode: raw?.error?.error_subcode || null,
+      raw: {
+        error: raw?.error
+          ? {
+              message: raw.error.message,
+              type: raw.error.type,
+              code: raw.error.code,
+              error_subcode: raw.error.error_subcode,
+              error_user_title: raw.error.error_user_title,
+              error_user_msg: raw.error.error_user_msg,
+            }
+          : undefined,
+      },
     };
   }
 
@@ -574,11 +757,13 @@ export async function listWhatsAppTemplatesPayload() {
 export async function createAndSubmitWhatsAppTemplate(input = {}) {
   const name = String(input.name || "jewellery_update");
   const body = String(input.body || "");
-  const language = String(input.language || "en");
+  const language = graphLanguage(input.language || "en_US");
   const category = String(input.category || "MARKETING").toUpperCase();
-  const components = Array.isArray(input.components)
-    ? input.components
-    : [{ type: "BODY", text: body }];
+  const variables = Array.isArray(input.variables) ? input.variables.map(String) : [];
+  const components = normalizeWhatsAppGraphComponents(
+    Array.isArray(input.components) ? input.components : [{ type: "BODY", text: body }],
+    { body, variables },
+  );
 
   const id = `wa-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   /** @type {Record<string, unknown>} */
@@ -591,7 +776,7 @@ export async function createAndSubmitWhatsAppTemplate(input = {}) {
     language,
     status: "pending_approval",
     body,
-    variables: Array.isArray(input.variables) ? input.variables : [],
+    variables,
     external_template_id: null,
     publish_mode: null,
     metadata: {
@@ -696,13 +881,19 @@ export async function updateAndSubmitWhatsAppTemplate(templateId, input = {}) {
   const current = memoryStore.get(String(templateId)) || existing;
   const name = String(input.name || current.name || "jewellery_update");
   const body = String(input.body ?? current.body ?? "");
-  const language = String(input.language || current.language || "en");
+  const language = graphLanguage(input.language || current.language || "en_US");
   const category = String(
     input.category || current.category || "MARKETING",
   ).toUpperCase();
-  const components = Array.isArray(input.components)
-    ? input.components
-    : [{ type: "BODY", text: body }];
+  const variables = Array.isArray(input.variables)
+    ? input.variables.map(String)
+    : Array.isArray(current.variables)
+      ? current.variables.map(String)
+      : [];
+  const components = normalizeWhatsAppGraphComponents(
+    Array.isArray(input.components) ? input.components : [{ type: "BODY", text: body }],
+    { body, variables },
+  );
 
   let template = {
     ...current,
@@ -711,9 +902,7 @@ export async function updateAndSubmitWhatsAppTemplate(templateId, input = {}) {
     language,
     category: category.toLowerCase(),
     status: "pending_approval",
-    variables: Array.isArray(input.variables)
-      ? input.variables
-      : current.variables || [],
+    variables,
     metadata: {
       ...(current.metadata && typeof current.metadata === "object"
         ? current.metadata
@@ -868,7 +1057,7 @@ export async function seedWhatsAppAutomationTemplates(opts = {}) {
     const payload = {
       name: String(row.name),
       body: String(row.body || ""),
-      language: String(row.language || "en"),
+      language: graphLanguage(row.language || "en_US"),
       category: String(row.category || "MARKETING"),
       variables: Array.isArray(row.variables) ? row.variables : [],
       components: Array.isArray(row.components) ? row.components : undefined,
