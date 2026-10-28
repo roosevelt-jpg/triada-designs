@@ -480,7 +480,7 @@ class TriadaWorkspaceSeeder extends Seeder
             ]);
         }
 
-        // Align with Next.js TEAM_ROSTER (apps/web/src/lib/agents/team-roster.js) prompt_version 4.
+        // Align with Next.js TEAM_ROSTER (apps/web/src/lib/agents/team-roster.js) prompt_version 5.
         foreach ([
             [
                 'key' => 'ai_support',
@@ -492,7 +492,7 @@ class TriadaWorkspaceSeeder extends Seeder
                     'channels' => ['instagram', 'whatsapp', 'facebook', 'webchat', 'email'],
                     'escalation' => true,
                     'collaborates_with' => ['escalation_officer', 'quality_control', 'compliance', 'leads_qualification', 'follow_up'],
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'You are AI Support for Triada Designs. Retrieve training docs for tone, timing, and open/close. Never invent prices, stock, or policies. Warm Triada tone. Hand off complaints, custom quotes, and wholesale to Escalation. Write shared memory notes for Follow up and Leads.',
                 ],
             ],
@@ -505,7 +505,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'config' => [
                     'channels' => ['webchat', 'facebook', 'instagram', 'whatsapp', 'telegram', 'email'],
                     'escalation' => true,
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'You are AI Support for Triada Designs. Retrieve training docs when unsure. Never invent prices or policies. Escalate complaints and custom quotes.',
                 ],
             ],
@@ -518,7 +518,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'config' => [
                     'channels' => ['content_studio', 'instagram', 'tiktok', 'facebook', 'whatsapp', 'linkedin'],
                     'collaborates_with' => ['marketing', 'quality_control', 'compliance'],
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'You are Content creator / Creative for Triada Designs. Draft viral high-converting UGC for Meta/IG/TikTok/WhatsApp. Hook first, soft CTA, no fake scarcity. Ground materials in training docs. Human approval before publish. Never mention internal media pipelines.',
                     'allowed_tools' => [
                         'propose_creative_brief',
@@ -539,7 +539,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'status' => 'active',
                 'config' => [
                     'channels' => ['content_studio', 'meta_page', 'wordpress'],
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'One core message per draft. Viral UGC jewellery creative. Soft CTA. Public posts require human approval.',
                     'allowed_tools' => [
                         'propose_creative_brief',
@@ -560,7 +560,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'config' => [
                     'channels' => ['whatsapp', 'email', 'instagram'],
                     'collaborates_with' => ['ai_support', 'marketing', 'leads_qualification', 'compliance'],
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'One friendly reminder after a quiet day. Warm Triada tone. Never spam. Opt-in WhatsApp only. Read Support/Leads shared context. No invented discounts.',
                 ],
             ],
@@ -573,7 +573,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'config' => [
                     'channels' => ['content_studio', 'campaigns', 'calendar'],
                     'collaborates_with' => ['content_creator', 'quality_control', 'compliance'],
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'Campaign concepts for Meta/IG/TikTok/WhatsApp jewellery marketing. Prefer viral UGC angles — hooks first, soft CTAs, no fake urgency. Human approval before live. Collaborate with Creative and QC via shared memory.',
                     'allowed_tools' => [
                         'propose_creative_brief',
@@ -594,7 +594,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'config' => [
                     'channels' => ['internal'],
                     'collaborates_with' => ['ai_support', 'content_creator', 'marketing', 'compliance'],
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'Return PASS / NEEDS FIXES / BLOCK. Flag invented prices, stock, fake scarcity, off-brand tone, and missing disclosures. Write QC notes into shared memory.',
                 ],
             ],
@@ -607,7 +607,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'config' => [
                     'channels' => ['internal', 'whatsapp', 'email', 'linkedin'],
                     'collaborates_with' => ['ai_support', 'follow_up', 'marketing', 'escalation_officer'],
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'WhatsApp: business messages only to opted-in customers. No bulk unsolicited WhatsApp. ALLOW / HOLD / BLOCK with reason in shared memory. Broadcasts need human approval.',
                 ],
             ],
@@ -621,7 +621,7 @@ class TriadaWorkspaceSeeder extends Seeder
                     'channels' => ['webchat', 'facebook', 'instagram', 'whatsapp', 'telegram', 'email'],
                     'create_leads' => true,
                     'collaborates_with' => ['ai_support', 'follow_up', 'escalation_officer'],
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'Score from explicit purchase/service signals only. Share lead context in shared memory. Route hot / wholesale / custom to Escalation.',
                 ],
             ],
@@ -634,7 +634,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'config' => [
                     'channels' => ['webchat', 'facebook', 'instagram', 'whatsapp', 'telegram', 'email'],
                     'create_leads' => true,
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'Score from explicit purchase/service signals only. Never invent intent.',
                 ],
             ],
@@ -647,7 +647,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'config' => [
                     'channels' => ['webchat', 'facebook', 'instagram', 'whatsapp', 'telegram'],
                     'create_leads' => true,
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'Consultative, not pushy. Recommend only catalog-backed options. Score explicit signals only.',
                 ],
             ],
@@ -660,7 +660,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'config' => [
                     'channels' => ['internal', 'telegram', 'email', 'whatsapp'],
                     'collaborates_with' => ['ai_support', 'compliance', 'leads_qualification'],
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'Prefer clear next actions and owners. Escalate wholesale, boutique, stylist, corporate gifting, custom quotes, and complaints. Never invent revenue or promises. Write handoff into shared memory.',
                 ],
             ],
@@ -672,7 +672,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'status' => 'active',
                 'config' => [
                     'channels' => ['internal'],
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'Prefer clear next actions and owners. Do not invent revenue. One soft follow-up after quiet time; never spam.',
                 ],
             ],
@@ -685,7 +685,7 @@ class TriadaWorkspaceSeeder extends Seeder
                 'config' => [
                     'channels' => ['facebook', 'instagram', 'whatsapp'],
                     'respect_takeover' => true,
-                    'prompt_version' => 4,
+                    'prompt_version' => 5,
                     'system_prompt' => 'Channel eligibility only. Defer content to AI Support. Never invent policies.',
                 ],
             ],

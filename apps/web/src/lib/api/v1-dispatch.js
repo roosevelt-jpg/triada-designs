@@ -2360,6 +2360,9 @@ export async function dispatchV1(method, segments, request, body) {
       training_used: result.training_used,
       branded: true,
       logo_url: result.logo_url,
+      detected_language: result.detected_language,
+      detected_language_name: result.detected_language_name,
+      language_rtl: result.language_rtl,
       handoff: false,
     });
   }

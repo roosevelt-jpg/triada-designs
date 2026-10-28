@@ -114,9 +114,17 @@ class AiOrchestrator
         $message = (string) ($context['message'] ?? $context['body'] ?? '');
         $knowledge = $this->retrieveKnowledge($workspace, $message);
         $catalog = $this->catalogHints($workspace);
+        $detected = app(CustomerLanguageDetector::class)->detect($message, [
+            'hint' => (string) ($context['detected_language'] ?? $context['preferred_language'] ?? $context['language'] ?? ''),
+            'fallback' => 'en',
+        ]);
 
-        $system = $this->systemPrompt($agent, $purpose, $knowledge, $catalog);
-        $prompt = $this->userPrompt($purpose, $message, $context);
+        $system = $this->systemPrompt($agent, $purpose, $knowledge, $catalog, $detected);
+        $prompt = $this->userPrompt($purpose, $message, array_merge($context, [
+            'detected_language' => $detected['code'],
+            'detected_language_name' => $detected['name'],
+            'language_rtl' => $detected['rtl'],
+        ]));
 
         $completion = $this->llm->complete([
             'system' => $system,
@@ -149,12 +157,14 @@ class AiOrchestrator
             'input' => [
                 'message' => $message,
                 'purpose' => $purpose,
+                'detected_language' => $detected['code'],
                 'knowledge_ids' => array_column($knowledge, 'id'),
             ],
             'output' => [
                 'text' => $completion['text'] ?? null,
                 'parsed' => $parsed,
                 'side_effects' => $sideEffects,
+                'detected_language' => $detected['code'],
             ],
             'error_message' => $completion['error'] ?? null,
             'latency_ms' => $latency,
@@ -172,6 +182,10 @@ class AiOrchestrator
             'parsed' => $parsed,
             'side_effects' => $sideEffects,
             'knowledge_used' => $knowledge,
+            'detected_language' => $detected['code'],
+            'detected_language_name' => $detected['name'],
+            'language_rtl' => $detected['rtl'],
+            'language_confidence' => $detected['confidence'],
             'latency_ms' => $latency,
             'error' => $completion['error'] ?? null,
         ];
@@ -265,12 +279,24 @@ class AiOrchestrator
         return 'Products: '.implode(', ', $products ?: ['(none seeded)']).'. Services: '.implode(', ', $services ?: ['(none seeded)']).'.';
     }
 
-    protected function systemPrompt(?AgentConfig $agent, string $purpose, array $knowledge, string $catalog): string
+    /**
+     * @param  array{code?:string,name?:string,rtl?:bool,confidence?:float}  $detected
+     */
+    protected function systemPrompt(?AgentConfig $agent, string $purpose, array $knowledge, string $catalog, array $detected = []): string
     {
         $role = $agent?->role ?? 'support';
         $name = $agent?->name ?? 'Triada assistant';
         $policy = (string) data_get($agent?->config, 'system_prompt', '');
         $kb = collect($knowledge)->map(fn ($k) => "- {$k['title']}: {$k['excerpt']}")->implode("\n");
+        $langCode = (string) ($detected['code'] ?? 'en');
+        $langName = (string) ($detected['name'] ?? 'English');
+        $rtl = ! empty($detected['rtl']);
+        $rtlLine = $rtl
+            ? "- This language is RTL: prefer natural right-to-left phrasing; do not force Latin script."
+            : '';
+        $arabicLine = $langCode === 'ar'
+            ? "- Arabic replies: write proper Arabic script (not Latin transliteration) with natural RTL-friendly phrasing."
+            : '';
 
         return trim(<<<TXT
 You are {$name} ({$role}) for Triada Designs — jewellery and Salt & Spirit collections.
@@ -284,7 +310,14 @@ Hard rules:
 - WhatsApp: business messages only (orders, products, support) to opted-in customers.
 - Posts, broadcasts, and custom quotes require human approval before sending.
 - Never mention internal tooling or implementation details in customer-facing copy.
-- Match the customer's language on every reply (including Arabic, Romanian, German, French, Russian, Spanish, Portuguese, English). Shared team notes may stay in English; customer-facing text follows the customer.
+- Match the customer's language on every reply (detect from their latest message; default English if unclear).
+- Supported customer languages include Arabic, Romanian, German, French, Russian, Spanish, Portuguese, and English — and match other languages when the customer writes them.
+- Keep Triada warmth and accuracy in that language; do not mix languages unless the customer does.
+- Shared team notes may stay in English; customer-facing text follows the customer.
+Detected customer language for this turn: {$langName} ({$langCode}).
+- Reply entirely in {$langName} unless the customer mixed languages — then mirror their mix.
+{$rtlLine}
+{$arabicLine}
 Agent policy:
 {$policy}
 Catalog: {$catalog}
@@ -296,8 +329,11 @@ TXT);
     protected function userPrompt(string $purpose, string $message, array $context): string
     {
         $intent = (string) ($context['intent'] ?? '');
+        $lang = (string) ($context['detected_language_name'] ?? $context['detected_language'] ?? 'English');
+        $code = (string) ($context['detected_language'] ?? 'en');
+        $rtl = ! empty($context['language_rtl']) ? ' [RTL]' : '';
 
-        return "Purpose: {$purpose}\nIntent hint: {$intent}\nCustomer message:\n{$message}";
+        return "Purpose: {$purpose}\nIntent hint: {$intent}\nReply language: {$lang} ({$code}){$rtl}\nCustomer message:\n{$message}";
     }
 
     /**

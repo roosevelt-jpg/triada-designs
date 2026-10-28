@@ -30,15 +30,16 @@ class LocalHeuristicLlmAdapter implements LlmAdapterInterface
         $prompt = strtolower((string) ($request['prompt'] ?? ''));
         $system = (string) ($request['system'] ?? '');
         $purpose = strtolower((string) ($request['purpose'] ?? 'draft'));
+        $lang = $this->detectLangFromRequest($request);
 
         $text = match (true) {
-            str_contains($purpose, 'classif') || str_contains($prompt, 'classify') => $this->classify($prompt),
+            str_contains($purpose, 'classif') || str_contains($prompt, 'classify') => $this->classify($prompt, $lang),
             str_contains($purpose, 'qualif') || str_contains($prompt, 'qualify') => $this->qualify($prompt),
             str_contains($purpose, 'escalat') || str_contains($prompt, 'complaint') => $this->escalate($prompt),
             str_contains($purpose, 'gift') => $this->giftFinder($prompt),
             str_contains($purpose, 'ugc') || str_contains($purpose, 'content_ugc') => $this->ugcScriptDraft($prompt),
             str_contains($purpose, 'content') || str_contains($prompt, 'caption') => $this->contentDraft($prompt),
-            default => $this->draftReply($prompt, $system),
+            default => $this->draftReply($prompt, $system, $lang),
         };
 
         $promptTokens = max(1, (int) ceil(strlen($prompt) / 4));
@@ -55,7 +56,7 @@ class LocalHeuristicLlmAdapter implements LlmAdapterInterface
         ];
     }
 
-    protected function classify(string $prompt): string
+    protected function classify(string $prompt, string $lang = 'en'): string
     {
         $intent = match (true) {
             str_contains($prompt, 'where is my order') || str_contains($prompt, 'tracking') => 'order_status',
@@ -73,7 +74,7 @@ class LocalHeuristicLlmAdapter implements LlmAdapterInterface
 
         return json_encode([
             'intent' => $intent,
-            'language' => 'en',
+            'language' => $lang,
             'confidence' => 0.78,
             'needs_human' => in_array($intent, ['complaint', 'custom_piece', 'b2b_enquiry'], true),
             'provider' => 'local_heuristic',
@@ -149,8 +150,13 @@ class LocalHeuristicLlmAdapter implements LlmAdapterInterface
         ], JSON_THROW_ON_ERROR);
     }
 
-    protected function draftReply(string $prompt, string $system): string
+    protected function draftReply(string $prompt, string $system, string $lang = 'en'): string
     {
+        $localized = $this->localizedDraft($lang, $prompt);
+        if ($localized !== null) {
+            return $localized;
+        }
+
         $base = "Thanks for reaching out to Triada Designs. I'm the AI assistant — I can help with sizes, materials, care, shipping, and our collection, and I can connect you to a person anytime.";
 
         if (str_contains($prompt, 'size') || str_contains($prompt, 'sizing') || str_contains($prompt, 'ring size')) {
@@ -192,5 +198,54 @@ class LocalHeuristicLlmAdapter implements LlmAdapterInterface
         $hint = $system !== '' ? ' (guided by agent policy)' : '';
 
         return $base.$hint.' Could you share a bit more about the piece, size, or occasion you have in mind?';
+    }
+
+    /**
+     * @param  array<string, mixed>  $request
+     */
+    protected function detectLangFromRequest(array $request): string
+    {
+        $blob = ((string) ($request['prompt'] ?? ''))."\n".((string) ($request['system'] ?? ''));
+        if (preg_match('/Reply language:\s*[^(]*\(([a-z]{2})\)/i', $blob, $m)) {
+            return strtolower($m[1]);
+        }
+        if (preg_match('/Detected customer language for this turn:\s*[^(]*\(([a-z]{2})\)/i', $blob, $m)) {
+            return strtolower($m[1]);
+        }
+
+        return app(CustomerLanguageDetector::class)->detect((string) ($request['prompt'] ?? ''))['code'];
+    }
+
+    protected function localizedDraft(string $lang, string $prompt): ?string
+    {
+        $replies = [
+            'ar' => 'تحيات دافئة من Triada Designs. أنا المساعد الذكي — يمكنني المساعدة في المقاسات والمواد والعناية والشحن والمجموعة، وأوصلك بشخص عند الطلب. القطع من الفضة المطلية بالذهب؛ ذهب عيار 14 و18 عند الطلب. مدة التصنيع عادةً حوالي 7 أيام.',
+            'ro' => 'Salutări calde de la Triada Designs. Sunt asistentul AI — pot ajuta cu mărimi, materiale, îngrijire, livrare și colecție, și vă pot conecta cu o persoană oricând. Piesele sunt argint cu placare aur; aur 14K/18K la cerere. Timp tipic de execuție ~7 zile.',
+            'de' => 'Herzliche Grüße von Triada Designs. Ich bin der KI-Assistent — ich helfe bei Größen, Materialien, Pflege, Versand und der Kollektion und verbinde Sie jederzeit mit einer Person. Stücke: Silber mit Goldplattierung; 14K/18K Gold auf Anfrage. Fertigung ca. 7 Tage.',
+            'fr' => 'Chaleureuses salutations de Triada Designs. Je suis l’assistant IA — je peux aider sur les tailles, matières, entretien, livraison et la collection, et vous mettre en relation avec une personne. Pièces en argent plaqué or ; or 14K/18K sur demande. Fabrication typique ~7 jours.',
+            'ru' => 'Тёплые приветствия от Triada Designs. Я ИИ-ассистент — помогу с размерами, материалами, уходом, доставкой и коллекцией и соединю с человеком по запросу. Изделия: серебро с золотым покрытием; золото 14K/18K по запросу. Изготовление обычно около 7 дней.',
+            'es' => 'Saludos cordiales de Triada Designs. Soy el asistente de IA — puedo ayudar con tallas, materiales, cuidado, envío y la colección, y conectarle con una persona cuando lo desee. Piezas de plata con baño de oro; oro 14K/18K bajo pedido. Fabricación típica ~7 días.',
+            'pt' => 'Saudações calorosas da Triada Designs. Sou o assistente de IA — posso ajudar com tamanhos, materiais, cuidados, entrega e a coleção, e ligá-lo a uma pessoa quando quiser. Peças em prata com banho de ouro; ouro 14K/18K sob pedido. Fabrico típico ~7 dias.',
+        ];
+
+        if ($lang === 'en' || ! isset($replies[$lang])) {
+            return null;
+        }
+
+        $extra = '';
+        if (str_contains($prompt, 'price') || str_contains($prompt, 'cost') || str_contains($prompt, 'aed') || str_contains($prompt, 'سعر') || str_contains($prompt, 'pret') || str_contains($prompt, 'preis') || str_contains($prompt, 'prix') || str_contains($prompt, 'цена') || str_contains($prompt, 'precio') || str_contains($prompt, 'preço')) {
+            $extra = match ($lang) {
+                'ar' => ' الأسعار من القائمة المعتمدة فقط — أخبرني بالقطعة أو رمز SKU.',
+                'ro' => ' Prețurile vin doar din lista aprobată — spuneți piesa sau SKU-ul.',
+                'de' => ' Preise nur aus der freigegebenen Liste — nennen Sie Stück oder SKU.',
+                'fr' => ' Prix uniquement depuis la liste approuvée — indiquez la pièce ou le SKU.',
+                'ru' => ' Цены только из утверждённого прайса — укажите изделие или SKU.',
+                'es' => ' Precios solo de la lista aprobada — indique la pieza o el SKU.',
+                'pt' => ' Preços apenas da lista aprovada — indique a peça ou o SKU.',
+                default => '',
+            };
+        }
+
+        return $replies[$lang].$extra;
     }
 }

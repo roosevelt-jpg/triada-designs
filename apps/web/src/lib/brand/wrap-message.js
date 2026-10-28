@@ -17,6 +17,7 @@ import {
  *   body: string,
  *   greetingKind?: string,
  *   customerName?: string,
+ *   language?: string,
  *   includeGreeting?: boolean,
  *   includeFooter?: boolean,
  *   compactFooter?: boolean,
@@ -35,6 +36,7 @@ export function wrapWhatsAppMessage(opts) {
   const greeting = includeGreeting
     ? warmGreeting(opts.greetingKind || "default", {
         customerName: opts.customerName,
+        language: opts.language,
       })
     : "";
   const footer = includeFooter
@@ -119,13 +121,16 @@ export function brandedWhatsAppTemplateComponents(opts) {
 /**
  * Ensure an outbound plain string carries Triada greeting + footer when missing.
  * @param {string} text
- * @param {{ greetingKind?: string, customerName?: string }} [opts]
+ * @param {{ greetingKind?: string, customerName?: string, language?: string }} [opts]
  */
 export function ensureBrandedOutboundText(text, opts = {}) {
   const raw = String(text || "").trim();
   const already =
     /triada designs/i.test(raw) &&
-    (/warm greetings/i.test(raw) || /info@triada-designs\.com/i.test(raw));
+    (/warm greetings|salutări calde|herzliche grüße|chaleureuses salutations|тёплые приветствия|saludos cordiales|saudações calorosas|تحيات دافئة/i.test(
+      raw,
+    ) ||
+      /info@triada-designs\.com/i.test(raw));
   if (already) {
     return {
       text: raw,
@@ -138,5 +143,6 @@ export function ensureBrandedOutboundText(text, opts = {}) {
     body: raw,
     greetingKind: opts.greetingKind,
     customerName: opts.customerName,
+    language: opts.language,
   });
 }

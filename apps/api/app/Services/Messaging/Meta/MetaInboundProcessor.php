@@ -11,6 +11,7 @@ use App\Models\Message;
 use App\Models\WebhookEvent;
 use App\Models\Workspace;
 use App\Services\AI\AiOrchestrator;
+use App\Services\AI\CustomerLanguageDetector;
 use App\Services\Automations\WorkflowExecutor;
 use App\Services\Messaging\DTOs\NormalizedMessage;
 use Illuminate\Support\Facades\DB;
@@ -81,6 +82,10 @@ class MetaInboundProcessor
                     'channel' => $channel,
                     'conversation_id' => $result['conversation']['id'] ?? null,
                     'contact_id' => $result['contact']['id'] ?? null,
+                    'detected_language' => $result['conversation']['detected_language']
+                        ?? $result['message']['detected_language']
+                        ?? null,
+                    'preferred_language' => $result['contact']['preferred_language'] ?? null,
                 ]);
             } catch (\Throwable $e) {
                 $aiResult = ['ok' => false, 'error' => $e->getMessage()];
@@ -183,6 +188,12 @@ class MetaInboundProcessor
 
             $contact = Contact::query()->findOrFail($identity->contact_id);
 
+            $detected = app(CustomerLanguageDetector::class)->detect((string) $item->body, [
+                'hint' => (string) ($contact->preferred_language ?? ''),
+                'fallback' => 'en',
+            ]);
+            $langCode = $detected['code'];
+
             $conversation = Conversation::query()->firstOrCreate(
                 [
                     'workspace_id' => $workspace->id,
@@ -195,7 +206,7 @@ class MetaInboundProcessor
                     'status' => 'open',
                     'priority' => 'normal',
                     'automation_mode' => 'ai',
-                    'detected_language' => 'en',
+                    'detected_language' => $langCode,
                     'last_message_at' => now(),
                     'last_inbound_at' => now(),
                 ]
@@ -210,19 +221,30 @@ class MetaInboundProcessor
                 'sender_id' => $contact->id,
                 'message_type' => $item->messageType,
                 'body' => $item->body,
-                'detected_language' => 'en',
+                'detected_language' => $langCode,
                 'delivery_status' => 'received',
                 'provider_timestamp' => $item->timestamp ? date('Y-m-d H:i:s', strtotime($item->timestamp)) : now(),
                 'metadata' => array_merge($item->metadata, [
                     'page_or_account_id' => $item->pageOrAccountId,
+                    'language_method' => $detected['method'],
+                    'language_confidence' => $detected['confidence'],
                 ]),
             ]);
 
             $conversation->forceFill([
                 'last_message_at' => now(),
                 'last_inbound_at' => now(),
+                'detected_language' => $langCode,
                 'integration_id' => $conversation->integration_id ?: $integration?->id,
             ])->save();
+
+            if (
+                empty($contact->preferred_language)
+                || $contact->preferred_language === 'en'
+                || $detected['confidence'] >= 0.7
+            ) {
+                $contact->forceFill(['preferred_language' => $langCode])->save();
+            }
 
             if ($integration) {
                 WebhookEvent::query()->create([

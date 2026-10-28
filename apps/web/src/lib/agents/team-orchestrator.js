@@ -78,6 +78,9 @@ export async function runTeamCollaboration(input = {}) {
     context: enrichedContext,
   });
 
+  const detectedLanguage = String(primaryResult.detected_language || "en");
+  enrichedContext.detected_language = detectedLanguage;
+
   /** @type {Array<Record<string, unknown>>} */
   const steps = [
     {
@@ -219,6 +222,9 @@ export async function runTeamCollaboration(input = {}) {
     output: draft,
     provider: primaryResult.provider,
     mode: primaryResult.mode,
+    detected_language: detectedLanguage,
+    detected_language_name: primaryResult.detected_language_name,
+    language_rtl: primaryResult.language_rtl,
     training_used: primaryResult.training_used,
     shared_memory: {
       storage: shared.storage,

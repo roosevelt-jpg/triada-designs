@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\Task;
 use App\Models\Workspace;
 use App\Services\AI\AiOrchestrator;
+use App\Services\AI\CustomerLanguageDetector;
 
 class AnswerBotService
 {
@@ -24,8 +25,18 @@ class AnswerBotService
      */
     public function handle(Workspace $workspace, string $message, array $context = []): array
     {
-        $faq = $this->knowledge->answerFaq($message);
-        $classified = $this->ai->runAgent($workspace, 'support', 'classify', array_merge($context, [
+        $detected = app(CustomerLanguageDetector::class)->detect($message, [
+            'hint' => (string) ($context['detected_language'] ?? $context['preferred_language'] ?? ''),
+            'fallback' => 'en',
+        ]);
+        $langContext = array_merge($context, [
+            'detected_language' => $detected['code'],
+            'preferred_language' => $detected['code'],
+        ]);
+
+        // English FAQ snippets only — for other languages prefer AI/local draft matching the customer.
+        $faq = $detected['code'] === 'en' ? $this->knowledge->answerFaq($message) : null;
+        $classified = $this->ai->runAgent($workspace, 'support', 'classify', array_merge($langContext, [
             'message' => $message,
             'dry_run' => true,
         ]));
@@ -37,7 +48,7 @@ class AnswerBotService
 
         $reply = $faq;
         if ($reply === null) {
-            $draft = $this->ai->runAgent($workspace, 'support', 'draft_reply', array_merge($context, [
+            $draft = $this->ai->runAgent($workspace, 'support', 'draft_reply', array_merge($langContext, [
                 'message' => $message,
                 'intent' => $intent,
                 'dry_run' => ! empty($context['dry_run']),
@@ -73,6 +84,9 @@ class AnswerBotService
             'reply' => $reply,
             'disclosure' => JewelleryKnowledge::AI_DISCLOSURE,
             'needs_human' => $handoff,
+            'detected_language' => $detected['code'],
+            'detected_language_name' => $detected['name'],
+            'language_rtl' => $detected['rtl'],
             'policies' => $this->knowledge->policies(),
             'mode' => 'answer_bot',
         ];
