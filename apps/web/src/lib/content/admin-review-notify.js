@@ -6,7 +6,11 @@ import { BRAND } from "@/lib/brand/identity";
 import { wrapEmailMessage } from "@/lib/brand/wrap-email";
 import { SEED_ADMIN } from "@/lib/constants";
 import { sendResendEmail } from "@/lib/email/resend";
-import { findContent, patchContent } from "@/lib/content-schedule-store";
+import {
+  findContent,
+  listPendingReview,
+  patchContent,
+} from "@/lib/content-schedule-store";
 import { pushNotification } from "@/lib/notifications/notifications-store";
 
 function adminEmail() {
@@ -76,7 +80,37 @@ export function buildReviewNotifyEmail(opts) {
 }
 
 /**
+ * Mirror pending content into the shared dashboard bell feed (deduped).
+ * Used by GET /notifications so seed/in_review items appear without regenerate.
+ * Generate path still calls notifyAdminPendingReview (same pushNotification).
+ */
+export function syncPendingReviewNotifications() {
+  const pending = listPendingReview();
+  const synced = [];
+  for (const item of pending) {
+    const event = pushNotification({
+      type: "content_pending_review",
+      title: `Pending review: ${String(item.title || "Untitled creative")}`,
+      body: `A ${String(item.channel || "channel")} draft is ready for preview and approval.`,
+      href: `/content/review?highlight=${encodeURIComponent(item.id)}`,
+      severity: "warning",
+      entity_type: "content_item",
+      entity_id: item.id,
+      payload: {
+        content_id: item.id,
+        channel: item.channel || null,
+        status: item.status || "in_review",
+      },
+      dedupe: true,
+    });
+    synced.push(event);
+  }
+  return { synced: synced.length, notifications: synced };
+}
+
+/**
  * Send (or locally log) an admin review notification once per pending cycle.
+ * Always writes the shared bell feed; email is once per pending cycle.
  * @param {{
  *   contentId: string,
  *   kind?: string,

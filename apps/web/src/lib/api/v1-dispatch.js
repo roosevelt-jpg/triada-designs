@@ -28,7 +28,10 @@ import {
   listScheduled,
   patchContent,
 } from "@/lib/content-schedule-store";
-import { notifyAdminPendingReview } from "@/lib/content/admin-review-notify";
+import {
+  notifyAdminPendingReview,
+  syncPendingReviewNotifications,
+} from "@/lib/content/admin-review-notify";
 import {
   getMediaForContent,
   setMediaVariants,
@@ -520,26 +523,10 @@ export async function dispatchV1(method, segments, request, body) {
     });
   }
 
-  // ---- dashboard bell notifications feed (shared with content review) ----
+  // ---- dashboard bell notifications feed (single store; TD-75 UI + content review) ----
   if (path === "notifications" && m === "GET") {
-    // Surface existing pending review items even before a fresh generate.
-    for (const item of listPendingReview()) {
-      pushNotification({
-        type: "content_pending_review",
-        title: `Pending review: ${String(item.title || "Untitled creative")}`,
-        body: `A ${String(item.channel || "channel")} draft is ready for preview and approval.`,
-        href: `/content/review?highlight=${encodeURIComponent(item.id)}`,
-        severity: "warning",
-        entity_type: "content_item",
-        entity_id: item.id,
-        payload: {
-          content_id: item.id,
-          channel: item.channel || null,
-          status: item.status || "in_review",
-        },
-        dedupe: true,
-      });
-    }
+    // Same feed producer as generate-time notify — no second store.
+    syncPendingReviewNotifications();
     const url = new URL(request.url);
     const unreadOnly = url.searchParams.get("unread") === "1";
     const limit = Number(url.searchParams.get("limit") || 50);
@@ -547,18 +534,7 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "notifications/unread-count" && m === "GET") {
-    for (const item of listPendingReview()) {
-      pushNotification({
-        type: "content_pending_review",
-        title: `Pending review: ${String(item.title || "Untitled creative")}`,
-        body: `A ${String(item.channel || "channel")} draft is ready for preview and approval.`,
-        href: `/content/review?highlight=${encodeURIComponent(item.id)}`,
-        severity: "warning",
-        entity_type: "content_item",
-        entity_id: item.id,
-        dedupe: true,
-      });
-    }
+    syncPendingReviewNotifications();
     return jsonOk({
       unread_count: unreadNotificationCount(),
       feed: "dashboard_bell",
@@ -850,7 +826,7 @@ export async function dispatchV1(method, segments, request, body) {
         message: videoLive ? "Video generation is connected." : "Video generation is local.",
       },
       resize_engine: "triada",
-      summary: "Generate, approve, schedule, and publish.",
+      summary: "Generate, preview, approve, schedule, and publish.",
     });
   }
 

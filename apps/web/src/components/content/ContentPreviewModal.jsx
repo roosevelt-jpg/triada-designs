@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { creativeModeLabel } from "@/lib/integrations/brand-labels";
@@ -11,11 +12,15 @@ function mediaUrl(url) {
 }
 
 /**
- * Preview-before-approval modal shown after image/video generation.
+ * Preview-before-approval modal shown after image/video generation,
+ * and when reopening pending creatives from Content Studio.
+ * Approval happens here (or on /content/review) — not from the card list.
+ *
  * @param {{
  *   open: boolean,
  *   item: object|null,
  *   asset: object|null,
+ *   variants?: object[],
  *   busy?: boolean,
  *   onClose: () => void,
  *   onApprove: () => void,
@@ -26,16 +31,27 @@ export function ContentPreviewModal({
   open,
   item,
   asset,
+  variants = [],
   busy = false,
   onClose,
   onApprove,
   onOpenReview,
 }) {
+  useEffect(() => {
+    if (!open) return undefined;
+    function onKey(event) {
+      if (event.key === "Escape" && !busy) onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, busy, onClose]);
+
   if (!open || !item) return null;
 
   const url = mediaUrl(asset?.url);
   const kind = asset?.kind || "image";
   const modeLabel = creativeModeLabel(asset?.mode || "local_sim");
+  const canApprove = item.status === "in_review" || item.status === "draft";
 
   return (
     <div
@@ -43,7 +59,9 @@ export function ContentPreviewModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="content-preview-title"
-      onClick={onClose}
+      onClick={() => {
+        if (!busy) onClose();
+      }}
     >
       <div
         className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-md border border-line bg-ivory shadow-xl"
@@ -56,7 +74,13 @@ export function ContentPreviewModal({
               {item.title}
             </h2>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close preview">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            disabled={busy}
+            aria-label="Close preview"
+          >
             Close
           </Button>
         </div>
@@ -72,7 +96,7 @@ export function ContentPreviewModal({
               />
             ) : (
               <div className="flex h-48 items-center justify-center text-sm text-muted">
-                Preview media is not available yet.
+                Preview media is not available yet — generate creative first.
               </div>
             )}
             <div className="flex flex-wrap items-center gap-2 border-t border-line px-3 py-2 text-xs">
@@ -88,21 +112,56 @@ export function ContentPreviewModal({
             </div>
           </div>
 
+          {variants.length > 0 ? (
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-muted">
+                Platform variants
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {variants.slice(0, 4).map((variant) => {
+                  const preview = variant.media_asset?.url || variant.mediaAsset?.url;
+                  return (
+                    <div
+                      key={variant.id || variant.platform_target}
+                      className="overflow-hidden rounded-sm border border-line bg-white"
+                    >
+                      {preview ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={mediaUrl(preview)}
+                          alt={variant.platform_target}
+                          className="h-20 w-full object-contain"
+                        />
+                      ) : null}
+                      <p className="truncate px-2 py-1 text-[10px] text-muted">
+                        {variant.platform_target}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           {item.body ? <p className="text-sm text-muted">{item.body}</p> : null}
 
           <p className="text-sm text-brown-dark">
-            Review this creative before approving. Approved items can be scheduled on the calendar.
+            {canApprove
+              ? "Review this creative before approving. Approved items can be scheduled on the calendar."
+              : "This item is already past pending review."}
           </p>
 
           <div className="flex flex-wrap gap-2">
-            <Button disabled={busy} onClick={onApprove}>
-              Approve
-            </Button>
+            {canApprove ? (
+              <Button disabled={busy || !url} onClick={onApprove}>
+                Approve
+              </Button>
+            ) : null}
             <Button variant="secondary" disabled={busy} onClick={onOpenReview}>
               Open review queue
             </Button>
             <Button variant="ghost" disabled={busy} onClick={onClose}>
-              Keep pending
+              {canApprove ? "Keep pending" : "Close"}
             </Button>
           </div>
         </div>

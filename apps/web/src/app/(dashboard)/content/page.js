@@ -95,9 +95,25 @@ export default function ContentPage() {
     }
   }
 
-  function openPreview(item, asset, extraNotice = "") {
-    setPreview({ item, asset });
+  function openPreview(item, asset, extraNotice = "", variants = []) {
+    setPreview({
+      item,
+      asset: asset || null,
+      variants: Array.isArray(variants) ? variants : [],
+    });
     if (extraNotice) setNotice(extraNotice);
+  }
+
+  function previewExisting(item) {
+    const media = mediaByItem[item.id];
+    const assets = media?.assets || [];
+    const asset =
+      assets.find((a) => a.kind === "video") ||
+      assets.find((a) => a.kind === "animation") ||
+      assets.find((a) => a.kind === "image") ||
+      assets[0] ||
+      null;
+    openPreview(item, asset, "", media?.variants || []);
   }
 
   async function schedule(item) {
@@ -158,11 +174,12 @@ export default function ContentPage() {
         },
       });
       const nextItem = result.content || { ...item, status: "in_review" };
-      await refreshMedia(item.id);
+      const media = await refreshMedia(item.id);
       openPreview(
         nextItem,
         result.asset,
-        `Image ready for preview (${creativeModeLabel(result.mode)}).`
+        `Image ready for preview (${creativeModeLabel(result.mode)}).`,
+        media?.variants || result.variants || []
       );
       await load();
     } catch (err) {
@@ -182,11 +199,12 @@ export default function ContentPage() {
       });
       const count = result.variants?.length || 0;
       const nextItem = result.content || { ...item, status: "in_review" };
-      await refreshMedia(item.id);
+      const media = await refreshMedia(item.id);
       openPreview(
         nextItem,
         result.asset || result.variants?.[0]?.media_asset,
-        `Generated ${count} platform variants (${creativeModeLabel(result.mode)}). Preview before approval.`
+        `Generated ${count} platform variants (${creativeModeLabel(result.mode)}). Preview before approval.`,
+        media?.variants || result.variants || []
       );
       await load();
     } catch (err) {
@@ -209,10 +227,12 @@ export default function ContentPage() {
         },
       });
       const nextItem = result.content || { ...item, status: "in_review" };
+      const media = await refreshMedia(item.id);
       openPreview(
         nextItem,
         result.asset,
-        `Short video ready for preview (${result.mode_label || creativeModeLabel(result.mode) || "ready"}).`
+        `Short video ready for preview (${result.mode_label || creativeModeLabel(result.mode) || "ready"}).`,
+        media?.variants || []
       );
       await load();
     } catch (err) {
@@ -237,10 +257,12 @@ export default function ContentPage() {
         },
       });
       const nextItem = result.content || { ...item, status: "in_review" };
+      const media = await refreshMedia(item.id);
       openPreview(
         nextItem,
         result.asset,
-        `UGC video ready for preview (${result.mode_label || creativeModeLabel(result.mode) || "ready"}).`
+        `UGC video ready for preview (${result.mode_label || creativeModeLabel(result.mode) || "ready"}).`,
+        media?.variants || []
       );
       await load();
     } catch (err) {
@@ -266,11 +288,12 @@ export default function ContentPage() {
         },
       });
       const nextItem = result.content || { ...item, status: "in_review" };
-      await refreshMedia(item.id);
+      const media = await refreshMedia(item.id);
       openPreview(
         nextItem,
         result.asset,
-        `Animation ready for preview (${creativeModeLabel(result.mode)}).`
+        `Animation ready for preview (${creativeModeLabel(result.mode)}).`,
+        media?.variants || []
       );
       await load();
     } catch (err) {
@@ -295,11 +318,12 @@ export default function ContentPage() {
       });
       const variantCount = result.variants?.length || 0;
       const nextItem = result.content || { ...item, status: "in_review" };
-      await refreshMedia(item.id);
+      const media = await refreshMedia(item.id);
       openPreview(
         nextItem,
         result.asset,
-        `Full creative pack ready (${creativeModeLabel(result.mode)}): preview before approval · ${variantCount} variants.`
+        `Full creative pack ready (${creativeModeLabel(result.mode)}): preview before approval · ${variantCount} variants.`,
+        media?.variants || result.variants || []
       );
       await load();
     } catch (err) {
@@ -321,6 +345,7 @@ export default function ContentPage() {
         open={Boolean(preview)}
         item={preview?.item || null}
         asset={preview?.asset || null}
+        variants={preview?.variants || []}
         busy={Boolean(busyId && String(busyId).startsWith("approve-"))}
         onClose={() => setPreview(null)}
         onApprove={() => preview?.item?.id && approve(preview.item.id)}
@@ -394,7 +419,12 @@ export default function ContentPage() {
                 </p>
 
                 {hero?.url ? (
-                  <div className="mt-4 overflow-hidden rounded-sm border border-line bg-stone/30">
+                  <button
+                    type="button"
+                    className="mt-4 w-full overflow-hidden rounded-sm border border-line bg-stone/30 text-left transition-colors hover:border-champagne"
+                    onClick={() => previewExisting(item)}
+                    aria-label={`Preview ${item.title}`}
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={mediaUrl(hero.url)}
@@ -407,8 +437,9 @@ export default function ContentPage() {
                         {hero.kind} · {hero.width}×{hero.height}
                         {hero.aspect_ratio ? ` · ${hero.aspect_ratio}` : ""}
                       </span>
+                      <span className="text-brown-dark">Preview</span>
                     </div>
-                  </div>
+                  </button>
                 ) : (
                   <p className="mt-4 text-sm text-muted">No creative image yet — generate pack below.</p>
                 )}
@@ -539,8 +570,11 @@ export default function ContentPage() {
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   {item.status === "in_review" || item.status === "draft" ? (
-                    <Button disabled={busyId === `approve-${item.id}`} onClick={() => approve(item.id)}>
-                      Approve (human)
+                    <Button
+                      disabled={busyId === `approve-${item.id}`}
+                      onClick={() => previewExisting(item)}
+                    >
+                      Preview & approve
                     </Button>
                   ) : null}
                   {item.status === "approved" ? (
