@@ -214,13 +214,18 @@ export function envPresent(name) {
   return Boolean(v && String(v).trim());
 }
 
-export function buildIntegrationsList() {
+/**
+ * @param {{ anthropicHasCredentials?: boolean, anthropicModel?: string }} [opts]
+ */
+export function buildIntegrationsList(opts = {}) {
   const metaReady =
     envPresent("META_PAGE_ACCESS_TOKEN") ||
     envPresent("META_WA_ACCESS_TOKEN") ||
     envPresent("META_APP_ID");
   const gemini = envPresent("GEMINI_API_KEY");
   const resend = envPresent("RESEND_API_KEY");
+  const anthropicReady =
+    Boolean(opts.anthropicHasCredentials) || envPresent("ANTHROPIC_API_KEY");
 
   const rows = [
     {
@@ -348,22 +353,38 @@ export function buildIntegrationsList() {
       id: "int-anthropic",
       provider: "anthropic",
       display_name: "Anthropic Claude",
-      status: "awaiting_credentials",
+      status: anthropicReady ? "connected" : "awaiting_credentials",
       external_account_id: "anthropic-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
-      capabilities: ["llm.generate"],
+      capabilities: ["llm.generate", "llm.chat", "agents", "creative_prompts"],
+      metadata: {
+        model: opts.anthropicModel || "claude-sonnet-4-20250514",
+        has_api_key: anthropicReady,
+      },
     },
   ];
 
   return rows;
 }
 
-export function buildIntegrationsHealth() {
+/**
+ * @param {{ anthropic?: Record<string, unknown> }} [opts]
+ */
+export function buildIntegrationsHealth(opts = {}) {
   const metaReady =
     envPresent("META_PAGE_ACCESS_TOKEN") || envPresent("META_APP_ID");
   const waReady = envPresent("META_WA_ACCESS_TOKEN");
   const gemini = envPresent("GEMINI_API_KEY");
+  const anthropicFromStore = opts.anthropic && typeof opts.anthropic === "object"
+    ? opts.anthropic
+    : null;
+  const anthropicReady = Boolean(
+    anthropicFromStore?.has_credentials || envPresent("ANTHROPIC_API_KEY"),
+  );
+  const anthropicModel =
+    (typeof anthropicFromStore?.model === "string" && anthropicFromStore.model) ||
+    "claude-sonnet-4-20250514";
   const channelHealth = (key, ready) => ({
     status: ready ? "connected" : "awaiting_credentials",
     health: {
@@ -373,6 +394,23 @@ export function buildIntegrationsHealth() {
         : `Awaiting ${key} credentials on Integrations.`,
     },
   });
+
+  const anthropic = anthropicFromStore || {
+    provider: "anthropic",
+    has_credentials: anthropicReady,
+    status: anthropicReady ? "connected" : "awaiting_credentials",
+    model: anthropicModel,
+    honesty: anthropicReady
+      ? "Anthropic API key present on host."
+      : "Anthropic key not stored on this host yet — paste on Integrations to enable live Claude.",
+  };
+
+  const llmProvider = anthropicReady
+    ? "anthropic"
+    : gemini
+      ? "gemini"
+      : "local";
+  const llmLive = anthropicReady || gemini;
 
   return {
     mode: "local",
@@ -405,22 +443,26 @@ export function buildIntegrationsHealth() {
         whatsapp: channelHealth("whatsapp", waReady),
       },
     },
-    anthropic: {
-      has_credentials: false,
-      status: "awaiting_credentials",
-      model: "claude-sonnet-4-20250514",
-      honesty:
-        "Anthropic key not stored on this host yet — paste on Integrations to enable live Claude.",
-    },
+    anthropic,
     llm: {
-      configured_provider: gemini ? "gemini" : "local",
-      provider: gemini ? "gemini" : "local_sim",
-      model: gemini ? "gemini-2.0-flash" : "local-heuristic",
-      status: gemini ? "live" : "awaiting_credentials",
-      has_credentials: gemini,
-      honesty: gemini
-        ? "Gemini credentials present; Anthropic remains primary when keyed."
-        : "No live LLM credentials — local heuristic responses only.",
+      configured_provider: llmProvider,
+      provider: anthropicReady
+        ? "anthropic"
+        : gemini
+          ? "gemini"
+          : "local_sim",
+      model: anthropicReady
+        ? anthropicModel
+        : gemini
+          ? "gemini-2.0-flash"
+          : "local-heuristic",
+      status: llmLive ? "live" : "awaiting_credentials",
+      has_credentials: llmLive,
+      honesty: anthropicReady
+        ? "Anthropic credentials present — primary AI path."
+        : gemini
+          ? "Gemini credentials present; Anthropic remains primary when keyed."
+          : "No live LLM credentials — local heuristic responses only.",
     },
     wordpress_posts: [
       {
@@ -530,8 +572,11 @@ export function buildWorkflows() {
   ];
 }
 
-export function buildDashboard() {
-  const integrations = buildIntegrationsList();
+/**
+ * @param {{ anthropicHasCredentials?: boolean, anthropicModel?: string }} [opts]
+ */
+export function buildDashboard(opts = {}) {
+  const integrations = buildIntegrationsList(opts);
   return {
     workspace_id: WORKSPACE.id,
     metrics: {

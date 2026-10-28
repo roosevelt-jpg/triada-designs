@@ -21,6 +21,11 @@ import {
   paginate,
 } from "@/lib/api/seed-data";
 import {
+  clearAnthropicCredentials,
+  getAnthropicStatus,
+  saveAnthropicCredentials,
+} from "@/lib/integrations/anthropic-credentials";
+import {
   getUserFromAccessToken,
   readBearerToken,
 } from "@/lib/auth/supabase-auth";
@@ -151,7 +156,13 @@ export async function dispatchV1(method, segments, request, body) {
 
   // ---- dashboard / catalog ----
   if (path === "dashboard" && m === "GET") {
-    return jsonOk(buildDashboard());
+    const anthropic = await getAnthropicStatus();
+    return jsonOk(
+      buildDashboard({
+        anthropicHasCredentials: anthropic.has_credentials,
+        anthropicModel: anthropic.model,
+      }),
+    );
   }
 
   if (path === "services" && m === "GET") {
@@ -240,11 +251,18 @@ export async function dispatchV1(method, segments, request, body) {
 
   // ---- integrations ----
   if (path === "integrations" && m === "GET") {
-    return jsonOk({ data: buildIntegrationsList() });
+    const anthropic = await getAnthropicStatus();
+    return jsonOk({
+      data: buildIntegrationsList({
+        anthropicHasCredentials: anthropic.has_credentials,
+        anthropicModel: anthropic.model,
+      }),
+    });
   }
 
   if (path === "integrations/health" && m === "GET") {
-    return jsonOk(buildIntegrationsHealth());
+    const anthropic = await getAnthropicStatus();
+    return jsonOk(buildIntegrationsHealth({ anthropic }));
   }
 
   if (path === "integrations/wordpress/drafts" && m === "POST") {
@@ -260,39 +278,42 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "integrations/wordpress/posts" && m === "GET") {
+    const anthropic = await getAnthropicStatus();
     return jsonOk({
       mode: "local",
-      data: buildIntegrationsHealth().wordpress_posts,
+      data: buildIntegrationsHealth({ anthropic }).wordpress_posts,
     });
   }
 
   if (path === "integrations/anthropic" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {{ api_key?: string, model?: string }} */ (body)
+        : {};
+    const result = await saveAnthropicCredentials(input);
+    if (!result.ok) {
+      return jsonErr(result.message, result.status || 422);
+    }
     return jsonOk({
       ok: true,
-      anthropic: {
-        has_credentials: Boolean(body?.api_key),
-        status: body?.api_key ? "connected" : "awaiting_credentials",
-        model: body?.model || "claude-sonnet-4-20250514",
-        honesty: body?.api_key
-          ? "Key accepted in dual-run memory for this instance only — persist via Vercel env for Production."
-          : "No key provided.",
-      },
+      anthropic: result.anthropic,
+      storage: result.storage,
+      source: "next_dual_run",
     });
   }
 
   if (path === "integrations/anthropic/clear" && m === "POST") {
+    const result = await clearAnthropicCredentials();
     return jsonOk({
       ok: true,
-      anthropic: {
-        has_credentials: false,
-        status: "awaiting_credentials",
-        honesty: "Cleared on dual-run instance.",
-      },
+      anthropic: result.anthropic,
+      storage: result.storage,
+      source: "next_dual_run",
     });
   }
 
   if (path === "integrations/anthropic/status" && m === "GET") {
-    return jsonOk(buildIntegrationsHealth().anthropic);
+    return jsonOk(await getAnthropicStatus());
   }
 
   if (path === "integrations/zoho" && m === "POST") {
@@ -704,7 +725,8 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "agents/llm/status" && m === "GET") {
-    return jsonOk(buildIntegrationsHealth().llm);
+    const anthropic = await getAnthropicStatus();
+    return jsonOk(buildIntegrationsHealth({ anthropic }).llm);
   }
 
   if (path === "agents/activity" && m === "GET") {
@@ -722,9 +744,10 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "agents/test-run" && m === "POST") {
+    const anthropic = await getAnthropicStatus();
     return jsonOk({
       ok: true,
-      mode: buildIntegrationsHealth().llm.provider,
+      mode: buildIntegrationsHealth({ anthropic }).llm.provider,
       output: "Seeded answer-bot reply: silver with gold plating; ~7 days to make. Prices from approved catalog only.",
     });
   }
