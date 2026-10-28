@@ -81,27 +81,33 @@ export default function OverviewPage() {
             <StatCard
               className="fade-rise"
               label="Open conversations"
-              value={data.metrics.open_conversations}
+              value={Number(data.metrics?.open_conversations) || 0}
             />
             <StatCard
               className="fade-rise"
               label="Unanswered"
-              value={data.metrics.unanswered_conversations}
+              value={Number(data.metrics?.unanswered_conversations) || 0}
             />
             <StatCard
               className="fade-rise"
               label="Qualified leads"
-              value={data.metrics.qualified_leads}
+              value={Number(data.metrics?.qualified_leads) || 0}
             />
             <StatCard
               className="fade-rise"
               label="Awaiting approval"
-              value={data.metrics.content_awaiting_approval}
+              value={Number(data.metrics?.content_awaiting_approval) || 0}
             />
-            <StatCard label="AI-mode conversations" value={data.metrics.ai_handled_conversations} />
-            <StatCard label="Human escalations" value={data.metrics.human_escalations} />
-            <StatCard label="Open tasks" value={data.metrics.open_tasks} />
-            <StatCard label="Contacts" value={data.metrics.contacts} />
+            <StatCard
+              label="AI-mode conversations"
+              value={Number(data.metrics?.ai_handled_conversations) || 0}
+            />
+            <StatCard
+              label="Human escalations"
+              value={Number(data.metrics?.human_escalations) || 0}
+            />
+            <StatCard label="Open tasks" value={Number(data.metrics?.open_tasks) || 0} />
+            <StatCard label="Contacts" value={Number(data.metrics?.contacts) || 0} />
           </div>
 
           <AiInsightsPanel insights={insights} />

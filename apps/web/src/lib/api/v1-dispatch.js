@@ -44,6 +44,7 @@ import {
   listWhatsAppCampaignRecipients,
   upsertContacts,
 } from "@/lib/crm/contacts-store";
+import { collectLiveDashboardMetrics } from "@/lib/api/dashboard-metrics";
 import { syncWhatsAppContactsToCrm } from "@/lib/crm/meta-contact-sync";
 import { mapContactUploadRows } from "@/lib/crm/parse-contacts-file";
 import { toWhatsAppRecipient } from "@/lib/crm/phone-e164";
@@ -362,18 +363,24 @@ export async function dispatchV1(method, segments, request, body) {
   if (path === "dashboard" && m === "GET") {
     // Same Meta store overlay as integrations/list — otherwise overview
     // falsely shows FB/IG/WA as awaiting when credentials live in app_metadata.
+    // KPI metrics come from live stores / entity APIs (zeros when empty).
     const [anthropic, meta] = await Promise.all([
       getAnthropicStatus(),
       getMetaStatus(),
     ]);
+    const integrationOpts = {
+      anthropicHasCredentials: anthropic.has_credentials,
+      anthropicModel: anthropic.model,
+      metaFacebookReady: meta.facebook_ready,
+      metaMessengerReady: meta.messenger_ready,
+      metaInstagramReady: meta.instagram_ready,
+      metaWhatsAppReady: meta.whatsapp_ready,
+    };
+    const metrics = await collectLiveDashboardMetrics(integrationOpts);
     return jsonOk(
       buildDashboard({
-        anthropicHasCredentials: anthropic.has_credentials,
-        anthropicModel: anthropic.model,
-        metaFacebookReady: meta.facebook_ready,
-        metaMessengerReady: meta.messenger_ready,
-        metaInstagramReady: meta.instagram_ready,
-        metaWhatsAppReady: meta.whatsapp_ready,
+        ...integrationOpts,
+        metrics,
       }),
     );
   }
@@ -2116,7 +2123,19 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "analytics" && m === "GET") {
-    return jsonOk(buildAnalyticsPayload());
+    const [anthropic, meta] = await Promise.all([
+      getAnthropicStatus(),
+      getMetaStatus(),
+    ]);
+    const metrics = await collectLiveDashboardMetrics({
+      anthropicHasCredentials: anthropic.has_credentials,
+      anthropicModel: anthropic.model,
+      metaFacebookReady: meta.facebook_ready,
+      metaMessengerReady: meta.messenger_ready,
+      metaInstagramReady: meta.instagram_ready,
+      metaWhatsAppReady: meta.whatsapp_ready,
+    });
+    return jsonOk(buildAnalyticsPayload(metrics));
   }
 
   // ---- team invites / roles / members ----

@@ -361,6 +361,37 @@ export async function importContactRows(mappedRows, opts = {}) {
 }
 
 /**
+ * Non-mutating contact count for Overview KPIs.
+ * Does not seed empty stores — empty workspace returns 0.
+ * @returns {Promise<{ count: number, mode: 'supabase' | 'local_mock' }>}
+ */
+export async function countContacts() {
+  if (hasSupabaseAdminCredentials()) {
+    const supabase = createAdminSupabaseClient();
+    if (supabase) {
+      const { count, error } = await supabase
+        .from(TABLE)
+        .select("*", { count: "exact", head: true })
+        .eq("workspace_id", WORKSPACE_ID);
+      if (!error && typeof count === "number") {
+        return { count, mode: "supabase" };
+      }
+    }
+  }
+
+  try {
+    const raw = await readFile(LOCAL_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return { count: parsed.length, mode: "local_mock" };
+    }
+  } catch {
+    /* missing file = empty */
+  }
+  return { count: 0, mode: "local_mock" };
+}
+
+/**
  * Contacts ready for WhatsApp template/campaign sends.
  * @returns {Promise<{ mode: string, data: ContactRecord[] }>}
  */

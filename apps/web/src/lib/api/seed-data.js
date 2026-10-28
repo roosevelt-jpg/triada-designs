@@ -810,19 +810,19 @@ function seriesWeight(dayIndex) {
 }
 
 /**
- * Build AI Insights chart series from persisted seed metrics.
- * Values scale from workspace counts so charts stay consistent with KPIs.
+ * Build AI Insights chart series from live workspace metrics.
+ * Empty counts stay zero — charts do not invent volume.
  */
 export function buildAiInsights(metrics = {}) {
-  const totalConv = Number(metrics.total_conversations ?? metrics.conversations ?? 12);
-  const openConv = Number(metrics.open_conversations ?? 4);
-  const aiHandled = Number(metrics.ai_handled_conversations ?? metrics.ai_runs ?? 8);
-  const human = Number(metrics.human_escalations ?? metrics.human_takeovers ?? 1);
-  const qualified = Number(metrics.qualified_leads ?? 2);
-  const newLeads = Number(metrics.new_leads ?? metrics.leads ?? 3);
-  const contacts = Number(metrics.contacts ?? 18);
-  const awaiting = Number(metrics.content_awaiting_approval ?? 1);
-  const unanswered = Number(metrics.unanswered_conversations ?? 2);
+  const totalConv = Number(metrics.total_conversations ?? metrics.conversations ?? 0);
+  const openConv = Number(metrics.open_conversations ?? 0);
+  const aiHandled = Number(metrics.ai_handled_conversations ?? metrics.ai_runs ?? 0);
+  const human = Number(metrics.human_escalations ?? metrics.human_takeovers ?? 0);
+  const qualified = Number(metrics.qualified_leads ?? 0);
+  const newLeads = Number(metrics.new_leads ?? metrics.leads ?? 0);
+  const contacts = Number(metrics.contacts ?? 0);
+  const awaiting = Number(metrics.content_awaiting_approval ?? 0);
+  const unanswered = Number(metrics.unanswered_conversations ?? 0);
 
   const channelMix = [
     { channel: "instagram", key: "ig", share: 0.38, color: "var(--color-brand-brown)" },
@@ -833,7 +833,10 @@ export function buildAiInsights(metrics = {}) {
   ];
 
   const conversationsByChannel = Object.fromEntries(
-    channelMix.map((c) => [c.channel, Math.max(1, Math.round(totalConv * c.share))]),
+    channelMix.map((c) => [
+      c.channel,
+      totalConv > 0 ? Math.max(0, Math.round(totalConv * c.share)) : 0,
+    ]),
   );
 
   const volumeTrend = [];
@@ -843,18 +846,28 @@ export function buildAiInsights(metrics = {}) {
     const d = new Date(Date.now() - i * 86400000);
     const label = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
     const w = seriesWeight(13 - i);
-    const inbound = Math.max(1, Math.round((totalConv / 7) * w));
-    const aiReplies = Math.max(0, Math.round(inbound * (aiHandled / Math.max(totalConv, 1))));
+    const inbound =
+      totalConv > 0 ? Math.max(0, Math.round((totalConv / 7) * w)) : 0;
+    const aiReplies =
+      totalConv > 0
+        ? Math.max(0, Math.round(inbound * (aiHandled / totalConv)))
+        : 0;
     volumeTrend.push({
       day: label,
       inbound,
       ai_replies: aiReplies,
-      human_handoffs: Math.max(0, Math.round(inbound * (human / Math.max(totalConv, 1)))),
+      human_handoffs:
+        totalConv > 0
+          ? Math.max(0, Math.round(inbound * (human / totalConv)))
+          : 0,
     });
   }
 
-  // Response-time histogram buckets (minutes) — scaled from open/unanswered load
-  const loadFactor = Math.max(0.6, Math.min(1.8, (openConv + unanswered) / 4));
+  // Response-time histogram buckets — scaled from open/unanswered load when present
+  const loadFactor =
+    openConv + unanswered > 0
+      ? Math.max(0.6, Math.min(1.8, (openConv + unanswered) / 4))
+      : 0;
   const buckets = [
     { bucket: "0–2m", minutes: 1 },
     { bucket: "2–5m", minutes: 3.5 },
@@ -867,7 +880,10 @@ export function buildAiInsights(metrics = {}) {
   buckets.forEach((b, idx) => {
     responseHistogram.push({
       bucket: b.bucket,
-      count: Math.max(0, Math.round(aiHandled * histWeights[idx] * loadFactor)),
+      count:
+        aiHandled > 0
+          ? Math.max(0, Math.round(aiHandled * histWeights[idx] * loadFactor))
+          : 0,
     });
   });
 
@@ -879,12 +895,12 @@ export function buildAiInsights(metrics = {}) {
     },
     {
       name: "Human mode",
-      value: Math.max(human, 1),
+      value: human,
       color: "#70563f",
     },
     {
       name: "Open / queued",
-      value: Math.max(openConv, 1),
+      value: openConv,
       color: "#c7ae8a",
     },
   ];
@@ -923,22 +939,27 @@ export function buildAiInsights(metrics = {}) {
  *   metaInstagramReady?: boolean,
  *   metaMessengerReady?: boolean,
  *   metaWhatsAppReady?: boolean,
+ *   metrics?: Record<string, number>,
  * }} [opts]
  */
 export function buildDashboard(opts = {}) {
   const integrations = buildIntegrationsList(opts);
+  const live = opts.metrics && typeof opts.metrics === "object" ? opts.metrics : null;
   const metrics = {
-    total_conversations: 12,
-    open_conversations: 4,
-    unanswered_conversations: 2,
-    ai_handled_conversations: 8,
-    human_escalations: 1,
-    contacts: 18,
-    new_leads: 3,
-    qualified_leads: 2,
-    open_tasks: 4,
-    content_awaiting_approval: 1,
-    integration_failures: integrations.filter((i) => i.last_error_code).length,
+    total_conversations: Number(live?.total_conversations) || 0,
+    open_conversations: Number(live?.open_conversations) || 0,
+    unanswered_conversations: Number(live?.unanswered_conversations) || 0,
+    ai_handled_conversations: Number(live?.ai_handled_conversations) || 0,
+    human_escalations: Number(live?.human_escalations) || 0,
+    contacts: Number(live?.contacts) || 0,
+    new_leads: Number(live?.new_leads) || 0,
+    qualified_leads: Number(live?.qualified_leads) || 0,
+    open_tasks: Number(live?.open_tasks) || 0,
+    content_awaiting_approval: Number(live?.content_awaiting_approval) || 0,
+    integration_failures:
+      live && typeof live.integration_failures === "number"
+        ? live.integration_failures
+        : integrations.filter((i) => i.last_error_code).length,
   };
   return {
     workspace_id: WORKSPACE.id,
@@ -957,42 +978,45 @@ export function buildDashboard(opts = {}) {
   };
 }
 
-/** Full analytics payload for /v1/analytics */
-export function buildAnalyticsPayload() {
+/**
+ * Full analytics payload for /v1/analytics.
+ * @param {Record<string, number>} [liveMetrics]
+ */
+export function buildAnalyticsPayload(liveMetrics = null) {
+  const live = liveMetrics && typeof liveMetrics === "object" ? liveMetrics : {};
   const metrics = {
-    conversations: 12,
-    open_conversations: 4,
-    messages: 48,
-    contacts: 18,
-    leads: 5,
-    qualified_leads: 2,
-    open_tasks: 4,
-    opportunities: 2,
-    content_items: 2,
-    human_takeovers: 1,
-    ai_runs: 8,
-    ai_prompt_tokens: 12400,
-    ai_completion_tokens: 6800,
-    publications: 1,
+    conversations: Number(live.total_conversations ?? live.conversations) || 0,
+    open_conversations: Number(live.open_conversations) || 0,
+    messages: Number(live.messages) || 0,
+    contacts: Number(live.contacts) || 0,
+    leads: Number(live.leads ?? live.new_leads) || 0,
+    qualified_leads: Number(live.qualified_leads) || 0,
+    open_tasks: Number(live.open_tasks) || 0,
+    opportunities: Number(live.opportunities) || 0,
+    content_items: Number(live.content_items) || 0,
+    human_takeovers: Number(live.human_takeovers ?? live.human_escalations) || 0,
+    ai_runs: Number(live.ai_runs ?? live.ai_handled_conversations) || 0,
+    ai_prompt_tokens: Number(live.ai_prompt_tokens) || 0,
+    ai_completion_tokens: Number(live.ai_completion_tokens) || 0,
+    publications: Number(live.publications) || 0,
+    products: Number(live.products) || 0,
+    agents: Number(live.agents) || 0,
   };
   const insights = buildAiInsights({
     ...metrics,
     total_conversations: metrics.conversations,
     ai_handled_conversations: metrics.ai_runs,
     human_escalations: metrics.human_takeovers,
-    new_leads: metrics.leads,
-    content_awaiting_approval: 1,
-    unanswered_conversations: 2,
+    new_leads: Number(live.new_leads) || metrics.leads,
+    content_awaiting_approval: Number(live.content_awaiting_approval) || 0,
+    unanswered_conversations: Number(live.unanswered_conversations) || 0,
   });
   return {
     metrics,
     conversations_by_channel: insights.conversations_by_channel,
     by_channel: insights.conversations_by_channel,
     ai_insights: insights,
-    notes: [
-      "Metrics are derived from persisted workspace records only.",
-      "AI cost and live Meta delivery rates appear after usage events and live credentials.",
-    ],
+    notes: [],
   };
 }
 
