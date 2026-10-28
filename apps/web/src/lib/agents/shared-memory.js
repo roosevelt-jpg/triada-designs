@@ -6,12 +6,13 @@
 
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { hasSupabaseAdminCredentials } from "@/lib/supabase/config";
+import { getLocalDataDir } from "@/lib/local-data-dir";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const TABLE = "agent_shared_kv";
 const WORKSPACE_ID = "triada-ops";
-const LOCAL_DIR = path.join(process.cwd(), ".triada-local");
+const LOCAL_DIR = getLocalDataDir();
 const LOCAL_FILE = path.join(LOCAL_DIR, "agent-shared-kv.json");
 
 /**
@@ -96,7 +97,11 @@ async function ensureLocalSeeded() {
   const map = await readLocalMap();
   if (Object.keys(map).length > 0) return map;
   const seeded = seedSharedMemory();
-  await writeLocalMap(seeded);
+  try {
+    await writeLocalMap(seeded);
+  } catch {
+    // Read-only hosts: keep in-memory seed for this invocation.
+  }
   return seeded;
 }
 

@@ -5,6 +5,7 @@
 
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { hasSupabaseAdminCredentials } from "@/lib/supabase/config";
+import { getLocalDataDir } from "@/lib/local-data-dir";
 import { TEAM_ROSTER, resolveAgent } from "./team-roster";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -12,7 +13,7 @@ import path from "node:path";
 const AGENTS_TABLE = "ai_agents";
 const TASKS_TABLE = "ai_agent_tasks";
 const WORKSPACE_ID = "triada-ops";
-const LOCAL_DIR = path.join(process.cwd(), ".triada-local");
+const LOCAL_DIR = getLocalDataDir();
 const LOCAL_FILE = path.join(LOCAL_DIR, "ai-agents.json");
 
 /**
@@ -100,7 +101,11 @@ async function ensureLocalSeeded() {
   const state = await readLocal();
   if (state.agents.length > 0) return state;
   const next = { agents: seedAgents(), tasks: seedStarterTasks() };
-  await writeLocal(next);
+  try {
+    await writeLocal(next);
+  } catch {
+    // Read-only hosts: keep in-memory seed for this invocation.
+  }
   return next;
 }
 
