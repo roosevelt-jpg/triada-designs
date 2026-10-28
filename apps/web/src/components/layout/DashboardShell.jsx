@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Menu, Search, Bell, LogOut, X } from "lucide-react";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { apiFetch, getStoredToken, setStoredToken } from "@/lib/api-client";
@@ -11,6 +11,11 @@ import { Button } from "@/components/ui/Button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { WorkspaceClock } from "@/components/layout/WorkspaceClock";
 import { syncSystemTime } from "@/lib/system-time";
+import {
+  areaKeyForPath,
+  canAccess,
+  filterNavByPermissions,
+} from "@/lib/team/permissions";
 
 /** @param {{ children: import("react").ReactNode, title: string, description?: string, actions?: import("react").ReactNode }} props */
 export function DashboardShell({ children, title, description, actions }) {
@@ -36,6 +41,26 @@ export function DashboardShell({ children, title, description, actions }) {
         router.replace("/login");
       });
   }, [router]);
+
+  const navSections = useMemo(
+    () =>
+      filterNavByPermissions(DASHBOARD_NAV, user?.permissions, {
+        isAdmin: Boolean(user?.is_admin || user?.role === "admin"),
+      }),
+    [user],
+  );
+
+  useEffect(() => {
+    if (!user) return;
+    if (user.is_admin || user.role === "admin") return;
+    const area = areaKeyForPath(pathname);
+    if (!area) return;
+    if (!canAccess(user.permissions, area, "view")) {
+      const fallback =
+        navSections[0]?.items?.[0]?.href || "/overview";
+      if (pathname !== fallback) router.replace(fallback);
+    }
+  }, [user, pathname, navSections, router]);
 
   async function logout() {
     try {
@@ -82,7 +107,7 @@ export function DashboardShell({ children, title, description, actions }) {
           </div>
 
           <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4" aria-label="Dashboard">
-            {DASHBOARD_NAV.map((section) => (
+            {navSections.map((section) => (
               <div key={section.label}>
                 <p className="nav-category-band">{section.label}</p>
                 <ul className="mt-1.5 space-y-0.5">

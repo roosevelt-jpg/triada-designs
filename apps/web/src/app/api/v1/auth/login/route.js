@@ -4,6 +4,7 @@ import {
   loginResponsePayload,
   signInWithPassword,
 } from "@/lib/auth/supabase-auth";
+import { resolveMembershipForUser } from "@/lib/team/team-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,8 +48,37 @@ export async function POST(request) {
     return NextResponse.json(payload, { status: result.status || 422 });
   }
 
+  let membership = {
+    member: null,
+    role: null,
+    permissions: null,
+    isAdmin: false,
+  };
+  try {
+    membership = await resolveMembershipForUser(result.user);
+  } catch {
+    /* keep defaults */
+  }
+
+  if (
+    membership.member &&
+    membership.member.status &&
+    membership.member.status !== "active" &&
+    !membership.isAdmin
+  ) {
+    return NextResponse.json(
+      { message: "Your team membership is not active. Contact an admin." },
+      { status: 403 },
+    );
+  }
+
   return NextResponse.json(
-    loginResponsePayload(result.accessToken, result.user),
+    loginResponsePayload(result.accessToken, result.user, {
+      role: membership.role?.slug || (membership.isAdmin ? "admin" : "member"),
+      permissions: membership.permissions,
+      member: membership.member,
+      isAdmin: membership.isAdmin,
+    }),
     { status: 200 },
   );
 }

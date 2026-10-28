@@ -120,6 +120,24 @@ import { wrapEmailMessage } from "@/lib/brand/wrap-email";
 import { wrapInvoiceDocument } from "@/lib/brand/wrap-invoice";
 import { ensureBrandedOutboundText } from "@/lib/brand/wrap-message";
 import { BRAND, brandLogoUrl } from "@/lib/brand/identity";
+import {
+  API_PERMISSION_RULES,
+  PERMISSION_AREAS,
+  canAccess,
+} from "@/lib/team/permissions";
+import { sendInviteEmail } from "@/lib/team/invite-email";
+import {
+  createInvite,
+  createRole,
+  inviteAppBaseUrl,
+  listInvites,
+  listMembers,
+  listRoles,
+  resolveMembershipForUser,
+  revokeInvite,
+  updateMember,
+  updateRole,
+} from "@/lib/team/team-store";
 
 /** @type {{ timezone: string, workflows: ReturnType<typeof buildWorkflows>, agents: Awaited<ReturnType<typeof listAgents>>["data"] }} */
 const runtimeState = {
@@ -151,6 +169,67 @@ async function hydrateAgents() {
 export async function requireAuth(request) {
   const token = readBearerToken(request);
   return getUserFromAccessToken(token);
+}
+
+/**
+ * Attach membership + permissions for the authenticated user.
+ * @param {Request} request
+ */
+export async function requireMembership(request) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth;
+  let membership;
+  try {
+    membership = await resolveMembershipForUser(auth.user);
+  } catch (err) {
+    return {
+      ok: false,
+      status: 500,
+      message: err instanceof Error ? err.message : "Membership lookup failed.",
+    };
+  }
+  return {
+    ok: true,
+    user: auth.user,
+    membership,
+    isAdmin: Boolean(membership?.isAdmin),
+    permissions: membership?.permissions || null,
+  };
+}
+
+/**
+ * @param {Awaited<ReturnType<typeof requireMembership>>} ctx
+ * @param {string} area
+ * @param {"view"|"manage"} [level]
+ */
+export function assertPermission(ctx, area, level = "view") {
+  if (!ctx?.ok) {
+    return { ok: false, status: ctx?.status || 401, message: ctx?.message || "Unauthenticated." };
+  }
+  if (ctx.isAdmin) return { ok: true };
+  if (canAccess(ctx.permissions, area, level)) return { ok: true };
+  return {
+    ok: false,
+    status: 403,
+    message: `You do not have ${level} access to ${area}.`,
+  };
+}
+
+/**
+ * Enforce API path permission rules when configured.
+ * @param {string} method
+ * @param {string} path
+ * @param {Awaited<ReturnType<typeof requireMembership>>} ctx
+ */
+export function enforceApiPermission(method, path, ctx) {
+  if (ctx?.isAdmin) return { ok: true };
+  const m = method.toUpperCase();
+  for (const rule of API_PERMISSION_RULES) {
+    if (!rule.match.test(path)) continue;
+    if (rule.methods && !rule.methods.includes(m)) continue;
+    return assertPermission(ctx, rule.area, rule.level || "view");
+  }
+  return { ok: true };
 }
 
 /** @param {unknown} body */
@@ -2036,17 +2115,174 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk(buildAnalyticsPayload());
   }
 
+  // ---- team invites / roles / members ----
   if (path === "team" && m === "GET") {
+    const [members, invites, roles] = await Promise.all([
+      listMembers(),
+      listInvites({ status: "pending" }),
+      listRoles(),
+    ]);
     return jsonOk({
-      data: [
-        {
-          id: "member-1",
-          name: "Triada Admin",
-          email: "info@triada-designs.com",
-          role: "admin",
-        },
-      ],
+      data: members.data,
+      invites: invites.data,
+      roles: roles.data,
+      permission_areas: PERMISSION_AREAS,
+      source: members.source,
     });
+  }
+
+  if (path === "team/roles" && m === "GET") {
+    const roles = await listRoles();
+    return jsonOk({
+      data: roles.data,
+      permission_areas: PERMISSION_AREAS,
+      source: roles.source,
+    });
+  }
+
+  if (path === "team/roles" && m === "POST") {
+    try {
+      const created = await createRole(body && typeof body === "object" ? body : {});
+      return jsonOk(created, 201);
+    } catch (err) {
+      return jsonErr(err instanceof Error ? err.message : "Unable to create role.", 422);
+    }
+  }
+
+  if (path.match(/^team\/roles\/[^/]+$/) && (m === "PATCH" || m === "PUT")) {
+    try {
+      const updated = await updateRole(
+        segments[2],
+        body && typeof body === "object" ? body : {},
+      );
+      return jsonOk(updated);
+    } catch (err) {
+      return jsonErr(err instanceof Error ? err.message : "Unable to update role.", 422);
+    }
+  }
+
+  if (path === "team/invites" && m === "GET") {
+    const statusParam = (() => {
+      try {
+        return new URL(request.url).searchParams.get("status") || "pending";
+      } catch {
+        return "pending";
+      }
+    })();
+    const listed = await listInvites({
+      status: statusParam === "all" ? "" : statusParam,
+    });
+    return jsonOk({ data: listed.data, source: listed.source });
+  }
+
+  if (path === "team/invites" && m === "POST") {
+    const email =
+      body && typeof body === "object" && typeof body.email === "string"
+        ? body.email
+        : "";
+    const name =
+      body && typeof body === "object" && typeof body.name === "string"
+        ? body.name
+        : "";
+    const roleId =
+      body && typeof body === "object" && typeof body.role_id === "string"
+        ? body.role_id
+        : body && typeof body === "object" && typeof body.role === "string"
+          ? body.role
+          : "role-viewer";
+
+    const auth = await requireAuth(request);
+    const inviterEmail = auth.ok ? auth.user?.email || "" : "";
+    const inviterName =
+      auth.ok && auth.user?.user_metadata?.name
+        ? String(auth.user.user_metadata.name)
+        : inviterEmail || "Triada Admin";
+
+    let created;
+    try {
+      created = await createInvite({
+        email,
+        name,
+        role_id: roleId,
+        invited_by: auth.ok ? auth.user.id : null,
+        invited_by_email: inviterEmail,
+      });
+    } catch (err) {
+      return jsonErr(err instanceof Error ? err.message : "Unable to create invite.", 422);
+    }
+
+    const acceptUrl = `${inviteAppBaseUrl(request)}/invite/${created.token}`;
+    const mail = await sendInviteEmail({
+      toEmail: created.data.email,
+      inviteeName: created.data.name,
+      inviterName,
+      roleName: created.role?.name || created.data.role_slug,
+      acceptUrl,
+      expiresAt: created.data.expires_at,
+    });
+
+    if (!mail.ok) {
+      return jsonOk(
+        {
+          data: created.data,
+          accept_url: acceptUrl,
+          email: {
+            sent: false,
+            mode: mail.mode,
+            error: mail.error || mail.message,
+          },
+          message:
+            mail.message ||
+            "Invite created but email could not be sent. Share the accept link manually.",
+          source: created.source,
+        },
+        201,
+      );
+    }
+
+    return jsonOk(
+      {
+        data: created.data,
+        accept_url:
+          mail.mode === "local_fallback" ? acceptUrl : undefined,
+        email: {
+          sent: true,
+          mode: mail.mode,
+          id: mail.id || null,
+        },
+        message:
+          mail.mode === "local_fallback"
+            ? "Invite created. Resend is not keyed — use the accept link locally."
+            : "Invitation email sent via Resend.",
+        source: created.source,
+      },
+      201,
+    );
+  }
+
+  if (path.match(/^team\/invites\/[^/]+$/) && m === "DELETE") {
+    try {
+      const revoked = await revokeInvite(segments[2]);
+      return jsonOk(revoked);
+    } catch (err) {
+      return jsonErr(err instanceof Error ? err.message : "Unable to revoke invite.", 404);
+    }
+  }
+
+  if (path.match(/^team\/members\/[^/]+$/) && (m === "PATCH" || m === "PUT")) {
+    try {
+      const updated = await updateMember(
+        segments[2],
+        body && typeof body === "object" ? body : {},
+      );
+      return jsonOk(updated);
+    } catch (err) {
+      return jsonErr(err instanceof Error ? err.message : "Unable to update member.", 422);
+    }
+  }
+
+  if (path === "team/permission-areas" && m === "GET") {
+    return jsonOk({ data: PERMISSION_AREAS });
   }
 
   if (path === "audit-logs" && m === "GET") {
