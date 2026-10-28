@@ -78,6 +78,21 @@ export function listPendingApproval() {
 }
 
 /**
+ * Items awaiting admin preview / review (in_review preferred; drafts included).
+ */
+export function listPendingReview() {
+  return getContentItems()
+    .filter((c) => c.status === "in_review" || c.status === "draft")
+    .slice()
+    .sort((a, b) => {
+      const aScore = a.status === "in_review" ? 0 : 1;
+      const bScore = b.status === "in_review" ? 0 : 1;
+      if (aScore !== bScore) return aScore - bScore;
+      return String(b.updated_at || "").localeCompare(String(a.updated_at || ""));
+    });
+}
+
+/**
  * Dual-run cron: mark due scheduled items published (local_sim adapters).
  */
 export function processDueContentPublish() {

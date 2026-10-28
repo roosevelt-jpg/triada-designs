@@ -43,6 +43,7 @@ export const DASHBOARD_NAV = [
     label: "Marketing",
     items: [
       { href: "/content", label: "Content studio" },
+      { href: "/content/review", label: "Content review" },
       { href: "/templates", label: "Channel templates" },
       { href: "/calendar", label: "Calendar" },
       { href: "/campaigns", label: "Campaigns" },

@@ -24,9 +24,23 @@ import {
   getContentItems,
   getPublications,
   listPendingApproval,
+  listPendingReview,
   listScheduled,
   patchContent,
 } from "@/lib/content-schedule-store";
+import { notifyAdminPendingReview } from "@/lib/content/admin-review-notify";
+import {
+  getMediaForContent,
+  setMediaVariants,
+  upsertMediaAsset,
+} from "@/lib/creative/media-store";
+import {
+  markAllNotificationsRead,
+  markNotificationRead,
+  notificationsFeedPayload,
+  pushNotification,
+  unreadNotificationCount,
+} from "@/lib/notifications/notifications-store";
 import {
   publishProductById,
   saveAndMaybePublishProduct,
@@ -505,8 +519,84 @@ export async function dispatchV1(method, segments, request, body) {
     });
   }
 
+  // ---- dashboard bell notifications feed (shared with TD-75) ----
+  if (path === "notifications" && m === "GET") {
+    const url = new URL(request.url);
+    const unreadOnly = url.searchParams.get("unread") === "1";
+    const limit = Number(url.searchParams.get("limit") || 50);
+    return jsonOk(notificationsFeedPayload({ unreadOnly, limit }));
+  }
+
+  if (path === "notifications/read-all" && m === "POST") {
+    return jsonOk(markAllNotificationsRead());
+  }
+
+  if (path.match(/^notifications\/[^/]+\/read$/) && m === "POST") {
+    const id = segments[1];
+    const row = markNotificationRead(id);
+    if (!row) return jsonErr("Notification not found.", 404);
+    return jsonOk({ ok: true, notification: row, unread_count: unreadNotificationCount() });
+  }
+
+  if (path === "notifications" && m === "POST") {
+    // Internal/ops producers (and tests) may push into the same bell feed.
+    const event = pushNotification({
+      type: body?.type || "info",
+      title: body?.title || "Notification",
+      body: body?.body || "",
+      href: body?.href || null,
+      severity: body?.severity || "info",
+      entity_type: body?.entity_type || null,
+      entity_id: body?.entity_id || null,
+      payload: body?.payload && typeof body.payload === "object" ? body.payload : {},
+      dedupe: body?.dedupe !== false,
+    });
+    return jsonOk({ ok: true, notification: event, unread_count: unreadNotificationCount() }, 201);
+  }
+
   if (path === "content" && m === "GET") {
     return jsonOk(paginate(getContentItems()));
+  }
+
+  if (path === "content/review" && m === "GET") {
+    const { previewSvgDataUrl } = await import("@/lib/creative/preview-svg");
+    const pending = listPendingReview();
+    const data = pending.map((item) => {
+      let media = getMediaForContent(item.id);
+      if (!media.assets.length) {
+        const fallback = upsertMediaAsset(item.id, {
+          id: `asset-${item.id}-review-fallback`,
+          kind: "image",
+          mode: "local_sim",
+          width: 1080,
+          height: 1080,
+          url: previewSvgDataUrl({
+            title: item.product_context?.name || item.title || "Triada Designs",
+            target: item.channel || "preview",
+            prompt: item.body || "Pending creative review",
+            kind: "image",
+          }),
+          mime_type: "image/svg+xml",
+          metadata: { fallback_preview: true },
+        });
+        media = getMediaForContent(item.id);
+        media.assets = media.assets.length ? media.assets : [fallback];
+      }
+      return {
+        ...item,
+        media,
+        preview_asset:
+          media.assets.find((a) => a.kind === "video") ||
+          media.assets.find((a) => a.kind === "animation") ||
+          media.assets.find((a) => a.kind === "image") ||
+          null,
+      };
+    });
+    return jsonOk({
+      data,
+      pending_count: data.length,
+      review_url: "/content/review",
+    });
   }
 
   if (path.startsWith("content/") && m === "POST") {
@@ -527,6 +617,7 @@ export async function dispatchV1(method, segments, request, body) {
         approved_at: new Date().toISOString(),
         approved_by: "dual-run-admin",
         approval_version: nextVersion,
+        review_notified_at: null,
       });
       return jsonOk({
         content,
@@ -585,10 +676,62 @@ export async function dispatchV1(method, segments, request, body) {
         body: body || {},
         action,
       });
+      const wasPending =
+        item.status === "in_review" || item.status === "draft";
+      // Media generation always enters pending review for preview-before-approval.
       const content = patchContent(contentId, {
-        status: item.status === "draft" || isUgc ? "in_review" : item.status,
+        status:
+          item.status === "approved" ||
+          item.status === "scheduled" ||
+          item.status === "published"
+            ? item.status
+            : "in_review",
         creative_brief: composed.creative_brief,
+        // Re-notify when regenerating after leaving review, or first entry.
+        ...(wasPending && item.review_notified_at && item.status === "in_review"
+          ? {}
+          : { review_notified_at: null }),
       });
+
+      const storedAsset = upsertMediaAsset(contentId, {
+        ...composed.asset,
+        id: `asset-${contentId}-${action}`,
+      });
+      if (composed.variants?.length) {
+        setMediaVariants(contentId, composed.variants);
+      }
+      if (action === "ensure-creative") {
+        // Also store a hero image + animation when packing full creative.
+        if (composed.asset?.kind !== "image") {
+          upsertMediaAsset(contentId, {
+            ...composed.asset,
+            id: `asset-${contentId}-image`,
+            kind: "image",
+            height: 1080,
+            width: 1080,
+            duration_ms: null,
+          });
+        }
+      }
+
+      const kindLabel = isUgc
+        ? "UGC video"
+        : action.includes("video")
+          ? "video"
+          : action.includes("anim")
+            ? "animation"
+            : action.includes("variant")
+              ? "platform variants"
+              : "image";
+
+      let notify = null;
+      if (content.status === "in_review") {
+        notify = await notifyAdminPendingReview({
+          contentId,
+          kind: kindLabel,
+        });
+      }
+
       return jsonOk({
         ok: true,
         mode: composed.mode,
@@ -597,10 +740,12 @@ export async function dispatchV1(method, segments, request, body) {
         content_id: contentId,
         content,
         script: composed.script || content.creative_brief?.ugc_script || null,
-        asset: {
-          ...composed.asset,
-          id: `asset-${contentId}-${action}`,
-        },
+        asset: storedAsset,
+        variants: composed.variants || [],
+        preview_required: true,
+        review_url: "/content/review",
+        admin_notified: Boolean(notify?.ok && !notify?.skipped),
+        notify,
         sidecar: composed.sidecar,
       });
     }
@@ -608,7 +753,13 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path.match(/^content\/[^/]+\/media$/) && m === "GET") {
-    return jsonOk({ assets: [], variants: [], mode: "local_seed" });
+    const contentId = segments[1];
+    const media = getMediaForContent(contentId);
+    return jsonOk({
+      ...media,
+      mode: media.assets[0]?.mode || "local_sim",
+      preview_ready: media.assets.some((a) => Boolean(a.url)),
+    });
   }
 
   if (path === "publications" && m === "GET") {
@@ -2295,6 +2446,7 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk({
       data: listScheduled(),
       pending_approval: listPendingApproval(),
+      pending_review: listPendingReview(),
       cron: {
         path: "/api/cron/content-publish",
       },

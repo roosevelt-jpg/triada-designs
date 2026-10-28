@@ -42,6 +42,42 @@ class CatalogController extends Controller
         );
     }
 
+    /**
+     * Pending preview / review queue for admin.
+     */
+    public function contentReview(Request $request, CreativeMediaService $creative): JsonResponse
+    {
+        $workspaceId = $this->workspaceId($request);
+        $workspace = Workspace::query()->findOrFail($workspaceId);
+
+        $pending = ContentItem::query()
+            ->where('workspace_id', $workspaceId)
+            ->whereIn('status', ['in_review', 'draft'])
+            ->orderByRaw("CASE WHEN status = 'in_review' THEN 0 ELSE 1 END")
+            ->orderByDesc('updated_at')
+            ->get();
+
+        $data = $pending->map(function (ContentItem $item) use ($creative, $workspace) {
+            $media = $creative->listForContent($workspace, $item);
+            $assets = $media['assets'] ?? [];
+            $preview = collect($assets)->firstWhere('kind', 'video')
+                ?? collect($assets)->firstWhere('kind', 'animation')
+                ?? collect($assets)->firstWhere('kind', 'image');
+
+            return array_merge($item->toArray(), [
+                'media' => $media,
+                'preview_asset' => $preview,
+                'review_notified_at' => data_get($item->publish_metadata, 'review_notified_at'),
+            ]);
+        })->values();
+
+        return response()->json([
+            'data' => $data,
+            'pending_count' => $data->count(),
+            'review_url' => '/content/review',
+        ]);
+    }
+
     public function approveContent(
         Request $request,
         string $contentId,

@@ -16,6 +16,7 @@ import {
   ugcScriptSystemPrompt,
   ugcScriptUserPrompt,
 } from "./jewellery-prompts";
+import { previewSvgDataUrl } from "./preview-svg";
 
 /**
  * @param {string} text
@@ -188,6 +189,53 @@ export async function composeCreativePackage(input) {
       ? "video"
       : "image";
 
+  const width = 1080;
+  const height = isVideo || kind === "animation" ? 1920 : 1080;
+  const prompt = isVideo ? videoPrompt : imagePrompt;
+  const productTitle =
+    String(item.product_context?.name || product || item.title || "Triada Designs");
+  const previewUrl = previewSvgDataUrl({
+    width,
+    height,
+    title: productTitle,
+    target: isUgc ? "ugc" : kind,
+    prompt,
+    kind,
+  });
+
+  /** @type {object[]} */
+  const variants = [];
+  if (action === "generate-variants" || action === "ensure-creative") {
+    const platforms = [
+      { key: "instagram_feed", w: 1080, h: 1080, ratio: "1:1" },
+      { key: "instagram_story", w: 1080, h: 1920, ratio: "9:16" },
+      { key: "facebook_feed", w: 1200, h: 630, ratio: "1.91:1" },
+      { key: "tiktok", w: 1080, h: 1920, ratio: "9:16" },
+    ];
+    for (const platform of platforms) {
+      variants.push({
+        id: `variant-${item.id || "draft"}-${platform.key}`,
+        platform_target: platform.key,
+        width: platform.w,
+        height: platform.h,
+        aspect_ratio: platform.ratio,
+        mode: mediaMode,
+        media_asset: {
+          url: previewSvgDataUrl({
+            width: platform.w,
+            height: platform.h,
+            title: productTitle,
+            target: platform.key,
+            prompt,
+            kind: "image",
+          }),
+          kind: "image",
+          mode: mediaMode,
+        },
+      });
+    }
+  }
+
   return {
     ok: true,
     mode: overallMode,
@@ -209,20 +257,25 @@ export async function composeCreativePackage(input) {
       id: `asset-${item.id || "draft"}-${action || "creative"}`,
       kind,
       mode: mediaMode,
-      width: 1080,
-      height: isVideo || kind === "animation" ? 1920 : 1080,
-      url: null,
-      prompt: isVideo ? videoPrompt : imagePrompt,
+      width,
+      height,
+      aspect_ratio: height === width ? "1:1" : height > width ? "9:16" : "16:9",
+      duration_ms: isVideo ? durationMs : null,
+      url: previewUrl,
+      mime_type: "image/svg+xml",
+      prompt,
+      preview_ready: true,
     },
+    variants,
     sidecar: isVideo
       ? { placeholder_mp4: !geminiReady, animation_svg: !geminiReady }
       : null,
     message: isUgc
-      ? "UGC video drafted and queued for approval."
+      ? "UGC video drafted — preview before approval."
       : isVideo
-        ? "Short video drafted and queued for approval."
+        ? "Short video drafted — preview before approval."
         : isImage
-          ? "Creative draft ready for approval."
+          ? "Creative draft ready — preview before approval."
           : "Creative generation ready.",
   };
 }
