@@ -13,11 +13,15 @@ primary_region = "iad"
 [env]
   APP_ENV = "production"
   APP_DEBUG = "false"
+  APP_URL = "https://api.triada-designs.com"
   DB_CONNECTION = "sqlite"
   DB_DATABASE = "/var/www/html/database/database.sqlite"
   LOG_CHANNEL = "stderr"
+  INTEGRATION_MODE = "live"
+  META_VERIFY_TOKEN = "triada-local-verify"
   FRONTEND_URL = "https://dashboard.triada-designs.com"
   CORS_ALLOWED_ORIGINS = "https://dashboard.triada-designs.com,https://triada-ops.vercel.app,http://127.0.0.1:43127,http://localhost:43127"
+  SANCTUM_STATEFUL_DOMAINS = "dashboard.triada-designs.com,triada-ops.vercel.app,localhost,localhost:43127,127.0.0.1,127.0.0.1:43127"
 
 [http_service]
   internal_port = 8000
