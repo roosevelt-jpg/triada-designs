@@ -205,7 +205,7 @@ class ShopifyClient
     {
         $clientId = (string) config('integrations.shopify.client_id');
         $redirect = (string) config('integrations.shopify.redirect_uri');
-        $scopes = (string) config('integrations.shopify.scopes', 'read_products,read_orders,read_inventory');
+        $scopes = (string) config('integrations.shopify.scopes', 'read_products,write_products,read_orders,read_inventory');
         $shop = preg_replace('/[^a-zA-Z0-9.-]/', '', $shop) ?: 'example.myshopify.com';
 
         return 'https://'.$shop.'/admin/oauth/authorize?'.http_build_query([
