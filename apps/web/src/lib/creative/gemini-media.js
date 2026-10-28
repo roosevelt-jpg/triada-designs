@@ -45,6 +45,72 @@ export function geminiBaseUrl() {
 }
 
 /**
+ * List models visible to this API key (used to pick live image/video endpoints).
+ * @param {string} apiKey
+ * @returns {Promise<{ ok: boolean, models: string[], error?: string }>}
+ */
+async function listGeminiModels(apiKey) {
+  const base = geminiBaseUrl();
+  try {
+    const response = await fetch(`${base}/models`, {
+      method: "GET",
+      headers: { "x-goog-api-key": apiKey },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      // Retry query-param auth (some AI Studio keys prefer it).
+      const alt = await fetch(`${base}/models?key=${encodeURIComponent(apiKey)}`);
+      const altJson = await alt.json().catch(() => ({}));
+      if (!alt.ok) {
+        return {
+          ok: false,
+          models: [],
+          error: `models.list HTTP ${response.status}/${alt.status}: ${String(json?.error?.message || altJson?.error?.message || "").slice(0, 200)}`,
+        };
+      }
+      const names = (altJson.models || [])
+        .map((m) => String(m.name || "").replace(/^models\//, ""))
+        .filter(Boolean);
+      return { ok: true, models: names };
+    }
+    const names = (json.models || [])
+      .map((m) => String(m.name || "").replace(/^models\//, ""))
+      .filter(Boolean);
+    return { ok: true, models: names };
+  } catch (error) {
+    return { ok: false, models: [], error: String(error?.message || error) };
+  }
+}
+
+/**
+ * Rank discovered models for jewellery image generation.
+ * @param {string[]} available
+ */
+function pickImageModels(available) {
+  const set = new Set(available.map((m) => m.toLowerCase()));
+  const preferred = [
+    "gemini-nano-banana-2.1",
+    "gemini-3-pro-image",
+    "gemini-3.1-flash-image",
+    "gemini-3.1-flash-lite-image",
+    "gemini-2.5-flash-image",
+    "gemini-2.5-flash-image-preview",
+  ];
+  const ranked = preferred.filter((m) => set.has(m.toLowerCase()));
+  // Also include any other image-named Gemini models the key can see.
+  for (const name of available) {
+    const lower = name.toLowerCase();
+    if (
+      !ranked.some((r) => r.toLowerCase() === lower) &&
+      (lower.includes("image") || lower.includes("nano-banana") || lower.includes("imagen"))
+    ) {
+      ranked.push(name);
+    }
+  }
+  return ranked.length ? ranked : preferred;
+}
+
+/**
  * Ignore stale Vercel IMAGE_MODEL=claude-… / text-LLM values.
  * @param {string} model
  * @param {"image"|"video"} kind
@@ -225,8 +291,17 @@ async function callGenerateContentImage(opts) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+  const payload = {
+    contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
+    generationConfig: {
+      responseModalities: ["TEXT", "IMAGE"],
+      imageConfig: { aspectRatio: opts.aspectRatio },
+    },
+  };
+
   try {
-    const response = await fetch(
+    /** @type {Response} */
+    let response = await fetch(
       `${base}/models/${encodeURIComponent(opts.model)}:generateContent`,
       {
         method: "POST",
@@ -234,18 +309,26 @@ async function callGenerateContentImage(opts) {
           "content-type": "application/json",
           "x-goog-api-key": opts.apiKey,
         },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
-          generationConfig: {
-            responseModalities: ["TEXT", "IMAGE"],
-            imageConfig: { aspectRatio: opts.aspectRatio },
-          },
-        }),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       },
     );
 
-    const json = await response.json().catch(() => ({}));
+    let json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      // Fallback auth style used by many AI Studio curl samples.
+      response = await fetch(
+        `${base}/models/${encodeURIComponent(opts.model)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        },
+      );
+      json = await response.json().catch(() => ({}));
+    }
+
     if (!response.ok) {
       return {
         ok: false,
@@ -323,7 +406,15 @@ export async function generateGeminiImage(input) {
     (process.env.GEMINI_IMAGE_MODEL || "").trim();
   const errors = [];
 
-  for (const model of modelList(preferred, GEMINI_IMAGE_MODELS, "image")) {
+  const listed = await listGeminiModels(apiKey);
+  const discovered = listed.ok ? pickImageModels(listed.models) : GEMINI_IMAGE_MODELS;
+  if (!listed.ok) {
+    errors.push(`models.list: ${listed.error}`);
+  }
+
+  const cascade = modelList(preferred, [...discovered, ...GEMINI_IMAGE_MODELS], "image");
+
+  for (const model of cascade) {
     // Primary: Interactions (Gemini apps path)
     const result = await callInteractions({
       apiKey,
@@ -362,11 +453,18 @@ export async function generateGeminiImage(input) {
     errors.push(`gc:${model}: ${gc.error}`);
   }
 
+  const availableHint = listed.ok
+    ? ` available_imageish=${discovered.slice(0, 8).join(",") || "none"}; sample=${listed.models.slice(0, 8).join(",")}`
+    : "";
+
   return {
     ok: false,
-    error: errors.slice(0, 8).join(" | ") || "Gemini image generation failed",
+    error:
+      (errors.slice(0, 10).join(" | ") || "Gemini image generation failed") +
+      availableHint,
     mode: "error",
     attempts: errors.length,
+    available_models: listed.ok ? listed.models.slice(0, 40) : [],
   };
 }
 
