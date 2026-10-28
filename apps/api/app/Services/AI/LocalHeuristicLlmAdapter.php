@@ -36,6 +36,7 @@ class LocalHeuristicLlmAdapter implements LlmAdapterInterface
             str_contains($purpose, 'qualif') || str_contains($prompt, 'qualify') => $this->qualify($prompt),
             str_contains($purpose, 'escalat') || str_contains($prompt, 'complaint') => $this->escalate($prompt),
             str_contains($purpose, 'gift') => $this->giftFinder($prompt),
+            str_contains($purpose, 'ugc') || str_contains($purpose, 'content_ugc') => $this->ugcScriptDraft($prompt),
             str_contains($purpose, 'content') || str_contains($prompt, 'caption') => $this->contentDraft($prompt),
             default => $this->draftReply($prompt, $system),
         };
@@ -134,6 +135,18 @@ class LocalHeuristicLlmAdapter implements LlmAdapterInterface
     protected function contentDraft(string $prompt): string
     {
         return 'Draft (local_sim): Quiet sparkle for Dubai evenings — Triada Designs jewellery. Human approval required before publish. Prompt cues: '.substr($prompt, 0, 160);
+    }
+
+    protected function ugcScriptDraft(string $prompt): string
+    {
+        return json_encode([
+            'hook' => 'POV: soft Gulf light on a piece you will actually wear every day.',
+            'script' => 'Local_sim UGC script for Triada Designs — calm voiceover, real jewellery close-up, no hard sell. Human approval required before publish. Cues: '.substr($prompt, 0, 120),
+            'storyboard' => '0-2s handheld product close-up; 2-6s soft light shift + authentic voiceover; end frame brand restraint.',
+            'cta' => 'Shop Triada Designs',
+            'provider' => 'local_heuristic',
+            'note' => 'Script only — VIDEO_PROVIDER or local animation renders pixels.',
+        ], JSON_THROW_ON_ERROR);
     }
 
     protected function draftReply(string $prompt, string $system): string

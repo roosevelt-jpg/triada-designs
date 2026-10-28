@@ -62,6 +62,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware('cron.secret')->prefix('cron')->group(function () {
         Route::match(['get', 'post'], '/abandonment/process', [CronWorkerController::class, 'processAbandonment']);
         Route::match(['get', 'post'], '/after-sale/process', [CronWorkerController::class, 'processAfterSale']);
+        Route::match(['get', 'post'], '/content-publish/process', [CronWorkerController::class, 'processContentPublish']);
     });
 
     Route::middleware('auth:sanctum')->group(function () {
@@ -96,6 +97,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/content/{contentId}/generate-image', [CreativeMediaController::class, 'generateImage']);
         Route::post('/content/{contentId}/generate-variants', [CreativeMediaController::class, 'generateVariants']);
         Route::post('/content/{contentId}/generate-video', [CreativeMediaController::class, 'generateVideo']);
+        Route::post('/content/{contentId}/generate-ugc-video', [CreativeMediaController::class, 'generateUgcVideo']);
         Route::post('/content/{contentId}/generate-animation', [CreativeMediaController::class, 'generateAnimation']);
         Route::post('/content/{contentId}/ensure-creative', [CreativeMediaController::class, 'ensureCreative']);
 

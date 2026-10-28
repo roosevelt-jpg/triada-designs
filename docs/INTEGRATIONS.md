@@ -171,6 +171,36 @@ Ops UI formatters and the header clock sync skew + workspace IANA timezone from 
 
 Gates: human approval + approval_version check before publish. UI: Content Studio + Calendar + publication logs.
 
+**Flow:** generate (UGC/creative) → `in_review` pending approval → admin approve → calendar `scheduled_for` → Vercel Cron `/api/cron/content-publish` (or manual Publish).
+
+Cron worker: `POST /api/v1/cron/content-publish/process` (Bearer `CRON_SECRET`) drains due `scheduled` items without skipping approval gates.
+
+## Creative AI (image / video dual path)
+
+**Honest split:** Anthropic Claude (Integrations / `ANTHROPIC_API_KEY`) writes captions, UGC scripts, and storyboards. **Claude cannot render video or image pixels alone.**
+
+| Layer | Env / UI | Role |
+|---|---|---|
+| Scripts / briefs | Anthropic on Integrations, or `ANTHROPIC_*` | Text intelligence |
+| Image pixels | `IMAGE_PROVIDER=gemini` + key + `INTEGRATION_MODE=live` (else local SVG) | Still frames |
+| Video pixels | `VIDEO_PROVIDER` + `VIDEO_API_KEY` + `INTEGRATION_MODE=live` | Motion frames |
+| Local animation | `VIDEO_PROVIDER=local` or `animation` (default) | SVG motion + placeholder mp4 (already in creative AI) |
+
+```bash
+# Scripts (required for live agent/creative intelligence)
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
+
+# Video pixels — pick one provider (not Claude)
+VIDEO_PROVIDER=local          # local | animation | http | gemini | veo | runway | luma
+VIDEO_API_KEY=                # or GEMINI_API_KEY when provider=gemini|veo
+VIDEO_MODEL=veo-2.0-generate-001
+VIDEO_BASE_URL=               # optional gateway; Runway/Luma defaults exist in config
+INTEGRATION_MODE=live         # required for live provider HTTP
+```
+
+Without a video key, Content Studio still generates operable local_sim UGC stubs and queues them for approval.
+
 ## Meta App Review
 
 See `docs/meta/APP_REVIEW_CHECKLIST.md`.

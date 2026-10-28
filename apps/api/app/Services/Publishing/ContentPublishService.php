@@ -150,11 +150,19 @@ class ContentPublishService
      */
     public function schedule(Workspace $workspace, ContentItem $item, string $scheduledFor, ?string $actorId = null): array
     {
-        if ($item->status !== 'approved') {
+        if (! in_array($item->status, ['approved', 'scheduled'], true)) {
             return [
                 'ok' => false,
-                'error' => 'Only approved content can be scheduled.',
+                'error' => 'Only approved (or already scheduled) content can be scheduled.',
                 'gate' => 'approval_required',
+            ];
+        }
+
+        if (empty($item->approved_by) || empty($item->approval_version)) {
+            return [
+                'ok' => false,
+                'error' => 'Missing approval metadata.',
+                'gate' => 'approval_metadata',
             ];
         }
 
@@ -175,5 +183,80 @@ class ContentPublishService
         ]);
 
         return ['ok' => true, 'content' => $item->fresh()];
+    }
+
+    /**
+     * Vercel Cron / worker: publish due scheduled posts (approval gates still enforced).
+     *
+     * @return array{ok:bool,processed:int,results:list<array<string,mixed>>}
+     */
+    public function processDue(Workspace $workspace): array
+    {
+        $due = ContentItem::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('status', 'scheduled')
+            ->whereNotNull('scheduled_for')
+            ->where('scheduled_for', '<=', now())
+            ->orderBy('scheduled_for')
+            ->limit(25)
+            ->get();
+
+        $results = [];
+        foreach ($due as $item) {
+            $adapters = $this->adaptersFor($item);
+            $itemResults = [];
+            $anyOk = false;
+            foreach ($adapters as $adapterKey) {
+                $out = $this->publish(
+                    $workspace,
+                    $item->fresh(),
+                    $adapterKey,
+                    (int) $item->approval_version,
+                    'cron:content-publish'
+                );
+                $itemResults[] = [
+                    'adapter' => $adapterKey,
+                    'ok' => (bool) ($out['ok'] ?? false),
+                    'error' => $out['error'] ?? null,
+                    'mode' => data_get($out, 'result.mode'),
+                ];
+                if ($out['ok'] ?? false) {
+                    $anyOk = true;
+                    break; // one successful publish is enough for the content item status
+                }
+            }
+            $results[] = [
+                'content_item_id' => $item->id,
+                'title' => $item->title,
+                'scheduled_for' => optional($item->scheduled_for)?->toIso8601String(),
+                'published' => $anyOk,
+                'adapters' => $itemResults,
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'processed' => count($results),
+            'results' => $results,
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function adaptersFor(ContentItem $item): array
+    {
+        $configured = data_get($item->publish_metadata, 'adapters');
+        if (is_array($configured) && $configured !== []) {
+            return array_values(array_filter(array_map('strval', $configured)));
+        }
+
+        $channel = strtolower((string) ($item->channel ?? ''));
+
+        return match (true) {
+            in_array($channel, ['wordpress', 'blog', 'website'], true) => ['wordpress'],
+            in_array($channel, ['instagram', 'facebook', 'meta', 'tiktok'], true) => ['meta_page'],
+            default => ['meta_page', 'wordpress'],
+        };
     }
 }

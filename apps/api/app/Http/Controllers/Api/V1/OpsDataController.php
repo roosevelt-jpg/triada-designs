@@ -76,13 +76,27 @@ class OpsDataController extends Controller
     {
         $workspaceId = $this->workspaceId($request);
 
-        $items = ContentItem::query()
+        $scheduled = ContentItem::query()
             ->where('workspace_id', $workspaceId)
             ->whereNotNull('scheduled_for')
             ->orderBy('scheduled_for')
             ->get();
 
-        return response()->json(['data' => $items]);
+        $pendingApproval = ContentItem::query()
+            ->where('workspace_id', $workspaceId)
+            ->whereIn('status', ['draft', 'in_review'])
+            ->orderByDesc('updated_at')
+            ->get();
+
+        return response()->json([
+            'data' => $scheduled,
+            'pending_approval' => $pendingApproval,
+            'flow' => 'generate → pending approval → calendar date → cron publish',
+            'cron' => [
+                'path' => '/api/cron/content-publish',
+                'note' => 'Vercel Cron publishes due scheduled posts (approval gates enforced).',
+            ],
+        ]);
     }
 
     public function campaigns(Request $request): JsonResponse

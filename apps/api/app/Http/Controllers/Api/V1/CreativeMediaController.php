@@ -92,19 +92,58 @@ class CreativeMediaController extends Controller
             'storyboard' => ['nullable', 'string', 'max:2000'],
             'caption' => ['nullable', 'string', 'max:4000'],
             'duration_ms' => ['nullable', 'integer', 'min:1000', 'max:60000'],
+            'style' => ['nullable', 'string', 'in:editorial,ugc,animation'],
         ]);
 
-        $result = $creative->generateVideo($workspace, $item, $data);
+        $isUgc = strtolower((string) ($data['style'] ?? '')) === 'ugc';
+        $result = $isUgc
+            ? $creative->generateUgcVideo($workspace, $item, $data)
+            : $creative->generateVideo($workspace, $item, $data);
 
         return response()->json([
             'ok' => $result['ok'],
             'mode' => $result['mode'],
             'prompt' => $result['prompt'] ?? null,
             'brief' => $result['brief'] ?? null,
+            'script' => $result['script'] ?? null,
+            'dual_path' => $result['dual_path'] ?? null,
+            'flow' => $result['flow'] ?? null,
             'error' => $result['error'],
             'asset' => $result['asset'],
             'sidecar' => $result['sidecar'] ?? null,
-            'note' => 'Short video draft only — human approval still required before public publish.',
+            'content' => $result['content'] ?? null,
+            'note' => $result['note']
+                ?? 'Short video draft only — human approval still required before public publish. Claude wrote script/storyboard; pixels use VIDEO_PROVIDER or local animation.',
+        ]);
+    }
+
+    public function generateUgcVideo(Request $request, string $contentId, CreativeMediaService $creative): JsonResponse
+    {
+        $workspace = $this->workspace($request);
+        $item = $this->content($workspace, $contentId);
+
+        $data = $request->validate([
+            'product' => ['nullable', 'string', 'max:200'],
+            'storyboard' => ['nullable', 'string', 'max:2000'],
+            'caption' => ['nullable', 'string', 'max:4000'],
+            'duration_ms' => ['nullable', 'integer', 'min:1000', 'max:60000'],
+        ]);
+
+        $result = $creative->generateUgcVideo($workspace, $item, $data);
+
+        return response()->json([
+            'ok' => $result['ok'],
+            'mode' => $result['mode'],
+            'prompt' => $result['prompt'] ?? null,
+            'brief' => $result['brief'] ?? null,
+            'script' => $result['script'] ?? null,
+            'dual_path' => $result['dual_path'] ?? null,
+            'flow' => $result['flow'] ?? null,
+            'error' => $result['error'],
+            'asset' => $result['asset'],
+            'sidecar' => $result['sidecar'] ?? null,
+            'content' => $result['content'] ?? null,
+            'note' => $result['note'] ?? 'UGC video queued for admin approval.',
         ]);
     }
 

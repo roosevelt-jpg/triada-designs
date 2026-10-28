@@ -158,4 +158,47 @@ class CreativeMediaApiTest extends TestCase
         $this->assertNotEmpty($run['content_item_id'] ?? null);
         $this->assertTrue(MediaAsset::query()->where('content_item_id', $run['content_item_id'])->exists());
     }
+
+    public function test_ugc_video_dual_path_queues_for_approval(): void
+    {
+        $item = ContentItem::query()
+            ->where('workspace_id', $this->workspace->id)
+            ->where('status', 'draft')
+            ->first();
+
+        if (! $item) {
+            $item = ContentItem::query()->create([
+                'workspace_id' => $this->workspace->id,
+                'title' => 'UGC draft',
+                'body' => 'Creator-style jewellery reel',
+                'status' => 'draft',
+                'channel' => 'instagram',
+                'content_type' => 'social_post',
+                'objective' => 'awareness',
+                'approval_version' => 0,
+            ]);
+        }
+
+        $video = $this->withToken($this->token)
+            ->postJson('/api/v1/content/'.$item->id.'/generate-ugc-video', [
+                'product' => 'Aura Signet Ring',
+                'duration_ms' => 8000,
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('dual_path.claude_renders_pixels', false)
+            ->json();
+
+        $this->assertNotEmpty($video['script']['script'] ?? null);
+        $this->assertSame('video', $video['asset']['kind'] ?? null);
+        $this->assertSame('in_review', $video['content']['status'] ?? ContentItem::query()->find($item->id)?->status);
+
+        $status = $this->withToken($this->token)
+            ->getJson('/api/v1/creative/status')
+            ->assertOk()
+            ->json();
+
+        $this->assertFalse($status['dual_path']['claude_alone'] ?? true);
+        $this->assertArrayHasKey('scripts', $status['dual_path'] ?? []);
+    }
 }

@@ -20,6 +20,14 @@ import {
   paginate,
 } from "@/lib/api/seed-data";
 import {
+  findContent,
+  getContentItems,
+  getPublications,
+  listPendingApproval,
+  listScheduled,
+  patchContent,
+} from "@/lib/content-schedule-store";
+import {
   publishProductById,
   saveAndMaybePublishProduct,
   syncShopifyCatalogInbound,
@@ -370,70 +378,150 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "content" && m === "GET") {
-    return jsonOk(paginate(buildContent()));
+    return jsonOk(paginate(getContentItems()));
   }
 
   if (path.startsWith("content/") && m === "POST") {
     const parts = segments;
     const contentId = parts[1];
     const action = parts[2];
-    const item = buildContent().find((c) => c.id === contentId) || {
+    const item = findContent(contentId) || {
       id: contentId,
       title: "Content",
-      status: "approved",
+      status: "draft",
+      approval_version: 0,
+      channel: "instagram",
     };
     if (action === "approve") {
+      const nextVersion = (item.approval_version || 0) + 1;
+      const content = patchContent(contentId, {
+        status: "approved",
+        approved_at: new Date().toISOString(),
+        approved_by: "dual-run-admin",
+        approval_version: nextVersion,
+      });
       return jsonOk({
-        content: { ...item, status: "approved", approved_at: new Date().toISOString() },
-        creative: { ok: true, mode: "local_seed", variant_count: 0 },
+        content,
+        creative: { ok: true, mode: "local_sim", variant_count: 0 },
         automations: [],
       });
     }
-    if (action === "schedule" || action === "publish") {
+    if (action === "schedule") {
+      if (item.status !== "approved" && item.status !== "scheduled") {
+        return jsonOk(
+          { ok: false, error: "Only approved content can be scheduled.", gate: "approval_required" },
+          422
+        );
+      }
+      const when = body?.scheduled_for || new Date(Date.now() + 3 * 86400000).toISOString();
+      const content = patchContent(contentId, { status: "scheduled", scheduled_for: when });
+      return jsonOk({ ok: true, content });
+    }
+    if (action === "publish") {
+      if (item.status !== "approved" && item.status !== "scheduled") {
+        return jsonOk(
+          { ok: false, error: "Content must be human-approved before publish.", gate: "approval_required" },
+          422
+        );
+      }
+      const content = patchContent(contentId, {
+        status: "published",
+        published_at: new Date().toISOString(),
+        publish_metadata: { adapter: body?.adapter || "meta_page", mode: "local_sim" },
+      });
       return jsonOk({
         ok: true,
-        content: { ...item, status: action === "publish" ? "published" : "scheduled" },
+        content,
         publication: {
           id: `pub-${contentId}`,
           channel: body?.channel || item.channel || "instagram",
-          status: action === "publish" ? "published" : "scheduled",
+          adapter: body?.adapter || "meta_page",
+          status: "published",
+          approval_version_checked: item.approval_version || 0,
+          published_at: content.published_at,
         },
+        result: { ok: true, mode: "local_sim" },
       });
     }
     if (
       action === "generate-image" ||
       action === "generate-variants" ||
       action === "generate-video" ||
+      action === "generate-ugc-video" ||
       action === "generate-animation" ||
       action === "ensure-creative"
     ) {
       const live = hasGeminiEnv();
+      const isUgc = action === "generate-ugc-video" || body?.style === "ugc";
+      const content = patchContent(contentId, {
+        status: item.status === "draft" || isUgc ? "in_review" : item.status,
+        creative_brief: {
+          ...(item.creative_brief || {}),
+          ugc_script: isUgc
+            ? {
+                hook: "POV: soft Gulf light on a piece you will wear every day.",
+                script: `Local_sim UGC script for ${body?.product || item.product_context?.name || "Triada jewellery"}.`,
+                storyboard: "0-2s handheld close-up; mid soft light; end brand restraint.",
+                cta: "Shop Triada Designs",
+                mode: "local_sim",
+              }
+            : undefined,
+          updated_at: new Date().toISOString(),
+        },
+      });
       return jsonOk({
         ok: true,
         mode: live ? "gemini" : "local_sim",
         mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
-        message: "Creative generation ready on Next dual-run.",
+        message: isUgc
+          ? "UGC script (Anthropic/local) + local animation pixels. Pending admin approval."
+          : "Creative generation ready on Next dual-run.",
         content_id: contentId,
+        content,
+        script: content.creative_brief?.ugc_script || null,
+        dual_path: {
+          script_mode: "local_sim",
+          pixel_mode: live ? "gemini" : "local_sim",
+          claude_renders_pixels: false,
+        },
+        flow: "generate → pending approval → calendar date → cron publish",
+        note: "Claude cannot render video pixels alone — VIDEO_PROVIDER or local animation required.",
+        asset: {
+          id: `asset-${contentId}-${action}`,
+          kind: action.includes("anim") ? "animation" : action.includes("video") ? "video" : "image",
+          mode: live ? "gemini" : "local_sim",
+          width: 1080,
+          height: action.includes("video") ? 1920 : 1080,
+          url: null,
+        },
+        sidecar: action.includes("video")
+          ? { placeholder_mp4: true, animation_svg: true }
+          : null,
       });
     }
     return jsonOk({ ok: true, content: item });
   }
 
   if (path.match(/^content\/[^/]+\/media$/) && m === "GET") {
-    return jsonOk({ data: [], mode: "local_seed" });
+    return jsonOk({ assets: [], variants: [], mode: "local_seed" });
   }
 
   if (path === "publications" && m === "GET") {
+    const pubs = getPublications();
     return jsonOk({
-      data: [
-        {
-          id: "pub-1",
-          content_id: "content-tides",
-          channel: "facebook",
-          status: "scheduled",
-          scheduled_for: new Date(Date.now() + 86400000).toISOString(),
-        },
-      ],
+      data:
+        pubs.length > 0
+          ? pubs
+          : [
+              {
+                id: "pub-1",
+                content_item_id: "content-tides",
+                channel: "facebook",
+                adapter: "meta_page",
+                status: "scheduled",
+                scheduled_for: new Date(Date.now() + 86400000).toISOString(),
+              },
+            ],
     });
   }
 
@@ -448,19 +536,29 @@ export async function dispatchV1(method, segments, request, body) {
         mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
         message: live
           ? "Image generation uses live AI."
-          : "Image generation runs locally until AI keys are present.",
+          : "Anthropic handles creative intelligence when keyed; image pixels stay local_sim without a dedicated IMAGE provider.",
       },
       video: {
-        mode: live ? "gemini" : "local_sim",
-        mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
-        message: live
-          ? "Short video and animation use live AI."
-          : "Video tools run locally until AI keys are present.",
+        mode: "local_sim",
+        mode_label: creativeModeLabel("local_sim"),
+        provider: process.env.VIDEO_PROVIDER || "local",
+        message:
+          "Claude writes scripts/storyboards only. Pixels need VIDEO_PROVIDER (runway|luma|veo|gemini|http) or local animation pipeline.",
+        dual_path: {
+          scripts: "Anthropic",
+          pixels: "VIDEO_PROVIDER or local SVG animation",
+        },
+      },
+      dual_path: {
+        scripts: "Anthropic Claude — scripts & storyboards",
+        pixels: "VIDEO_PROVIDER / local animation — Claude cannot render video alone",
+        claude_alone: false,
       },
       resize_engine: "triada",
-      summary: live
-        ? "Creative AI is connected."
-        : "Creative tools run locally until AI keys are present.",
+      honesty:
+        "Creative tools never auto-publish. Human approval + calendar schedule required. Claude does not render video pixels.",
+      summary:
+        "Dual path: Anthropic scripts → VIDEO_PROVIDER or local animation → pending approval → calendar → cron publish.",
     });
   }
 
@@ -1906,11 +2004,19 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "calendar" && m === "GET") {
-    return jsonOk({ data: buildContent().filter((c) => c.scheduled_for) });
+    return jsonOk({
+      data: listScheduled(),
+      pending_approval: listPendingApproval(),
+      flow: "generate → pending approval → calendar date → cron publish",
+      cron: {
+        path: "/api/cron/content-publish",
+        note: "Vercel Cron publishes due scheduled posts (approval gates enforced).",
+      },
+    });
   }
 
   if (path === "campaigns" && m === "GET") {
-    const items = buildContent();
+    const items = getContentItems();
     const byObjective = {};
     for (const item of items) {
       const key = item.objective || "general";

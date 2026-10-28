@@ -30,7 +30,7 @@ CRON_SECRET=<same as API CRON_SECRET>
 
 Vercel project: `triada-ops`. `API_ORIGIN` is **required** for Production (build fails if missing or set to `127.0.0.1`). Prefer same-origin `/api` in the browser; Next rewrites proxy to Laravel.
 
-Hobby-safe crons (daily): abandonment `0 8 * * *`, after-sale `0 9 * * *`.
+Hobby-safe crons (daily): abandonment `0 8 * * *`, after-sale `0 9 * * *`, content-publish `0 10 * * *` (`/api/cron/content-publish` → Laravel `content-publish/process`).
 
 - Do not put Laravel DB or provider secrets in `NEXT_PUBLIC_*`.
 - Keep `robots` noindex on the admin app (already set in root layout).
