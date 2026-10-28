@@ -10,7 +10,6 @@ import {
   WORKSPACE,
   buildAgents,
   buildAnalyticsPayload,
-  buildContacts,
   buildContent,
   buildConversations,
   buildDashboard,
@@ -20,6 +19,14 @@ import {
   buildWorkflows,
   paginate,
 } from "@/lib/api/seed-data";
+import {
+  importContactRows,
+  listContacts,
+  listWhatsAppCampaignRecipients,
+  upsertContacts,
+} from "@/lib/crm/contacts-store";
+import { mapContactUploadRows } from "@/lib/crm/parse-contacts-file";
+import { toWhatsAppRecipient } from "@/lib/crm/phone-e164";
 import {
   clearAnthropicCredentials,
   getAnthropicStatus,
@@ -671,23 +678,176 @@ export async function dispatchV1(method, segments, request, body) {
 
   // ---- CRM / inbox ----
   if (path === "contacts" && m === "GET") {
-    return jsonOk({ data: buildContacts() });
+    const url = new URL(request.url);
+    const q = url.searchParams.get("q") || "";
+    const whatsappReady = ["1", "true", "yes"].includes(
+      String(url.searchParams.get("whatsapp_ready") || "").toLowerCase(),
+    );
+    const listed = await listContacts({ q, whatsapp_ready: whatsappReady });
+    return jsonOk({
+      data: listed.data,
+      mode: listed.mode,
+      source: "next_dual_run",
+    });
   }
 
   if (path === "contacts" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await upsertContacts([
+      {
+        ...input,
+        source: input.source || "manual",
+      },
+    ]);
     return jsonOk(
       {
-        id: `contact-${Date.now()}`,
-        workspace_id: WORKSPACE.id,
-        ...(body && typeof body === "object" ? body : {}),
+        ...(result.upserted[0] || {}),
+        mode: result.mode,
+        source: "next_dual_run",
       },
       201,
     );
   }
 
+  if (path === "contacts/import" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const format = String(input.format || "csv").toLowerCase();
+    const source =
+      format === "excel" || format === "xlsx" ? "excel_upload" : "csv_upload";
+    const rawRows = Array.isArray(input.rows) ? input.rows : [];
+    if (!rawRows.length) {
+      return jsonErr("rows[] is required (parse CSV/Excel client-side first).", 422);
+    }
+    const mapped = mapContactUploadRows(
+      /** @type {Record<string, string>[]} */ (rawRows),
+      { defaultRegion: String(input.default_region || "AE"), source },
+    );
+    const imported = await importContactRows(mapped.rows, { source });
+    return jsonOk({
+      ok: true,
+      mode: imported.mode,
+      source: "next_dual_run",
+      summary: imported.summary,
+      invalid: imported.invalid,
+      imported: imported.imported,
+      preview_invalid: mapped.invalid.slice(0, 50),
+    });
+  }
+
+  if (path === "contacts/whatsapp-recipients" && m === "GET") {
+    const listed = await listWhatsAppCampaignRecipients();
+    return jsonOk({
+      data: listed.data.map((c) => ({
+        id: c.id,
+        name: c.name,
+        phone_e164: c.phone_e164,
+        phone_normalized: c.phone_normalized,
+        to: c.phone_normalized,
+        marketing_opt_out: c.marketing_opt_out,
+      })),
+      mode: listed.mode,
+      source: "next_dual_run",
+    });
+  }
+
   if (path.match(/^contacts\/[^/]+$/) && m === "GET") {
-    const c = buildContacts().find((x) => x.id === segments[1]);
-    return c ? jsonOk(c) : jsonErr("Contact not found.", 404);
+    const listed = await listContacts({});
+    const c = listed.data.find((x) => x.id === segments[1]);
+    return c
+      ? jsonOk({ ...c, mode: listed.mode })
+      : jsonErr("Contact not found.", 404);
+  }
+
+  if (path === "integrations/whatsapp/campaign-send" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const templateName = String(input.template_name || "").trim();
+    if (!templateName) {
+      return jsonErr("template_name is required.", 422);
+    }
+    if (input.marketing_opt_out === true && input.purpose !== "transactional") {
+      return {
+        status: 422,
+        body: {
+          ok: false,
+          error: "marketing_opt_out",
+          eligibility: { eligible: false },
+        },
+      };
+    }
+
+    const listed = await listWhatsAppCampaignRecipients();
+    let recipients = listed.data;
+    if (Array.isArray(input.contact_ids) && input.contact_ids.length) {
+      const allow = new Set(input.contact_ids.map(String));
+      recipients = recipients.filter((c) => allow.has(c.id));
+    }
+
+    const limit = Math.min(
+      Math.max(Number(input.limit) || recipients.length, 0),
+      100,
+    );
+    recipients = recipients.slice(0, limit);
+
+    const results = [];
+    for (const contact of recipients) {
+      if (contact.marketing_opt_out && input.purpose !== "transactional") {
+        results.push({
+          contact_id: contact.id,
+          to: contact.phone_normalized,
+          ok: false,
+          error: "marketing_opt_out",
+        });
+        continue;
+      }
+      const to =
+        contact.phone_normalized ||
+        toWhatsAppRecipient(contact.phone_e164 || contact.phone);
+      if (!to) {
+        results.push({
+          contact_id: contact.id,
+          to: null,
+          ok: false,
+          error: "invalid_phone",
+        });
+        continue;
+      }
+      const send = await sendWhatsAppTemplateMessage({
+        to,
+        template_name: templateName,
+        language: input.language ? String(input.language) : "en",
+        components: Array.isArray(input.components) ? input.components : [],
+      });
+      results.push({
+        contact_id: contact.id,
+        name: contact.name,
+        to,
+        phone_e164: contact.phone_e164,
+        ok: send.ok,
+        mode: send.mode,
+        provider_message_id: send.provider_message_id,
+        error: send.error,
+      });
+    }
+
+    return jsonOk({
+      ok: results.every((r) => r.ok),
+      mode: listed.mode,
+      template_name: templateName,
+      attempted: results.length,
+      sent: results.filter((r) => r.ok).length,
+      failed: results.filter((r) => !r.ok).length,
+      results,
+      source: "next_dual_run",
+    });
   }
 
   if (path === "conversations" && m === "GET") {
