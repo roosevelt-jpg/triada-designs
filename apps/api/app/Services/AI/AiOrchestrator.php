@@ -112,9 +112,10 @@ class AiOrchestrator
         }
 
         $message = (string) ($context['message'] ?? $context['body'] ?? '');
+        $languageSource = trim((string) ($context['customer_message'] ?? $context['message_body'] ?? $message));
         $knowledge = $this->retrieveKnowledge($workspace, $message);
         $catalog = $this->catalogHints($workspace);
-        $detected = app(CustomerLanguageDetector::class)->detect($message, [
+        $detected = app(CustomerLanguageDetector::class)->detect($languageSource !== '' ? $languageSource : $message, [
             'hint' => (string) ($context['detected_language'] ?? $context['preferred_language'] ?? $context['language'] ?? ''),
             'fallback' => 'en',
         ]);
@@ -226,6 +227,9 @@ class AiOrchestrator
             'qualify' => $qualify,
             'escalate' => $escalate,
             'suggested_reply' => data_get($draft, 'text'),
+            'detected_language' => $draft['detected_language'] ?? $classify['detected_language'] ?? null,
+            'detected_language_name' => $draft['detected_language_name'] ?? $classify['detected_language_name'] ?? null,
+            'language_rtl' => $draft['language_rtl'] ?? $classify['language_rtl'] ?? false,
             'needs_human' => (bool) data_get($escalate, 'parsed.escalate', false)
                 || (bool) data_get($classify, 'parsed.needs_human', false),
         ];
@@ -310,12 +314,16 @@ Hard rules:
 - WhatsApp: business messages only (orders, products, support) to opted-in customers.
 - Posts, broadcasts, and custom quotes require human approval before sending.
 - Never mention internal tooling or implementation details in customer-facing copy.
-- Match the customer's language on every reply (detect from their latest message; default English if unclear).
+Language lock (hard rule):
+- Always match the latest customer message language on every reply (default English only if unclear).
+- Never answer in a different language unless the customer switches in their latest message — then switch with them.
+- Do not hallucinate or drift into another language; greetings, follow-ups, escalation outlines, lead notes, and marketing chat stay locked.
 - Supported customer languages include Arabic, Romanian, German, French, Russian, Spanish, Portuguese, and English — and match other languages when the customer writes them.
 - Keep Triada warmth and accuracy in that language; do not mix languages unless the customer does.
 - Shared team notes may stay in English; customer-facing text follows the customer.
 Detected customer language for this turn: {$langName} ({$langCode}).
-- Reply entirely in {$langName} unless the customer mixed languages — then mirror their mix.
+- LANGUAGE LOCK: reply entirely in {$langName}. Never switch unless the customer's latest message switches.
+- Greetings, answers, follow-ups, escalation outlines, lead notes, and marketing chat must all be in {$langName}.
 {$rtlLine}
 {$arabicLine}
 Agent policy:

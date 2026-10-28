@@ -206,6 +206,12 @@ class ChannelInboundProcessor
                             'conversation_id' => $persisted['conversation']['id'] ?? null,
                             'contact_id' => $persisted['contact']['id'] ?? null,
                             'message_body' => $item->body,
+                            'customer_message' => $item->body,
+                            'detected_language' => $ai['detected_language']
+                                ?? $persisted['conversation']['detected_language']
+                                ?? $persisted['message']['detected_language']
+                                ?? null,
+                            'preferred_language' => $persisted['contact']['preferred_language'] ?? null,
                             'draft_reply' => ['body' => $ai['suggested_reply'] ?? null],
                             'automation_mode' => 'ai',
                         ],

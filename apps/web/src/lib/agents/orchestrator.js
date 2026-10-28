@@ -43,13 +43,21 @@ export async function runAgentOrchestration(input = {}) {
     seeded[0] ||
     { name: "Triada assistant", config: {} };
 
+  // Prefer explicit customer_message (team reviews wrap drafts in English instructions).
+  const languageSource = String(
+    input.context?.customer_message ||
+      input.context?.message_body ||
+      input.context?.body ||
+      message ||
+      "",
+  ).trim();
   const langHint = String(
     input.context?.detected_language ||
       input.context?.preferred_language ||
       input.context?.language ||
       "",
   );
-  const detected = detectCustomerLanguage(message, {
+  const detected = detectCustomerLanguage(languageSource, {
     hint: langHint,
     fallback: "en",
   });
@@ -244,6 +252,7 @@ Quality Control focus:
     return `
 Compliance focus:
 - ALLOW / HOLD / BLOCK with reason. WhatsApp only to opted-in customers. Broadcasts need human approval.
+- Flag customer-facing drafts that ignore the language lock (wrong language vs latest customer message).
 `;
   }
 

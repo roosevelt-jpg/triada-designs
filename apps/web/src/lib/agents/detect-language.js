@@ -413,15 +413,16 @@ export function detectCustomerLanguage(text, opts = {}) {
     };
   }
 
-  // Prefer contact preferred language when scores are nearly tied
-  if (hint && scores[hint] >= bestScore - 1 && scores[hint] > 0) {
+  // Prefer latest-message winner. Only keep hint when it IS the best code
+  // (never let preferred_language block a clear customer language switch).
+  if (hint && hint === bestCode) {
     const meta = languageMeta(hint);
     return {
       code: meta.code,
       name: meta.name,
-      confidence: 0.7,
+      confidence: Math.min(0.9, 0.6 + bestScore * 0.06),
       rtl: Boolean(meta.rtl),
-      method: "hint_tiebreak",
+      method: "hint_confirm",
     };
   }
 
@@ -484,7 +485,9 @@ export function buildLanguageMatchingBlock(detected, baseHook) {
     baseHook,
     "",
     `Detected customer language for this turn: ${name} (${code}).`,
-    `- Reply entirely in ${name} unless the customer mixed languages — then mirror their mix.`,
+    `- LANGUAGE LOCK: reply entirely in ${name}. Never switch to another language unless the customer's latest message switches.`,
+    `- Greetings, answers, follow-ups, escalation outlines, lead notes, and marketing chat must all be in ${name}.`,
+    "- If the customer mixed languages in the latest message — mirror their mix; otherwise stay monolingual in the detected language.",
     "- Shared memory / internal notes may stay in English; all customer-facing text must match the customer.",
     rtl
       ? "- This language is RTL: prefer natural right-to-left phrasing; do not force Latin script."

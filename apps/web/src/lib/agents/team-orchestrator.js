@@ -80,6 +80,7 @@ export async function runTeamCollaboration(input = {}) {
 
   const detectedLanguage = String(primaryResult.detected_language || "en");
   enrichedContext.detected_language = detectedLanguage;
+  enrichedContext.customer_message = message;
 
   /** @type {Array<Record<string, unknown>>} */
   const steps = [
@@ -146,6 +147,8 @@ export async function runTeamCollaboration(input = {}) {
       context: {
         ...enrichedContext,
         primary_agent: primary.key,
+        customer_message: message,
+        detected_language: detectedLanguage,
         draft,
       },
     });

@@ -7,15 +7,17 @@
 import { creativeAgentSystemPrompt } from "../creative/jewellery-prompts";
 
 /** Bump when any seeded roster prompt changes so agent-store syncs live rows. */
-export const TEAM_PROMPT_VERSION = 5;
+export const TEAM_PROMPT_VERSION = 6;
 
 /**
  * Language-matching hook — expanded by detect-language + orchestrator per turn.
  * Keep role-specific sections stable; only this shared block carries language policy.
  */
 export const LANGUAGE_MATCHING_HOOK = [
-  "Language:",
-  "- Match the customer’s language on every reply (detect from their latest message; default English if unclear).",
+  "Language lock (hard rule):",
+  "- Always match the latest customer message language on every reply (default English only if unclear).",
+  "- Never answer in a different language unless the customer switches in their latest message — then switch with them.",
+  "- Do not hallucinate or drift into another language mid-thread; greetings, follow-ups, escalation outlines, lead notes, and marketing chat all stay locked to the customer.",
   "- Supported customer languages include Arabic, Romanian, German, French, Russian, Spanish, Portuguese, and English — and match other languages when the customer writes them.",
   "- Keep Triada warmth and accuracy in that language; do not mix languages unless the customer does.",
   "- Arabic: write proper Arabic script with natural RTL-friendly phrasing; do not force Latin transliteration.",

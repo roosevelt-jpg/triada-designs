@@ -56,7 +56,12 @@ class AnswerBotService
             $reply = (string) ($draft['text'] ?? JewelleryKnowledge::AI_DISCLOSURE.' Could you share a bit more?');
         }
 
-        if (str_contains(strtolower($message), 'price') || str_contains(strtolower($message), 'aed')) {
+        // English catalog price snippets only — non-EN keeps the language-locked AI/local draft.
+        $asksPrice = (bool) preg_match(
+            '/\b(price|aed|cost|how much|سعر|pret|preț|preis|prix|цена|precio|preço|custa|cuesta)\b/iu',
+            $message
+        );
+        if ($asksPrice && $detected['code'] === 'en') {
             $skuHint = $this->extractSkuHint($message);
             if ($skuHint) {
                 $product = Product::query()

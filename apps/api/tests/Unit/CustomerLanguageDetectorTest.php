@@ -35,4 +35,22 @@ class CustomerLanguageDetectorTest extends TestCase
         $this->assertSame('ar', $detected['code']);
         $this->assertTrue($detected['rtl']);
     }
+
+    public function test_latest_message_wins_over_preferred_language_hint(): void
+    {
+        $detector = new CustomerLanguageDetector;
+        $detected = $detector->detect('Bonjour, quel est le prix de la bague ?', [
+            'hint' => 'en',
+        ]);
+        $this->assertSame('fr', $detected['code']);
+    }
+
+    public function test_hint_only_fills_when_message_unclear(): void
+    {
+        $detector = new CustomerLanguageDetector;
+        $detected = $detector->detect('12345 !!!', [
+            'hint' => 'ar',
+        ]);
+        $this->assertSame('ar', $detected['code']);
+    }
 }

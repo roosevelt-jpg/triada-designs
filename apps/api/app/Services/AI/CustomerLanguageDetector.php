@@ -144,15 +144,16 @@ class CustomerLanguageDetector
             ];
         }
 
-        if ($hint !== '' && ($scores[$hint] ?? 0) >= $bestScore - 1 && ($scores[$hint] ?? 0) > 0) {
+        // Prefer latest-message winner. Never let preferred_language block a switch.
+        if ($hint !== '' && $hint === $bestCode) {
             $meta = $this->meta($hint);
 
             return [
                 'code' => $meta['code'],
                 'name' => $meta['name'],
-                'confidence' => 0.7,
+                'confidence' => min(0.9, 0.6 + $bestScore * 0.06),
                 'rtl' => $meta['rtl'],
-                'method' => 'hint_tiebreak',
+                'method' => 'hint_confirm',
             ];
         }
 

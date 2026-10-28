@@ -217,9 +217,12 @@ class ActionExecutor
         if ($useAi && $message !== '') {
             $result = $this->ai->runAgent($workspace, (string) ($config['agent_key'] ?? 'support'), 'draft_reply', [
                 'message' => $message,
+                'customer_message' => $message,
                 'channel' => $context['channel'] ?? 'webchat',
                 'conversation_id' => $context['conversation_id'] ?? null,
                 'contact_id' => $context['contact_id'] ?? null,
+                'detected_language' => $context['detected_language'] ?? null,
+                'preferred_language' => $context['preferred_language'] ?? null,
                 'dry_run' => $dryRun,
             ]);
 

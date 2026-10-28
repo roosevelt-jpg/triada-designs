@@ -315,6 +315,12 @@ class MetaInboundProcessor
             'conversation_id' => $persisted['conversation']['id'] ?? null,
             'contact_id' => $persisted['contact']['id'] ?? null,
             'message_body' => $item->body,
+            'customer_message' => $item->body,
+            'detected_language' => $aiResult['detected_language']
+                ?? $persisted['conversation']['detected_language']
+                ?? $persisted['message']['detected_language']
+                ?? null,
+            'preferred_language' => $persisted['contact']['preferred_language'] ?? null,
             'draft_reply' => ['body' => $aiResult['suggested_reply'] ?? null],
             'requires_whatsapp_template' => false,
             'needs_human' => $aiResult['needs_human'] ?? false,
