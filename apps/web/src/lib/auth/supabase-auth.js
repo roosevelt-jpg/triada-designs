@@ -40,6 +40,65 @@ export function localSeedUser() {
   };
 }
 
+/**
+ * @param {{ id: string, email: string, name?: string, phone?: string, role_title?: string }} profile
+ * @returns {import('@supabase/supabase-js').User}
+ */
+export function localSeedUserFromProfile(profile) {
+  return {
+    id: profile.id,
+    email: profile.email,
+    user_metadata: {
+      name: profile.name || "",
+      phone: profile.phone || "",
+      role_title: profile.role_title || "",
+    },
+    app_metadata: { provider: "local_seed" },
+    aud: "authenticated",
+    created_at: "2026-01-01T00:00:00.000Z",
+  };
+}
+
+/**
+ * Encode a local dual-run bearer token for any team member.
+ * @param {{ id: string, email: string, name?: string, phone?: string, role_title?: string }} profile
+ */
+export function issueLocalSeedToken(profile) {
+  const payload = Buffer.from(
+    JSON.stringify({
+      id: profile.id,
+      email: String(profile.email || "").toLowerCase(),
+      name: profile.name || "",
+      phone: profile.phone || "",
+      role_title: profile.role_title || "",
+      iat: Date.now(),
+    }),
+    "utf8",
+  ).toString("base64url");
+  return `${LOCAL_SEED_TOKEN_PREFIX}${payload}`;
+}
+
+/**
+ * @param {string} token
+ * @returns {import('@supabase/supabase-js').User | null}
+ */
+export function parseLocalSeedToken(token) {
+  if (!isLocalSeedToken(token)) return null;
+  const rest = token.slice(LOCAL_SEED_TOKEN_PREFIX.length);
+  // Legacy admin tokens: triada-local-seed.<timestamp>
+  if (/^\d+$/.test(rest)) {
+    return localSeedUser();
+  }
+  try {
+    const json = Buffer.from(rest, "base64url").toString("utf8");
+    const data = JSON.parse(json);
+    if (!data?.id || !data?.email) return localSeedUser();
+    return localSeedUserFromProfile(data);
+  } catch {
+    return localSeedUser();
+  }
+}
+
 /** @param {string} token */
 export function isLocalSeedToken(token) {
   return Boolean(token && token.startsWith(LOCAL_SEED_TOKEN_PREFIX));
@@ -77,15 +136,24 @@ export function toAuthUser(user) {
  * Shape Laravel Sanctum `POST /api/v1/auth/login` returned historically.
  * @param {string} accessToken
  * @param {import('@supabase/supabase-js').User} user
+ * @param {{ role?: string, permissions?: object, member?: object, isAdmin?: boolean }} [extras]
  */
-export function loginResponsePayload(accessToken, user) {
+export function loginResponsePayload(accessToken, user, extras = {}) {
   const local = isLocalSeedToken(accessToken);
+  const email = (user?.email || "").toLowerCase();
+  const isAdmin =
+    extras.isAdmin === true ||
+    extras.role === "admin" ||
+    email === ADMIN_EMAIL.toLowerCase();
   return {
     token: accessToken,
     token_type: "Bearer",
     user: toAuthUser(user),
     workspace: defaultWorkspacePayload(),
-    role: "admin",
+    role: extras.role || (isAdmin ? "admin" : "member"),
+    permissions: extras.permissions || null,
+    member: extras.member || null,
+    is_admin: isAdmin,
     auth_provider: local ? "local_seed" : "supabase",
   };
 }
@@ -93,13 +161,22 @@ export function loginResponsePayload(accessToken, user) {
 /**
  * Shape Laravel Sanctum `GET /api/v1/auth/me`.
  * @param {import('@supabase/supabase-js').User} user
+ * @param {{ role?: string, permissions?: object, member?: object, isAdmin?: boolean, authProvider?: string }} [extras]
  */
-export function meResponsePayload(user) {
+export function meResponsePayload(user, extras = {}) {
+  const email = (user?.email || "").toLowerCase();
+  const isAdmin =
+    extras.isAdmin === true ||
+    extras.role === "admin" ||
+    email === ADMIN_EMAIL.toLowerCase();
   return {
     user: toAuthUser(user),
     workspace: defaultWorkspacePayload(),
-    role: "admin",
-    auth_provider: "supabase",
+    role: extras.role || (isAdmin ? "admin" : "member"),
+    permissions: extras.permissions || null,
+    member: extras.member || null,
+    is_admin: isAdmin,
+    auth_provider: extras.authProvider || "supabase",
   };
 }
 
@@ -181,22 +258,45 @@ export async function ensureAdminUser(
  */
 export async function signInWithPassword(email, password) {
   if (!hasSupabaseAnonCredentials()) {
-    if (
-      localSeedAuthEnabled() &&
-      email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
-      password === ADMIN_PASSWORD
-    ) {
+    if (!localSeedAuthEnabled()) {
+      return {
+        ok: false,
+        status: 503,
+        message:
+          "Supabase Auth is not configured on this host (missing SUPABASE_URL / anon key).",
+      };
+    }
+    const normalized = email.trim().toLowerCase();
+    if (normalized === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
+      const user = localSeedUser();
       return {
         ok: true,
-        accessToken: `${LOCAL_SEED_TOKEN_PREFIX}${Date.now()}`,
-        user: localSeedUser(),
+        accessToken: issueLocalSeedToken({
+          id: user.id,
+          email: user.email,
+          name: ADMIN_NAME,
+        }),
+        user,
       };
+    }
+    try {
+      const { authenticateLocalMember } = await import("@/lib/team/team-store");
+      const local = await authenticateLocalMember(normalized, password);
+      if (local.ok) {
+        return {
+          ok: true,
+          accessToken: issueLocalSeedToken(local.profile),
+          user: localSeedUserFromProfile(local.profile),
+        };
+      }
+    } catch {
+      /* fall through */
     }
     return {
       ok: false,
-      status: 503,
-      message:
-        "Supabase Auth is not configured on this host (missing SUPABASE_URL / anon key).",
+      status: 422,
+      message: "The provided credentials are incorrect.",
+      errors: { email: ["The provided credentials are incorrect."] },
     };
   }
 
@@ -269,7 +369,8 @@ export async function getUserFromAccessToken(accessToken) {
     return { ok: false, status: 401, message: "Unauthenticated." };
   }
   if (isLocalSeedToken(accessToken) && localSeedAuthEnabled()) {
-    return { ok: true, user: localSeedUser() };
+    const user = parseLocalSeedToken(accessToken) || localSeedUser();
+    return { ok: true, user };
   }
   if (!hasSupabaseAnonCredentials()) {
     return {

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import {
   getUserFromAccessToken,
+  isLocalSeedToken,
   meResponsePayload,
   readBearerToken,
 } from "@/lib/auth/supabase-auth";
+import { resolveMembershipForUser } from "@/lib/team/team-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,5 +23,26 @@ export async function GET(request) {
     );
   }
 
-  return NextResponse.json(meResponsePayload(result.user), { status: 200 });
+  let membership = {
+    member: null,
+    role: null,
+    permissions: null,
+    isAdmin: false,
+  };
+  try {
+    membership = await resolveMembershipForUser(result.user);
+  } catch {
+    /* keep defaults */
+  }
+
+  return NextResponse.json(
+    meResponsePayload(result.user, {
+      role: membership.role?.slug || (membership.isAdmin ? "admin" : "member"),
+      permissions: membership.permissions,
+      member: membership.member,
+      isAdmin: membership.isAdmin,
+      authProvider: isLocalSeedToken(token) ? "local_seed" : "supabase",
+    }),
+    { status: 200 },
+  );
 }

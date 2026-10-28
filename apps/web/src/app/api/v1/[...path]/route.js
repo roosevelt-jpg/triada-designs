@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { dispatchV1, requireAuth } from "@/lib/api/v1-dispatch";
+import {
+  dispatchV1,
+  enforceApiPermission,
+  requireMembership,
+} from "@/lib/api/v1-dispatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,11 +31,28 @@ async function handle(request, context) {
     );
   }
 
-  const auth = await requireAuth(request);
-  if (!auth.ok) {
+  // Public invite routes live under /api/v1/invites/* (dedicated handlers).
+  if (segments[0] === "invites") {
     return NextResponse.json(
-      { message: auth.message || "Unauthenticated." },
-      { status: auth.status || 401 },
+      { message: "Use dedicated invite route handlers." },
+      { status: 404 },
+    );
+  }
+
+  const membership = await requireMembership(request);
+  if (!membership.ok) {
+    return NextResponse.json(
+      { message: membership.message || "Unauthenticated." },
+      { status: membership.status || 401 },
+    );
+  }
+
+  const path = segments.join("/");
+  const permitted = enforceApiPermission(request.method, path, membership);
+  if (!permitted.ok) {
+    return NextResponse.json(
+      { message: permitted.message || "Forbidden." },
+      { status: permitted.status || 403 },
     );
   }
 
