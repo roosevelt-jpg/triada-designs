@@ -40,8 +40,8 @@ export const PERMISSION_AREAS = [
   {
     key: "content",
     label: "Content / Calendar",
-    description: "Content studio, calendar, campaigns",
-    hrefs: ["/content", "/calendar", "/campaigns"],
+    description: "Content studio, calendar, campaigns, notifications",
+    hrefs: ["/content", "/calendar", "/campaigns", "/notifications"],
   },
   {
     key: "templates",
@@ -317,6 +317,8 @@ export const API_PERMISSION_RULES = [
   { match: /^settings(\/|$)/, area: "settings", level: "manage", methods: ["POST", "PATCH", "PUT", "DELETE"] },
   { match: /^content(\/|$)/, area: "content", level: "view", methods: ["GET"] },
   { match: /^content(\/|$)/, area: "content", level: "manage", methods: ["POST", "PATCH", "PUT", "DELETE"] },
+  { match: /^notifications(\/|$)/, area: "content", level: "view", methods: ["GET"] },
+  { match: /^notifications(\/|$)/, area: "content", level: "manage", methods: ["POST", "PATCH", "PUT", "DELETE"] },
   { match: /^workflows(\/|$)/, area: "automations", level: "view", methods: ["GET"] },
   { match: /^workflows(\/|$)/, area: "automations", level: "manage", methods: ["POST", "PATCH", "PUT", "DELETE"] },
   { match: /^automations(\/|$)/, area: "automations", level: "view", methods: ["GET"] },

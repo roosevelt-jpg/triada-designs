@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Menu, Search, Bell, LogOut, X } from "lucide-react";
+import { Menu, Search, LogOut, X } from "lucide-react";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { apiFetch, getStoredToken, setStoredToken } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import { WorkspaceClock } from "@/components/layout/WorkspaceClock";
 import { syncSystemTime } from "@/lib/system-time";
 import {
@@ -171,13 +172,7 @@ export function DashboardShell({ children, title, description, actions }) {
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
               <WorkspaceClock />
-              <button
-                type="button"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-line bg-white transition-colors duration-150 hover:bg-stone"
-                aria-label="Notifications"
-              >
-                <Bell size={16} />
-              </button>
+              <NotificationBell />
               <div className="hidden text-right md:block">
                 <p className="text-sm font-medium leading-tight">
                   {user?.user?.name || "Loading…"}

@@ -28,6 +28,14 @@ import {
   patchContent,
 } from "@/lib/content-schedule-store";
 import {
+  dismissContentPendingReview,
+  getUnreadNotificationCount,
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  notifyContentPendingReview,
+} from "@/lib/notifications/notifications-store";
+import {
   publishProductById,
   saveAndMaybePublishProduct,
   syncShopifyCatalogInbound,
@@ -528,6 +536,7 @@ export async function dispatchV1(method, segments, request, body) {
         approved_by: "dual-run-admin",
         approval_version: nextVersion,
       });
+      await dismissContentPendingReview(contentId);
       return jsonOk({
         content,
         creative: { ok: true, mode: "local_sim", variant_count: 0 },
@@ -585,10 +594,14 @@ export async function dispatchV1(method, segments, request, body) {
         body: body || {},
         action,
       });
+      const nextStatus = item.status === "draft" || isUgc ? "in_review" : item.status;
       const content = patchContent(contentId, {
-        status: item.status === "draft" || isUgc ? "in_review" : item.status,
+        status: nextStatus,
         creative_brief: composed.creative_brief,
       });
+      if (nextStatus === "in_review" || nextStatus === "draft") {
+        await notifyContentPendingReview(content);
+      }
       return jsonOk({
         ok: true,
         mode: composed.mode,
@@ -2299,6 +2312,39 @@ export async function dispatchV1(method, segments, request, body) {
         path: "/api/cron/content-publish",
       },
     });
+  }
+
+  // ---- notifications (dashboard bell) ----
+  if (path === "notifications" && m === "GET") {
+    let unreadOnly = false;
+    let limit = 40;
+    try {
+      const url = new URL(request.url);
+      unreadOnly = url.searchParams.get("unread") === "1";
+      const rawLimit = Number(url.searchParams.get("limit"));
+      if (Number.isFinite(rawLimit) && rawLimit > 0) limit = rawLimit;
+    } catch {
+      /* defaults */
+    }
+    const listed = await listNotifications({ unreadOnly, limit });
+    return jsonOk(listed);
+  }
+
+  if (path === "notifications/unread-count" && m === "GET") {
+    const counts = await getUnreadNotificationCount();
+    return jsonOk(counts);
+  }
+
+  if (path === "notifications/read-all" && m === "POST") {
+    const counts = await markAllNotificationsRead();
+    return jsonOk({ ok: true, ...counts });
+  }
+
+  if (path.match(/^notifications\/[^/]+\/read$/) && m === "POST") {
+    const id = segments[1];
+    const event = await markNotificationRead(id);
+    const counts = await getUnreadNotificationCount();
+    return jsonOk({ ok: true, notification: event, ...counts });
   }
 
   if (path === "campaigns" && m === "GET") {
