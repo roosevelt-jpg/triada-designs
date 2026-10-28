@@ -39,9 +39,7 @@ export function anthropicStatusPayload(opts) {
   const has = Boolean(opts.has_credentials);
   const model = opts.model || envAnthropicModel();
   const status = has ? "connected" : "awaiting_credentials";
-  const summary = has
-    ? "Claude is connected on this host."
-    : "Waiting for Claude credentials on Vercel.";
+  const summary = has ? "Claude is connected." : "Waiting credentials.";
   return {
     provider: PROVIDER,
     configured_provider: has ? "anthropic" : "local",
@@ -56,7 +54,7 @@ export function anthropicStatusPayload(opts) {
     summary,
     // Kept for older clients; UI should prefer summary / status_label.
     honesty: opts.honesty || summary,
-    ui_hint: "Claude credentials are managed on the host (Vercel).",
+    ui_hint: "Waiting credentials until Claude is Connected.",
   };
 }
 
@@ -197,7 +195,7 @@ export async function getAnthropicStatus() {
       has_credentials: true,
       model: envAnthropicModel(),
       source: "env",
-      honesty: "Claude is connected on this host.",
+      honesty: "Claude is connected.",
     });
   }
 
@@ -207,7 +205,7 @@ export async function getAnthropicStatus() {
       has_credentials: true,
       model: stored.model || envAnthropicModel(),
       source: stored.storage,
-      honesty: "Claude is connected on this host.",
+      honesty: "Claude is connected.",
     });
   }
 
@@ -253,7 +251,7 @@ export async function saveAnthropicCredentials(input) {
       has_credentials: true,
       model,
       source: "env",
-      honesty: "Claude model preference updated. Host credentials remain in place.",
+      honesty: "Claude model preference updated.",
     });
     return { ok: true, anthropic: status, storage: "env" };
   }
@@ -322,7 +320,7 @@ export async function saveAnthropicCredentials(input) {
     has_credentials: true,
     model,
     source: storage,
-    honesty: "Claude is connected on this host.",
+    honesty: "Claude is connected.",
   });
 
   return { ok: true, anthropic: status, storage };
@@ -364,8 +362,8 @@ export async function clearAnthropicCredentials() {
       model: envAnthropicModel(),
       source: envStill ? "env" : "none",
       honesty: envStill
-        ? "Stored key cleared. Host credentials remain connected."
-        : "Stored Claude key cleared.",
+        ? "Stored key cleared. Claude remains Connected."
+        : "Claude disconnected.",
     }),
     storage,
   };

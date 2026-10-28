@@ -238,7 +238,7 @@ export default function AgentsPage() {
   return (
     <DashboardShell
       title="AI agents"
-      description="Eight seeded teammates share memory and tasks. Create agents, assign work, and collaborate from one place."
+      description="Create agents, assign work, and collaborate from one place."
       actions={
         <div className="flex flex-wrap gap-2">
           <Link href="/agents/training">
@@ -284,7 +284,7 @@ export default function AgentsPage() {
       ) : null}
 
       {!loading && !error && agents.length === 0 ? (
-        <EmptyState title="No agents configured" description="Seed or create agent configs to appear here." />
+        <EmptyState title="No agents configured" description="Create an agent to get started." />
       ) : null}
 
       {!loading && agents.length > 0 ? (

@@ -121,7 +121,7 @@ export default function IntegrationsPage() {
   return (
     <DashboardShell
       title="Integrations"
-      description="Channel and provider status from host credentials on Vercel. Connected or Waiting credentials — keys are never entered here."
+      description="Channel and provider status. Connected or Waiting credentials."
       actions={
         <div className="flex flex-wrap gap-2">
           <Link href="/integrations/meta">
@@ -169,7 +169,7 @@ export default function IntegrationsPage() {
               <div>
                 <h2 className="ops-section-title">AI providers</h2>
                 <p className="mt-1 text-sm text-muted">
-                  Connection status for AI providers on this host.
+                  Connection status for AI providers.
                 </p>
               </div>
               <StatusPill
@@ -186,8 +186,8 @@ export default function IntegrationsPage() {
               summary={
                 health?.anthropic?.summary ||
                 (health?.anthropic?.has_credentials
-                  ? "Claude is connected on this host."
-                  : "Waiting for Claude credentials on Vercel.")
+                  ? "Claude is connected."
+                  : "Waiting credentials.")
               }
               status={health?.anthropic?.status}
               hasCredentials={health?.anthropic?.has_credentials}
@@ -195,7 +195,7 @@ export default function IntegrationsPage() {
             />
             <ProviderRow
               title="Gemini"
-              summary={health?.gemini?.summary || "Gemini on this host."}
+              summary={health?.gemini?.summary || "Gemini."}
               status={health?.gemini?.status}
               hasCredentials={health?.gemini?.has_credentials}
               statusLabel={
@@ -225,8 +225,7 @@ export default function IntegrationsPage() {
                 key: "google_places",
                 title: "Google Places",
                 row: health?.google_places,
-                fallback:
-                  "Popup location Autocomplete (country, city, town) and map pin. Set GOOGLE_PLACES_API_KEY or GOOGLE_MAPS_API_KEY on Vercel.",
+                fallback: "Popup location search and map pin.",
                 href: "/popups",
                 hrefLabel: "Open pop-ups",
               },
@@ -265,7 +264,7 @@ export default function IntegrationsPage() {
                 <div>
                   <h2 className="ops-section-title">Meta messaging</h2>
                   <p className="mt-1 text-sm text-muted">
-                    Facebook Messenger, Instagram, and WhatsApp status from host Meta credentials.
+                    Facebook Messenger, Instagram, and WhatsApp.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -309,9 +308,7 @@ export default function IntegrationsPage() {
                         />
                       </div>
                       <p className="mt-2 text-xs leading-relaxed text-muted">
-                        {connected
-                          ? "Ready for dashboard messaging ops."
-                          : "Waiting credentials on Vercel."}
+                        {connected ? "Ready." : "Waiting credentials."}
                       </p>
                     </div>
                   );
@@ -326,7 +323,7 @@ export default function IntegrationsPage() {
                 <div>
                   <h2 className="ops-section-title">WordPress</h2>
                   <p className="mt-1 text-sm text-muted">
-                    CMS knowledge source and draft publishing path via REST API.
+                    CMS drafts and product publishing.
                   </p>
                 </div>
                 <StatusPill
@@ -368,7 +365,7 @@ export default function IntegrationsPage() {
                 <div>
                   <h2 className="ops-section-title">Zoho CRM + Books</h2>
                   <p className="mt-1 text-sm text-muted">
-                    Contacts, leads, and invoice PDF — credentials live on the host.
+                    Contacts, leads, and invoice PDF.
                   </p>
                 </div>
                 <StatusPill
@@ -385,7 +382,7 @@ export default function IntegrationsPage() {
               <p className="mt-3 text-sm text-muted">
                 {health?.zoho?.has_credentials || health?.zoho?.credentials?.has_credentials
                   ? health?.zoho?.message || "Zoho CRM is connected."
-                  : "Waiting credentials on Vercel."}
+                  : "Waiting credentials."}
               </p>
               <p className="mt-1 text-xs text-muted">
                 Books:{" "}

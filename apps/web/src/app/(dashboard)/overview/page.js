@@ -59,7 +59,7 @@ export default function OverviewPage() {
   return (
     <DashboardShell
       title="Overview"
-      description={`Workspace pulse${today ? ` · ${today}` : ""}. Metrics from Triada dual-run records.`}
+      description={`Workspace pulse${today ? ` · ${today}` : ""}`}
       actions={
         <div className="flex flex-wrap gap-2">
           <Link href="/inbox">

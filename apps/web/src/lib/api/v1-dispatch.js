@@ -771,7 +771,7 @@ export async function dispatchV1(method, segments, request, body) {
           body?.client_id || body?.refresh_token
             ? "connected"
             : "awaiting_credentials",
-        honesty: "Zoho credentials accepted in dual-run memory for this instance.",
+        honesty: "Zoho credentials accepted.",
       },
       books: { status: "awaiting_credentials" },
     });
@@ -888,7 +888,7 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk({
       ok: true,
       mode: "next_dual_run",
-      message: "integrations/meta/connect accepted on Next dual-run (Laravel offline).",
+      message: "Meta connect accepted.",
       verify_token_hint: "triada-meta-verify-2026",
     });
   }
@@ -915,7 +915,7 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk({
       ok: true,
       mode: "next_dual_run",
-      message: `${path} accepted on Next dual-run (Laravel offline).`,
+      message: "Request accepted.",
       verify_token_hint: "triada-meta-verify-2026",
     });
   }
@@ -1064,8 +1064,8 @@ export async function dispatchV1(method, segments, request, body) {
       ok: true,
       mode: "next_dual_run",
       message: status.connected
-        ? "Shopify Admin API credentials already present on the host."
-        : "Paste SHOPIFY_ACCESS_TOKEN on Vercel — dashboard stays status-only.",
+        ? "Shopify is Connected."
+        : "Waiting credentials.",
       status,
     });
   }
@@ -1074,8 +1074,7 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk({
       ok: true,
       mode: "next_dual_run",
-      message:
-        "Remove SHOPIFY_ACCESS_TOKEN from Vercel to disconnect. Dashboard cannot clear host secrets.",
+      message: "Shopify status unchanged.",
       status: shopifyStatusPayload(),
     });
   }
@@ -1408,7 +1407,7 @@ export async function dispatchV1(method, segments, request, body) {
       ok: true,
       lead_id: segments[1],
       zoho: { status: "awaiting_credentials" },
-      message: "Zoho sync queued on dual-run (credentials pending).",
+      message: "Zoho sync queued. Waiting credentials.",
     });
   }
 
@@ -2496,7 +2495,7 @@ export async function dispatchV1(method, segments, request, body) {
         },
       ],
       open_jobs: 1,
-      honesty: "Manufacturer board from Next dual-run seed.",
+      honesty: "Manufacturer board.",
     });
   }
 
@@ -2633,7 +2632,7 @@ export async function dispatchV1(method, segments, request, body) {
       ok: true,
       source: "next_dual_run",
       path: `/api/v1/${path}`,
-      message: "Seeded empty response (Laravel API_ORIGIN offline).",
+      message: "No data.",
     });
   }
 
@@ -2641,6 +2640,6 @@ export async function dispatchV1(method, segments, request, body) {
     ok: true,
     source: "next_dual_run",
     path: `/api/v1/${path}`,
-    message: "Accepted on Next dual-run stub.",
+    message: "Accepted.",
   });
 }

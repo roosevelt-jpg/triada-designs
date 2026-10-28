@@ -60,7 +60,7 @@ function emptyChannelSync() {
       link: null,
       synced_at: null,
       mode: "local",
-      message: "Waiting for Shopify Admin API credentials on Vercel.",
+      message: "Waiting credentials.",
     },
     wordpress: {
       status: "awaiting_credentials",
@@ -68,7 +68,7 @@ function emptyChannelSync() {
       link: null,
       synced_at: null,
       mode: "local",
-      message: "Waiting for WordPress credentials on Vercel.",
+      message: "Waiting credentials.",
     },
   };
 }

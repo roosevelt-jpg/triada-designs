@@ -225,7 +225,7 @@ export default function TrainingDocsPage() {
             <section className="surface-card space-y-3 p-5">
               <h2 className="ops-section-title">Test retrieval</h2>
               <p className="text-sm text-muted">
-                Simulates the RAG lookup injected into Anthropic / agent system prompts.
+                Test how agents retrieve training docs for a query.
               </p>
               <form className="space-y-3" onSubmit={testRetrieve}>
                 <Input

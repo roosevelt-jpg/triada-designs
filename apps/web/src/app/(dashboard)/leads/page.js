@@ -53,7 +53,7 @@ export default function LeadsPage() {
   return (
     <DashboardShell
       title="Leads"
-      description="Default pipeline stages with Zoho CRM upsert path (local seed until credentials are set)."
+      description="Lead pipeline stages. Sync to Zoho when Connected."
     >
       {loading ? <Skeleton className="h-64" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}

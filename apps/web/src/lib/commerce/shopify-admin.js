@@ -49,7 +49,7 @@ export function shopifyRuntime() {
       mode: "local",
       status: "awaiting_credentials",
       shop_domain: shopifyShopDomain(),
-      message: "Waiting for Shopify Admin API credentials on Vercel.",
+      message: "Waiting credentials.",
     };
   }
   return {
@@ -57,10 +57,7 @@ export function shopifyRuntime() {
     mode,
     status: mode === "live" ? "connected" : "connected",
     shop_domain: shopifyShopDomain(),
-    message:
-      mode === "live"
-        ? "Shopify Admin API credentials are present."
-        : "Shopify Admin API credentials are present (host).",
+    message: "Shopify is Connected.",
   };
 }
 
@@ -292,7 +289,6 @@ export function shopifyStatusPayload() {
     status_label: runtime.ready ? "Connected" : "Waiting credentials",
     mode: runtime.mode,
     summary: runtime.message,
-    honesty:
-      "Shopify stays Waiting credentials until SHOPIFY_ACCESS_TOKEN (or SHOPIFY_ADMIN_ACCESS_TOKEN) is set on Vercel.",
+    honesty: runtime.message,
   };
 }

@@ -104,8 +104,8 @@ export function metaStatusPayload(opts) {
   const summary =
     opts.summary ||
     (opts.connected
-      ? "Meta messaging credentials are connected for dashboard ops."
-      : "Waiting for Meta messaging credentials on Vercel.");
+      ? "Meta messaging is Connected."
+      : "Waiting credentials.");
   return {
     has_app_id: Boolean(opts.has_app_id),
     has_app_secret: Boolean(opts.has_app_secret),
@@ -507,8 +507,8 @@ export async function clearMetaCredentials() {
       ...presence,
       source: presence.connected ? "env" : "none",
       summary: presence.connected
-        ? "Stored Meta credentials cleared. Host env credentials remain connected."
-        : "Stored Meta credentials cleared.",
+        ? "Stored credentials cleared. Meta remains Connected."
+        : "Meta disconnected.",
     }),
     storage,
   };
@@ -528,7 +528,7 @@ export function metaChannelHealth(key, ready) {
       status_label: connectionLabel(ready ? "healthy" : "awaiting_credentials"),
       message: ready
         ? `${providerNickname(key === "messenger" ? "facebook" : key)} is connected.`
-        : `${providerNickname(key === "messenger" ? "facebook" : key)} waiting credentials on Vercel.`,
+        : `${providerNickname(key === "messenger" ? "facebook" : key)} · Waiting credentials.`,
     },
   };
 }

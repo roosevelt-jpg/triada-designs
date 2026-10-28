@@ -57,13 +57,13 @@ export function providerNickname(provider) {
  * @param {{ status?: string, provider?: string, model?: string, has_credentials?: boolean }} llm
  */
 export function aiStatusSummary(llm) {
-  if (!llm) return "AI waiting for host credentials.";
+  if (!llm) return "Waiting credentials.";
   const live =
     llm.status === "live" ||
     llm.status === "connected" ||
     Boolean(llm.has_credentials);
   if (!live) {
-    return "Waiting for AI credentials on the host (Vercel).";
+    return "Waiting credentials.";
   }
   const who = providerNickname(llm.provider);
   const model = modelNickname(llm.model);

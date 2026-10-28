@@ -72,7 +72,7 @@ async function handle(request, context) {
     const result = await dispatchV1(request.method, segments, request, body);
     return NextResponse.json(result.body, { status: result.status });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal dual-run error.";
+    const message = err instanceof Error ? err.message : "Something went wrong.";
     return NextResponse.json(
       { message, source: "next_dual_run" },
       { status: 500 },

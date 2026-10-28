@@ -174,7 +174,7 @@ export default function ProductsPage() {
   return (
     <DashboardShell
       title="Products"
-      description="Create and edit the Triada catalog. Publish syncs to Shopify Admin API and the WordPress marketing site when credentials are on Vercel; otherwise channels stay Waiting credentials."
+      description="Create and edit the Triada catalog. Publish to Shopify and WordPress when Connected."
       actions={
         <Button size="sm" onClick={openCreate}>
           Add product
@@ -296,7 +296,7 @@ export default function ProductsPage() {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No products"
-          description="Add a catalog piece, or sync from Shopify when the Admin API token is on Vercel."
+          description="Add a catalog piece, or sync from Shopify when Connected."
         />
       ) : null}
 

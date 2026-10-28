@@ -23,7 +23,6 @@ export default function ContactsPage() {
   const [syncingWa, setSyncingWa] = useState(false);
   const [uploadNotice, setUploadNotice] = useState("");
   const [invalidRows, setInvalidRows] = useState([]);
-  const [storeMode, setStoreMode] = useState("");
   const fileRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -33,7 +32,6 @@ export default function ContactsPage() {
       const query = q ? `?q=${encodeURIComponent(q)}` : "";
       const response = await apiFetch(`/v1/contacts${query}`);
       setItems(response.data || []);
-      setStoreMode(response.mode || "");
     } catch (err) {
       setError(err.message || "Failed to load contacts");
     } finally {
@@ -61,11 +59,10 @@ export default function ContactsPage() {
       const summary = result.summary || {};
       setInvalidRows(result.invalid || []);
       setUploadNotice(
-        `WhatsApp sync (${result.mode || "local_sim"}): ${summary.imported ?? 0} imported` +
+        `WhatsApp sync: ${summary.imported ?? 0} imported` +
           ` (${summary.created ?? 0} new, ${summary.updated ?? 0} updated)` +
           (summary.on_whatsapp != null ? ` · ${summary.on_whatsapp} on WhatsApp` : "") +
-          (summary.invalid ? ` · ${summary.invalid} invalid` : "") +
-          (result.store_mode ? ` · store ${result.store_mode}` : ""),
+          (summary.invalid ? ` · ${summary.invalid} invalid` : ""),
       );
       if (!result.ok && result.error) {
         setError(result.error);
@@ -114,8 +111,7 @@ export default function ContactsPage() {
       setUploadNotice(
         `Imported ${summary.imported ?? 0} of ${summary.submitted ?? rows.length}` +
           ` (${summary.created ?? 0} new, ${summary.updated ?? 0} updated)` +
-          (summary.invalid ? ` · ${summary.invalid} invalid flagged` : "") +
-          (result.mode ? ` · store ${result.mode}` : ""),
+          (summary.invalid ? ` · ${summary.invalid} invalid flagged` : ""),
       );
       await load();
     } catch (err) {
@@ -128,7 +124,7 @@ export default function ContactsPage() {
   return (
     <DashboardShell
       title="Contacts"
-      description="CRM contacts with E.164 phones for WhatsApp automation campaigns. Sync from Meta Cloud API or upload CSV/Excel. Local UAE numbers (05x) normalize to +971."
+      description="CRM contacts for WhatsApp campaigns. Sync from WhatsApp or upload CSV/Excel."
       actions={
         <div className="flex w-full max-w-2xl flex-col gap-2 sm:flex-row sm:items-end">
           <div className="w-full max-w-xs">
@@ -169,12 +165,6 @@ export default function ContactsPage() {
         </div>
       }
     >
-      {storeMode ? (
-        <p className="mb-3 text-xs text-muted">
-          Store: {storeMode === "supabase" ? "Supabase" : "local dual-run"} · phones saved as E.164
-        </p>
-      ) : null}
-
       {uploadNotice ? (
         <p className="mb-3 rounded-md border border-line bg-stone/30 px-3 py-2 text-sm text-ink">
           {uploadNotice}

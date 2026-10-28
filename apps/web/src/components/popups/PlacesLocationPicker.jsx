@@ -212,9 +212,7 @@ export function PlacesLocationPicker({
           <Badge tone="warning">Waiting credentials</Badge>
         </div>
         <p className="mt-2 text-sm text-muted">
-          Set <span className="font-medium text-ink">GOOGLE_PLACES_API_KEY</span> or{" "}
-          <span className="font-medium text-ink">GOOGLE_MAPS_API_KEY</span> on Vercel,
-          then re-check Integrations. Country, city/town, and map pin require Places.
+          Waiting credentials. Re-check Integrations when Google Places is Connected.
         </p>
       </div>
     );

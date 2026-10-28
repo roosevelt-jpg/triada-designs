@@ -33,12 +33,12 @@ export default function KnowledgePage() {
   return (
     <DashboardShell
       title="Knowledge"
-      description="Approved FAQs and policies used for AI answers. WordPress remains a separate CMS source under Integrations."
+      description="Approved FAQs and policies used for AI answers."
     >
       {loading ? <Skeleton className="h-32" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && sources.length === 0 ? (
-        <EmptyState title="No knowledge sources" description="Seed FAQs or import approved policy text." />
+        <EmptyState title="No knowledge sources" description="Add FAQs or approved policy text." />
       ) : null}
       {!loading && sources.length > 0 ? (
         <div className="divide-y divide-line surface-card overflow-hidden">

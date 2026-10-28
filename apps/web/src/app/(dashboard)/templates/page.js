@@ -178,7 +178,7 @@ export default function ChannelTemplatesPage() {
   return (
     <DashboardShell
       title="Channel templates"
-      description="Create, approve, and publish jewellery message / post templates per connected platform. WhatsApp templates submit to Meta for approval when Cloud credentials are connected."
+      description="Create, approve, and publish message and post templates per platform."
       actions={
         <div className="flex flex-wrap gap-2">
           <Link href="/integrations/meta">
@@ -225,7 +225,7 @@ export default function ChannelTemplatesPage() {
             {items.length === 0 ? (
               <EmptyState
                 title="No templates yet"
-                description="Seed jewellery templates appear after migrate + seed, or create one on the right."
+                description="Create a template on the right to get started."
               />
             ) : (
               <ul className="divide-y divide-line overflow-hidden rounded-md border border-line bg-white">

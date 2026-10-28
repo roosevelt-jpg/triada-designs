@@ -263,7 +263,7 @@ export async function signInWithPassword(email, password) {
         ok: false,
         status: 503,
         message:
-          "Supabase Auth is not configured on this host (missing SUPABASE_URL / anon key).",
+          "Sign-in is unavailable. Contact your administrator.",
       };
     }
     const normalized = email.trim().toLowerCase();
@@ -376,7 +376,7 @@ export async function getUserFromAccessToken(accessToken) {
     return {
       ok: false,
       status: 503,
-      message: "Supabase Auth is not configured on this host.",
+      message: "Sign-in is unavailable. Contact your administrator.",
     };
   }
 

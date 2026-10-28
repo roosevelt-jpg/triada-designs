@@ -46,8 +46,7 @@ export function wordpressRuntime() {
       mode: "local",
       status: "awaiting_credentials",
       base_url: wordpressBaseUrl(),
-      message:
-        "Waiting for WordPress credentials (WORDPRESS_BASE_URL, USERNAME, APPLICATION_PASSWORD) on Vercel.",
+      message: "Waiting credentials.",
     };
   }
   return {
@@ -55,10 +54,7 @@ export function wordpressRuntime() {
     mode,
     status: "connected",
     base_url: wordpressBaseUrl(),
-    message:
-      mode === "live"
-        ? "WordPress Application Password credentials are present."
-        : "WordPress credentials are present (host).",
+    message: "WordPress is Connected.",
   };
 }
 

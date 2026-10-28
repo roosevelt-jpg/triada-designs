@@ -35,7 +35,7 @@ export default function AnalyticsPage() {
   return (
     <DashboardShell
       title="Analytics"
-      description="Operational metrics from persisted workspace data via dual-run APIs."
+      description="Operational metrics for the workspace."
       actions={
         <Link href="/overview">
           <Button size="sm" variant="secondary">

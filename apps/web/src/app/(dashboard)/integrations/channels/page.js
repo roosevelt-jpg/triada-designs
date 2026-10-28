@@ -12,12 +12,12 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { connectionLabel } from "@/lib/integrations/brand-labels";
 
-/** Jewellery multi-channel list — status from host credentials on Vercel. */
+/** Jewellery multi-channel list — Connected / Waiting credentials only. */
 const CHANNELS = [
   { key: "webchat", title: "Website / webchat", blurb: "On-site chat widget." },
-  { key: "facebook", title: "Facebook", blurb: "Page messaging via Meta." },
-  { key: "instagram", title: "Instagram", blurb: "IG messaging via Meta." },
-  { key: "whatsapp", title: "WhatsApp", blurb: "Cloud API messaging." },
+  { key: "facebook", title: "Facebook", blurb: "Page messaging." },
+  { key: "instagram", title: "Instagram", blurb: "IG messaging." },
+  { key: "whatsapp", title: "WhatsApp", blurb: "Business messaging." },
   { key: "shopify", title: "Shopify", blurb: "Store catalog and orders." },
   { key: "tiktok", title: "TikTok", blurb: "Short-form commerce channel." },
   { key: "linkedin", title: "LinkedIn", blurb: "Professional outreach." },
@@ -97,7 +97,7 @@ export default function ChannelsIntegrationsPage() {
   return (
     <DashboardShell
       title="Sales channels"
-      description="Jewellery retail across Facebook, Website, Shopify, TikTok, Instagram, WhatsApp, LinkedIn, Email, and Telegram. Status only — credentials live on Vercel."
+      description="Jewellery retail across Facebook, Website, Shopify, TikTok, Instagram, WhatsApp, LinkedIn, Email, and Telegram. Status only."
       actions={
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={load}>
@@ -121,9 +121,7 @@ export default function ChannelsIntegrationsPage() {
       {!loading && status ? (
         <div className="space-y-6">
           <p className="text-sm text-muted">
-            {status.summary ||
-              status.honesty ||
-              "Each channel shows Connected or Waiting credentials from the host environment."}
+            {status.summary || "Each channel shows Connected or Waiting credentials."}
           </p>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {CHANNELS.map((ch) => {

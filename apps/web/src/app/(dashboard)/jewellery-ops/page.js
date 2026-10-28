@@ -19,7 +19,7 @@ const LINKS = [
   { href: "/popups", label: "Pop-ups & markets" },
   { href: "/ugc", label: "UGC & tags" },
   { href: "/automations", label: "Workflows" },
-  { href: "/integrations", label: "Anthropic / Integrations" },
+  { href: "/integrations", label: "Integrations" },
 ];
 
 export default function JewelleryOpsPage() {

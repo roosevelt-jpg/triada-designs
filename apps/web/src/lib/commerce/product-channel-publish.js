@@ -117,8 +117,8 @@ export async function saveAndMaybePublishProduct(input, opts = {}) {
             synced_at: null,
             mode: shopifyReady ? shopifyRuntime().mode : "local",
             message: shopifyReady
-              ? "Saved locally. Publish to push to Shopify."
-              : "Waiting for Shopify Admin API credentials on Vercel.",
+              ? "Saved. Publish to push to Shopify."
+              : "Waiting credentials.",
           },
       wordpress: saved.product.channel_sync.wordpress.external_id
         ? saved.product.channel_sync.wordpress
@@ -129,8 +129,8 @@ export async function saveAndMaybePublishProduct(input, opts = {}) {
             synced_at: null,
             mode: wpReady ? wordpressRuntime().mode : "local",
             message: wpReady
-              ? "Saved locally. Publish to push to WordPress."
-              : "Waiting for WordPress credentials on Vercel.",
+              ? "Saved. Publish to push to WordPress."
+              : "Waiting credentials.",
           },
     });
     return {

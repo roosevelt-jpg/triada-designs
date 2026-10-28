@@ -556,9 +556,7 @@ export function buildIntegrationsHealth(opts = {}) {
       { hasCredentials: anthropicReady },
     ),
     // Brand-safe summary for UI — avoid raw key/format dumps.
-    summary: anthropicReady
-      ? "Claude is connected on this host."
-      : "Waiting for Claude credentials on Vercel.",
+    summary: anthropicReady ? "Claude is connected." : "Waiting credentials.",
   };
 
   const llmProvider = anthropicReady ? "anthropic" : gemini ? "gemini" : "local";
@@ -606,15 +604,13 @@ export function buildIntegrationsHealth(opts = {}) {
         hasWordpressEnv() ? "connected" : "awaiting_credentials",
       ),
       message: hasWordpressEnv()
-        ? "WordPress Application Password credentials are present — product publish can go live."
-        : "Waiting for WordPress credentials on Vercel. Product publish stays awaiting until keyed.",
+        ? "WordPress is Connected."
+        : "Waiting credentials.",
     },
     zoho: {
       status: zohoReady ? "connected" : "awaiting_credentials",
       status_label: connectionLabel(zohoReady ? "connected" : "awaiting_credentials"),
-      message: zohoReady
-        ? "Zoho CRM credentials are present on this host."
-        : "Waiting for Zoho CRM credentials on Vercel.",
+      message: zohoReady ? "Zoho CRM is Connected." : "Waiting credentials.",
       credentials: {
         has_credentials: zohoReady,
         status: zohoReady ? "connected" : "awaiting_credentials",
@@ -643,9 +639,7 @@ export function buildIntegrationsHealth(opts = {}) {
         connectionLabel(metaConnected ? "connected" : "awaiting_credentials"),
       summary:
         metaFromStore?.summary ||
-        (metaConnected
-          ? "Meta messaging credentials are connected for dashboard ops."
-          : "Waiting for Meta messaging credentials on Vercel."),
+        (metaConnected ? "Meta messaging is Connected." : "Waiting credentials."),
       source: metaFromStore?.source || (metaConnected ? "env" : "none"),
       channels: {
         facebook: channelHealth("facebook", metaReady),
@@ -661,9 +655,7 @@ export function buildIntegrationsHealth(opts = {}) {
       status_label: connectionLabel(gemini ? "connected" : "awaiting_credentials"),
       model: geminiModel,
       model_label: modelNickname(geminiModel),
-      summary: gemini
-        ? "Gemini is connected on this host."
-        : "Waiting for Gemini credentials on Vercel.",
+      summary: gemini ? "Gemini is connected." : "Waiting credentials.",
     },
     google_places: places,
     resend: {
@@ -671,18 +663,14 @@ export function buildIntegrationsHealth(opts = {}) {
       has_credentials: resend,
       status: resend ? "connected" : "awaiting_credentials",
       status_label: connectionLabel(resend ? "connected" : "awaiting_credentials"),
-      summary: resend
-        ? "Email delivery is connected."
-        : "Email delivery needs a Resend key on this host.",
+      summary: resend ? "Email delivery is Connected." : "Waiting credentials.",
     },
     supabase: {
       provider: "supabase",
       has_credentials: supabase,
       status: supabase ? "connected" : "awaiting_credentials",
       status_label: connectionLabel(supabase ? "connected" : "awaiting_credentials"),
-      summary: supabase
-        ? "Supabase Auth and data are connected."
-        : "Supabase needs URL and keys on this host.",
+      summary: supabase ? "Supabase is Connected." : "Waiting credentials.",
     },
     anthropic,
     llm: {
@@ -702,7 +690,7 @@ export function buildIntegrationsHealth(opts = {}) {
         ? anthropicReady
           ? "Claude connected · Claude Sonnet"
           : `${providerNickname(llmProvider)} connected · ${modelNickname(llmModel)}`
-        : "Waiting for AI credentials on Vercel.",
+        : "Waiting credentials.",
     },
     wordpress_posts: [
       {
@@ -793,7 +781,7 @@ export function buildWorkflows() {
       "Cart / sizing abandonment (1 day)",
       "active",
       "schedule",
-      "Delayed abandonment follow-up via Vercel Cron.",
+      "Delayed abandonment follow-up.",
     ),
     simpleWorkflow(
       "wf-zoho",
@@ -923,8 +911,7 @@ export function buildAiInsights(metrics = {}) {
     response_histogram: responseHistogram,
     automation_mix: modePie,
     lead_funnel: leadFunnel,
-    summary:
-      "AI Insights derived from workspace conversation, lead, and automation counts served by dual-run APIs.",
+    summary: "Channel mix, volume, response time, and automation activity.",
   };
 }
 
@@ -966,10 +953,7 @@ export function buildDashboard(opts = {}) {
       last_error_code: i.last_error_code,
     })),
     ai_insights: buildAiInsights(metrics),
-    notes: [
-      "Metrics served by Next dual-run seed while Laravel API_ORIGIN is unavailable.",
-      "Estimated AI cost is omitted until LLM usage events are recorded.",
-    ],
+    notes: [],
   };
 }
 

@@ -17,17 +17,17 @@ const CHANNELS = [
   {
     key: "facebook",
     title: "Facebook Messenger",
-    blurb: "Pages + Messenger. Status from host Meta credentials on Vercel.",
+    blurb: "Pages and Messenger.",
   },
   {
     key: "instagram",
     title: "Instagram Messaging",
-    blurb: "Professional IG messaging via Meta. Day-to-day ops stay in this hub.",
+    blurb: "Professional IG messaging.",
   },
   {
     key: "whatsapp",
-    title: "WhatsApp Cloud API",
-    blurb: "WABA phone messaging with 24h window and template eligibility checks.",
+    title: "WhatsApp",
+    blurb: "Business phone messaging and templates.",
   },
 ];
 
@@ -79,7 +79,7 @@ export default function MetaIntegrationsPage() {
       const wa = await apiFetch("/v1/integrations/whatsapp/templates").catch(() => null);
       setWaTemplates(wa);
     } catch (err) {
-      setError(err.message || "Failed to load Meta control plane");
+      setError(err.message || "Failed to load Meta messaging");
     } finally {
       setLoading(false);
     }
@@ -271,7 +271,7 @@ export default function MetaIntegrationsPage() {
   return (
     <DashboardShell
       title="Meta messaging"
-      description="Facebook, Instagram, and WhatsApp status from host credentials on Vercel. Day-to-day messaging ops stay here — API keys are never entered in the dashboard."
+      description="Facebook, Instagram, and WhatsApp. Connected or Waiting credentials."
       actions={
         <div className="flex items-center gap-4">
           <BrandLogo variant="symbol" className="h-9 w-9" />
@@ -299,22 +299,11 @@ export default function MetaIntegrationsPage() {
           <section className="surface-card space-y-4 p-5">
             <div className="flex flex-wrap items-center gap-3">
               <Badge tone={status.connected || status.mode === "live" ? "success" : "brand"}>
-                {status.connected || status.mode === "live" ? "Live" : "Local"}
+                {status.connected || status.mode === "live" ? "Connected" : "Waiting credentials"}
               </Badge>
-              <Badge tone="neutral">Dashboard control plane</Badge>
             </div>
-            {status.honesty?.day_to_day ? (
-              <p className="max-w-3xl text-sm text-muted">{status.honesty.day_to_day}</p>
-            ) : (
-              <p className="max-w-3xl text-sm text-muted">
-                Day-to-day Facebook, Instagram, and WhatsApp messaging stays in Triada after
-                one-time Meta Developer setup.
-              </p>
-            )}
-            {status.honesty?.one_time_meta_developer_setup ? (
-              <p className="max-w-3xl text-sm text-muted">
-                {status.honesty.one_time_meta_developer_setup}
-              </p>
+            {status.summary ? (
+              <p className="max-w-3xl text-sm text-muted">{status.summary}</p>
             ) : null}
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-md border border-line px-3 py-3">
@@ -363,8 +352,8 @@ export default function MetaIntegrationsPage() {
                   </div>
                   <p className="mt-3 text-sm text-muted">
                     {info.status === "connected" || health.status === "healthy"
-                      ? health.message || "Ready for dashboard messaging ops."
-                      : "Waiting credentials on Vercel."}
+                      ? health.message || "Ready."
+                      : "Waiting credentials."}
                   </p>
                   {accountList.length ? (
                     <ul className="mt-3 space-y-1 text-sm text-muted">
@@ -397,20 +386,17 @@ export default function MetaIntegrationsPage() {
           <section className="surface-card space-y-4 p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="font-display text-2xl">WhatsApp Cloud templates</h2>
+                <h2 className="font-display text-2xl">WhatsApp templates</h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted">
-                  Seed campaign templates from the Triada automation doc (orders, abandonment,
-                  waitlist, VIP, after-sale, UGC), edit here, then submit to Meta for approval.
-                  Live submit uses host WhatsApp credentials on Vercel; otherwise Triada uses the
-                  local jewellery catalog.
+                  Create and edit campaign templates, then submit for approval.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone={healthTone(waTemplates?.status?.status)}>
                   {waTemplates?.status?.mode === "live_ready" ||
                   waTemplates?.status?.mode === "live"
-                    ? "Live Meta Graph"
-                    : "Local sim"}
+                    ? "Connected"
+                    : connectionLabel(waTemplates?.status?.status || "awaiting_credentials")}
                 </Badge>
                 <Button
                   onClick={() => seedWaAutomationTemplates(false)}
@@ -472,9 +458,9 @@ export default function MetaIntegrationsPage() {
                       : ""}{" "}
                     ·{" "}
                     {tpl.publish_mode === "live"
-                      ? "Live Graph"
+                      ? "Live"
                       : tpl.publish_mode === "local_sim"
-                        ? "Local sim"
+                        ? "Local"
                         : "Draft"}
                   </p>
                   <div className="mt-3">

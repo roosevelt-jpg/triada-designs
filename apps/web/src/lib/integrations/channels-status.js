@@ -195,8 +195,8 @@ export function buildSalesChannelsStatus(opts = {}) {
 
   const credentialedMeta = facebookReady || instagramReady || whatsappReady;
   const summary = credentialedMeta
-    ? "Meta messaging channels show Connected from host credentials. Other channels reflect Vercel env presence."
-    : "Each channel shows Connected or Waiting credentials from the host environment.";
+    ? "Meta messaging channels are Connected. Other channels show Connected or Waiting credentials."
+    : "Each channel shows Connected or Waiting credentials.";
 
   return {
     summary,

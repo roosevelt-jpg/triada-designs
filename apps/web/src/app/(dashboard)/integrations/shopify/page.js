@@ -52,7 +52,7 @@ export default function ShopifyIntegrationsPage() {
       });
       setStatus(result.status);
       setNotice(
-        `Sync ${result.run?.status || "done"} (${result.run?.mode || "local"}): ${result.run?.records_upserted ?? 0} records.`
+        `Sync ${result.run?.status || "done"}: ${result.run?.records_upserted ?? 0} records.`,
       );
     } catch (err) {
       setError(err.message);
@@ -71,7 +71,7 @@ export default function ShopifyIntegrationsPage() {
   return (
     <DashboardShell
       title="Shopify"
-      description="Store sync status from host Admin API credentials on Vercel. Never shown as Connected without live tokens."
+      description="Store sync status. Connected or Waiting credentials."
       actions={
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={load}>
@@ -106,8 +106,8 @@ export default function ShopifyIntegrationsPage() {
             <div className="space-y-3 px-5 py-4">
               <p className="text-sm text-muted">
                 {connected
-                  ? status.summary || status.honesty || status.health?.message || "Shopify Admin API is connected."
-                  : "Waiting credentials on Vercel."}
+                  ? status.summary || status.health?.message || "Shopify is connected."
+                  : "Waiting credentials."}
               </p>
               <p className="text-xs text-muted">
                 Products in workspace: {status.product_count ?? 0}
@@ -128,7 +128,7 @@ export default function ShopifyIntegrationsPage() {
             <div className="mt-3 divide-y divide-line">
               {(status.recent_sync_runs || []).length === 0 ? (
                 <p className="text-sm text-muted">
-                  No sync runs yet. Use Sync products to exercise the local simulator.
+                  No sync runs yet.
                 </p>
               ) : (
                 status.recent_sync_runs.map((run) => (
@@ -137,7 +137,7 @@ export default function ShopifyIntegrationsPage() {
                     className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
                   >
                     <span>
-                      {run.sync_type} · {run.mode} · upserted {run.records_upserted}
+                      {run.sync_type} · {run.records_upserted ?? 0} records
                     </span>
                     <Badge tone={run.status === "completed" ? "success" : "warning"}>
                       {run.status}

@@ -54,7 +54,7 @@ export function googlePlacesStatus(opts = {}) {
     status_label: connectionLabel(status, { hasCredentials: present }),
     summary: present
       ? "Google Places is connected for popup location capture."
-      : "Waiting for GOOGLE_PLACES_API_KEY or GOOGLE_MAPS_API_KEY on Vercel.",
+      : "Waiting credentials.",
     capabilities: ["places.autocomplete", "maps.pin", "geocode"],
   };
   if (includeKey && present) {

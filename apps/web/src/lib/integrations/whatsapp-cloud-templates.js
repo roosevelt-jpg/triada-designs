@@ -510,8 +510,8 @@ export async function whatsappTemplateStatus() {
     business_account_id_present: Boolean(creds.businessAccountId),
     token_source: creds.tokenSource,
     message: live
-      ? "Live WhatsApp Cloud API template path enabled (Meta Graph message_templates)."
-      : "WhatsApp Cloud templates use the local jewellery catalog until META_WA_ACCESS_TOKEN (or Integrations-stored WA token) and META_WA_BUSINESS_ACCOUNT_ID are available with live mode.",
+      ? "WhatsApp templates are Connected."
+      : "WhatsApp templates · Waiting credentials.",
   };
 }
 
@@ -575,7 +575,7 @@ export async function submitWhatsAppMessageTemplate(payload) {
         ...payload,
         status: "APPROVED",
         simulated: true,
-        note: "Local sim catalog — not submitted to Meta Cloud API.",
+        note: "Saved locally.",
       },
     };
   }
