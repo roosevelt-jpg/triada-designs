@@ -14,6 +14,7 @@ import { apiFetch } from "@/lib/api-client";
 const LINKS = [
   { href: "/inbox", label: "Unified inbox" },
   { href: "/orders", label: "Orders & invoices" },
+  { href: "/orders/invoices", label: "Invoice editor" },
   { href: "/manufacturer", label: "Manufacturer" },
   { href: "/outreach", label: "Outreach CRM" },
   { href: "/popups", label: "Pop-ups & markets" },

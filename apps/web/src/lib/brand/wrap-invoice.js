@@ -23,6 +23,8 @@ import { wrapEmailMessage } from "./wrap-email";
  *   issuedAt?: string,
  *   lineItems?: Array<{ title?: string, sku?: string, qty?: number, price?: number }>,
  *   notes?: string,
+ *   greeting?: string,
+ *   preparedFor?: string,
  * }} InvoiceDocInput
  */
 
@@ -32,15 +34,22 @@ import { wrapEmailMessage } from "./wrap-email";
 export function wrapInvoiceDocument(input = {}) {
   const docType = input.documentType === "receipt" ? "receipt" : "invoice";
   const title = docType === "receipt" ? "Receipt" : "Invoice";
-  const greeting = warmGreeting(docType === "receipt" ? "receipt" : "invoice", {
+  const defaultGreeting = warmGreeting(docType === "receipt" ? "receipt" : "invoice", {
     customerName: input.customerName,
   });
+  const greeting = String(input.greeting || "").trim() || defaultGreeting;
   const logo = brandLogoUrl();
   const currency = input.currency || "AED";
   const total = Number(input.total ?? 0);
   const lines = Array.isArray(input.lineItems) ? input.lineItems : [];
   const number = input.number || `INV-${Date.now().toString(36).toUpperCase()}`;
   const issuedAt = input.issuedAt || new Date().toISOString();
+  const preparedForCustom = String(input.preparedFor || "").trim();
+  const preparedForHtml = preparedForCustom
+    ? escapeHtml(preparedForCustom)
+    : input.customerName
+      ? `Prepared for <strong>${escapeHtml(input.customerName)}</strong>`
+      : "Prepared for our valued client";
 
   const rowsHtml =
     lines.length > 0
@@ -93,7 +102,7 @@ export function wrapInvoiceDocument(input = {}) {
     </div>
     <p class="greeting">${escapeHtml(greeting)}</p>
     <p style="margin:0 0 8px;font-size:14px;">
-      ${input.customerName ? `Prepared for <strong>${escapeHtml(input.customerName)}</strong>` : "Prepared for our valued client"}
+      ${preparedForHtml}
       ${input.customerEmail ? ` · ${escapeHtml(input.customerEmail)}` : ""}
       ${input.orderId ? `<br/>Order: ${escapeHtml(input.orderId)}` : ""}
     </p>

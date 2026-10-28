@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
@@ -89,6 +90,11 @@ export default function OrdersPage() {
     <DashboardShell
       title="Orders & invoices"
       description="WhatsApp order lifecycle (opt-in business only), where-is-my-order, automatic invoice + UAE e-invoicing path for B2B."
+      actions={
+        <Link href="/orders/invoices">
+          <Button size="sm">Edit invoices</Button>
+        </Link>
+      }
     >
       {loading ? <Skeleton className="h-32" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -138,10 +144,19 @@ export default function OrdersPage() {
 
           <section className="surface-card overflow-hidden">
             <div className="border-b border-line px-5 py-3.5">
-              <h2 className="ops-section-title">Invoices</h2>
-              <p className="mt-1 text-sm text-muted">
-                Branded with Triada logo header, warm greeting, and address footer (HTML/PDF print path).
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="ops-section-title">Invoices</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    Branded with Triada logo header, warm greeting, and address footer. Edit every content field in plain text.
+                  </p>
+                </div>
+                <Link href="/orders/invoices">
+                  <Button size="sm" variant="secondary">
+                    Open invoice editor
+                  </Button>
+                </Link>
+              </div>
             </div>
             <div className="divide-y divide-line">
               {invoices.length === 0 ? <p className="px-5 py-4 text-sm text-muted">No invoices yet.</p> : null}

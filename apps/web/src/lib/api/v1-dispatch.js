@@ -112,6 +112,15 @@ import {
   upsertTrainingDoc,
 } from "@/lib/training/training-docs-store";
 import {
+  deleteInvoiceDoc,
+  getInvoiceDoc,
+  listInvoiceDocs,
+  parseLineItemsPlainText,
+  presentInvoiceDoc,
+  shapeInvoiceDoc,
+  upsertInvoiceDoc,
+} from "@/lib/invoices/invoice-docs-store";
+import {
   TEMPLATE_CATEGORIES,
   isTemplateCategory,
   mapTemplateCategoryToMeta,
@@ -2009,6 +2018,9 @@ export async function dispatchV1(method, segments, request, body) {
       );
     }
     if (channel === "invoice" || channel === "receipt") {
+      const lineItems = Array.isArray(body?.line_items)
+        ? body.line_items
+        : parseLineItemsPlainText(String(body?.line_items_text || ""));
       return jsonOk(
         wrapInvoiceDocument({
           documentType: channel === "receipt" ? "receipt" : "invoice",
@@ -2017,9 +2029,13 @@ export async function dispatchV1(method, segments, request, body) {
           customerEmail: body?.customer_email,
           total: body?.total,
           currency: body?.currency,
-          lineItems: body?.line_items,
+          status: body?.status,
+          issuedAt: body?.issued_at,
+          lineItems,
           orderId: body?.order_id,
           notes: body?.notes,
+          greeting: body?.greeting,
+          preparedFor: body?.prepared_for,
         }),
       );
     }
@@ -2418,65 +2434,97 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "jewellery-ops/invoices" && m === "GET") {
-    const branded = wrapInvoiceDocument({
-      documentType: "invoice",
-      number: "INV-TD-1001",
-      orderId: "ord-1",
-      customerName: "Layla Al Maktoum",
-      total: 1450,
-      currency: "AED",
-      status: "draft",
-      lineItems: [
-        {
-          title: "Aura Signet Ring",
-          sku: "TD-RING-AURA-01",
-          qty: 1,
-          price: 1450,
-        },
-      ],
-    });
+    const listed = await listInvoiceDocs();
     return jsonOk({
-      data: [
-        {
-          id: "inv-1",
-          order_id: "ord-1",
-          status: "draft",
-          total: 1450,
-          currency: "AED",
-          source: "local_seed",
-          branded: true,
-          logo_url: branded.logo_url,
-          greeting: branded.greeting,
-          html: branded.html,
-          pdf_mode: branded.pdf_mode,
-        },
-      ],
+      data: listed.data.map(presentInvoiceDoc),
+      storage: listed.storage,
     });
   }
 
   if (path === "jewellery-ops/invoices" && m === "POST") {
     const input = body && typeof body === "object" ? body : {};
-    const branded = wrapInvoiceDocument({
-      documentType: input.document_type === "receipt" ? "receipt" : "invoice",
+    const lineItems = Array.isArray(input.line_items)
+      ? input.line_items
+      : parseLineItemsPlainText(String(input.line_items_text || ""));
+    const saved = await upsertInvoiceDoc({
+      ...input,
+      line_items: lineItems,
       number: input.number || input.invoice_number,
-      orderId: input.order_id,
-      customerName: input.customer_name,
-      customerEmail: input.customer_email,
-      total: input.total,
-      currency: input.currency || "AED",
-      status: input.status || "issued",
-      lineItems: Array.isArray(input.line_items) ? input.line_items : [],
-      notes: input.notes,
     });
+    const presented = presentInvoiceDoc(saved.doc);
     return jsonOk(
       {
         ok: true,
-        invoice: branded.summary,
-        document: branded,
+        invoice: presented,
+        document: presented.document,
         branded: true,
+        storage: saved.storage,
       },
       201,
     );
+  }
+
+  if (path === "jewellery-ops/invoices/preview" && m === "POST") {
+    const input = body && typeof body === "object" ? body : {};
+    const lineItems = Array.isArray(input.line_items)
+      ? input.line_items
+      : parseLineItemsPlainText(String(input.line_items_text || ""));
+    const shaped = shapeInvoiceDoc({
+      ...input,
+      line_items: lineItems,
+      number: input.number || input.invoice_number,
+    });
+    return jsonOk({
+      ok: true,
+      invoice: presentInvoiceDoc(shaped),
+      branded: true,
+      persisted: false,
+    });
+  }
+
+  if (path.match(/^jewellery-ops\/invoices\/[^/]+$/) && m === "GET") {
+    const id = segments[2];
+    const found = await getInvoiceDoc(id);
+    if (!found.doc) return jsonErr("Invoice not found", 404);
+    return jsonOk({
+      invoice: presentInvoiceDoc(found.doc),
+      storage: found.storage,
+    });
+  }
+
+  if (path.match(/^jewellery-ops\/invoices\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
+    const id = segments[2];
+    const input = body && typeof body === "object" ? body : {};
+    const existing = await getInvoiceDoc(id);
+    if (!existing.doc) return jsonErr("Invoice not found", 404);
+    const lineItems = Array.isArray(input.line_items)
+      ? input.line_items
+      : input.line_items_text != null
+        ? parseLineItemsPlainText(String(input.line_items_text || ""))
+        : existing.doc.line_items;
+    const saved = await upsertInvoiceDoc({
+      ...existing.doc,
+      ...input,
+      id,
+      line_items: lineItems,
+      number: input.number || input.invoice_number || existing.doc.number,
+      created_at: existing.doc.created_at,
+    });
+    const presented = presentInvoiceDoc(saved.doc);
+    return jsonOk({
+      ok: true,
+      invoice: presented,
+      document: presented.document,
+      branded: true,
+      storage: saved.storage,
+    });
+  }
+
+  if (path.match(/^jewellery-ops\/invoices\/[^/]+$/) && m === "DELETE") {
+    const id = segments[2];
+    const result = await deleteInvoiceDoc(id);
+    if (!result.ok) return jsonErr(result.message || "Delete failed", 400);
+    return jsonOk(result);
   }
 
   if (path === "jewellery-ops/manufacturer" && m === "GET") {

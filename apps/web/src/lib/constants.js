@@ -35,6 +35,7 @@ export const DASHBOARD_NAV = [
       { href: "/products", label: "Products" },
       { href: "/services", label: "Services" },
       { href: "/orders", label: "Orders & invoices" },
+      { href: "/orders/invoices", label: "Invoice editor" },
       { href: "/manufacturer", label: "Manufacturer" },
     ],
   },

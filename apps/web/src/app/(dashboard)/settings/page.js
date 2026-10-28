@@ -171,8 +171,13 @@ export default function SettingsPage() {
               >
                 triada-designs.com
               </a>
-              .
+              . Edit invoice content in plain text while keeping that brand chrome.
             </p>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/orders/invoices">
+                <Button variant="secondary">Invoice editor</Button>
+              </Link>
+            </div>
           </section>
 
           <section className="surface-card space-y-4 p-5">
