@@ -7,9 +7,16 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Input } from "@/components/ui/Input";
 import { apiFetch } from "@/lib/api-client";
 import { creativeModeLabel } from "@/lib/integrations/brand-labels";
+import { formatDateTime } from "@/lib/formatters";
 import { nowDate, syncSystemTime } from "@/lib/system-time";
+
+function toLocalInputValue(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 function modeTone(mode) {
   const label = creativeModeLabel(mode);
@@ -35,6 +42,7 @@ export default function ContentPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [notice, setNotice] = useState("");
+  const [scheduleDrafts, setScheduleDrafts] = useState({});
 
   const refreshMedia = useCallback(async (itemId) => {
     try {
@@ -93,12 +101,17 @@ export default function ContentPage() {
     setBusyId(`schedule-${item.id}`);
     try {
       await syncSystemTime().catch(() => {});
-      const when = new Date(nowDate().getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
+      const draft = scheduleDrafts[item.id];
+      const when = draft
+        ? new Date(draft).toISOString()
+        : new Date(nowDate().getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
       await apiFetch(`/v1/content/${item.id}/schedule`, {
         method: "POST",
         body: { scheduled_for: when },
       });
-      setNotice(`Scheduled for ${when} (server/workspace-aligned now + 3 days)`);
+      setNotice(
+        `Scheduled for ${formatDateTime(when)}. Appears on Calendar; Vercel Cron publishes when due.`
+      );
       await load();
     } catch (err) {
       setError(err.message);
@@ -184,18 +197,50 @@ export default function ContentPage() {
         },
       });
       setNotice(
-        `Short video drafted (${result.mode}). ${
+        `Short video drafted (${result.mode}). Script via Anthropic/local; pixels via VIDEO_PROVIDER or local animation. ${
           result.sidecar?.placeholder_mp4
             ? "Local stub includes animated SVG + placeholder mp4."
             : ""
         }`
       );
-      await refreshMedia(item.id);
+      await load();
     } catch (err) {
       setError(err.message);
     } finally {
       setBusyId(null);
     }
+  }
+
+  async function generateUgcVideo(item) {
+    setBusyId(`ugc-${item.id}`);
+    setNotice("");
+    try {
+      const result = await apiFetch(`/v1/content/${item.id}/generate-ugc-video`, {
+        method: "POST",
+        body: {
+          product: item.product_context?.name || "Triada Designs jewellery",
+          style: "ugc",
+          storyboard:
+            bodyStoryboardUgc(item.product_context?.name || "jewellery"),
+          duration_ms: 8000,
+        },
+      });
+      const hook = result.script?.hook ? ` Hook: “${result.script.hook}”.` : "";
+      setNotice(
+        `UGC video queued for approval (${result.mode}).${hook} Dual path: Claude script → ${
+          result.dual_path?.pixel_provider || "local animation"
+        } pixels. Open Calendar to approve + set publish date.`
+      );
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function bodyStoryboardUgc(product) {
+    return `Handheld UGC vertical of ${product}: natural desk light, authentic voiceover, soft end frame — no fake badges.`;
   }
 
   async function generateAnimation(item) {
@@ -249,7 +294,7 @@ export default function ContentPage() {
   return (
     <DashboardShell
       title="Content studio"
-      description="Draft → creative AI (image / platform variants / short video / animation) → human approval → schedule/publish. Every post gets post-aligned creatives. Adapters: WordPress + Meta page (local sim without credentials)."
+      description="Generate UGC/creative → pending approval → calendar date → cron publish. Claude writes scripts/storyboards; video pixels need VIDEO_PROVIDER (Runway/Luma/Veo) or the local animation pipeline — Claude cannot render video alone."
     >
       {loading ? <Skeleton className="h-64" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -272,6 +317,12 @@ export default function ContentPage() {
           <p className="max-w-3xl text-sm text-muted">
             {creativeStatus.image?.message} {creativeStatus.video?.message}
           </p>
+          {creativeStatus.dual_path ? (
+            <p className="max-w-3xl text-sm text-muted">
+              Dual path — scripts: {creativeStatus.dual_path.scripts}. Pixels:{" "}
+              {creativeStatus.dual_path.pixels}. Claude alone cannot output video frames.
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -360,6 +411,12 @@ export default function ContentPage() {
                     onClick={() => generateVideo(item)}
                   >
                     Generate short video
+                  </Button>
+                  <Button
+                    disabled={busyId === `ugc-${item.id}`}
+                    onClick={() => generateUgcVideo(item)}
+                  >
+                    Generate UGC video
                   </Button>
                   <Button
                     variant="secondary"
@@ -459,12 +516,26 @@ export default function ContentPage() {
                   ) : null}
                   {item.status === "approved" ? (
                     <>
+                      <Input
+                        type="datetime-local"
+                        label="Calendar date"
+                        className="min-w-[12rem]"
+                        value={
+                          scheduleDrafts[item.id] ||
+                          toLocalInputValue(
+                            new Date(nowDate().getTime() + 3 * 24 * 60 * 60 * 1000)
+                          )
+                        }
+                        onChange={(e) =>
+                          setScheduleDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
+                        }
+                      />
                       <Button
                         variant="secondary"
                         disabled={busyId === `schedule-${item.id}`}
                         onClick={() => schedule(item)}
                       >
-                        Schedule (+3d)
+                        Schedule on calendar
                       </Button>
                       <Button
                         disabled={busyId === `publish-${item.id}-wordpress`}

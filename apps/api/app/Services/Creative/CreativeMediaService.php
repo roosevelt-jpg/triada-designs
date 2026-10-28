@@ -17,22 +17,33 @@ class CreativeMediaService
         protected ImageGenerationService $images,
         protected ImageResizeService $resize,
         protected VideoGenerationService $videos,
+        protected VideoScriptService $scripts,
         protected JewelleryPromptBuilder $prompts,
         protected PlatformSizeCatalog $sizes,
     ) {
     }
 
     /**
-     * @return array{image:array,video:array,resize_engine:string,platforms:array}
+     * @return array{image:array,video:array,resize_engine:string,platforms:array,dual_path:array,honesty:string,summary:string}
      */
     public function status(): array
     {
+        $video = $this->videos->status();
+
         return [
             'image' => $this->images->status(),
-            'video' => $this->videos->status(),
+            'video' => $video,
             'resize_engine' => $this->resize->engine(),
             'platforms' => $this->sizes->all(),
-            'honesty' => 'Creative tools never auto-publish. Human approval remains required before public posts.',
+            'dual_path' => [
+                'scripts' => 'Anthropic Claude (Integrations) — captions, UGC scripts, storyboards',
+                'pixels' => $video['dual_path']['pixels'] ?? 'VIDEO_PROVIDER for video frames',
+                'local_animation' => 'VIDEO_PROVIDER=local|animation uses existing creative SVG motion + mp4 stub',
+                'claude_alone' => false,
+                'note' => 'Claude cannot render video pixels. Admin needs a video provider OR the local animation pipeline — not Claude alone.',
+            ],
+            'honesty' => 'Creative tools never auto-publish. Human approval + calendar schedule remain required before public posts. Claude writes scripts only.',
+            'summary' => 'Dual path: Anthropic scripts/storyboards → VIDEO_PROVIDER (or local animation) for pixels → pending approval → calendar date → cron publish.',
         ];
     }
 
@@ -122,36 +133,103 @@ class CreativeMediaService
     }
 
     /**
+     * Dual path: Anthropic script/storyboard → VIDEO_PROVIDER / local animation pixels.
+     * Moves draft items into in_review (pending approval) when assets are produced.
+     *
      * @param  array<string, mixed>  $context
-     * @return array{ok:bool,brief:array,asset:?MediaAsset,mode:string,error:?string,sidecar:?array}
+     * @return array{
+     *   ok:bool,
+     *   brief:array,
+     *   script:?array,
+     *   asset:?MediaAsset,
+     *   mode:string,
+     *   prompt:string,
+     *   error:?string,
+     *   sidecar:?array,
+     *   content:?ContentItem,
+     *   dual_path:array
+     * }
      */
     public function generateVideo(Workspace $workspace, ContentItem $item, array $context = []): array
     {
+        $style = strtolower((string) ($context['style'] ?? 'editorial'));
         $caption = (string) ($context['caption'] ?? $item->body ?? '');
-        $brief = $this->prompts->creativeBrief($caption, array_merge([
+        $script = $this->scripts->compose($item, array_merge($context, ['style' => $style]));
+
+        $mergedContext = array_merge($context, [
+            'style' => $style,
+            'script' => $script['script'],
+            'storyboard' => $context['storyboard'] ?? $script['storyboard'],
+            'video_prompt' => $script['video_prompt'],
+            'caption' => $caption !== '' ? $caption : $script['script'],
+        ]);
+
+        $brief = $this->prompts->creativeBrief($caption !== '' ? $caption : $script['script'], array_merge([
             'objective' => $item->objective,
             'channel' => $item->channel,
             'product' => data_get($item->product_context, 'name'),
+            'style' => $style,
+            'storyboard' => $mergedContext['storyboard'],
         ], $context));
 
-        $item->forceFill([
+        $result = $this->videos->generateForContent($workspace, $item, $mergedContext);
+
+        $statusPatch = [];
+        if (in_array($item->status, ['draft', ''], true) || $item->status === null) {
+            $statusPatch['status'] = 'in_review';
+        }
+
+        $item->forceFill(array_merge([
             'creative_brief' => array_merge($item->creative_brief ?? [], [
                 'video' => $brief,
+                'ugc_script' => $script,
                 'updated_at' => now()->toIso8601String(),
             ]),
-        ])->save();
-
-        $result = $this->videos->generateForContent($workspace, $item, $context);
+        ], $statusPatch))->save();
 
         return [
             'ok' => (bool) ($result['ok'] ?? false),
             'brief' => $brief,
+            'script' => $script,
             'asset' => $result['asset'] ?? null,
             'mode' => (string) ($result['mode'] ?? 'local_sim'),
-            'prompt' => $result['prompt'] ?? $brief['video_prompt'],
+            'prompt' => $result['prompt'] ?? $script['video_prompt'],
             'error' => $result['error'] ?? null,
             'sidecar' => $result['sidecar'] ?? null,
+            'content' => $item->fresh(),
+            'dual_path' => [
+                'script_mode' => $script['mode'],
+                'script_provider' => $script['provider'],
+                'pixel_mode' => $result['mode'] ?? 'local_sim',
+                'pixel_provider' => data_get($result, 'asset.provider') ?? config('creative.video.provider'),
+                'claude_renders_pixels' => false,
+            ],
         ];
+    }
+
+    /**
+     * UGC-style short video: force style=ugc, ensure in_review for admin approval.
+     *
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    public function generateUgcVideo(Workspace $workspace, ContentItem $item, array $context = []): array
+    {
+        $result = $this->generateVideo($workspace, $item, array_merge($context, [
+            'style' => 'ugc',
+            'duration_ms' => (int) ($context['duration_ms'] ?? 8000),
+        ]));
+
+        $fresh = $item->fresh();
+        if ($fresh && ! in_array($fresh->status, ['approved', 'scheduled', 'published'], true)) {
+            $fresh->forceFill(['status' => 'in_review'])->save();
+            $result['content'] = $fresh->fresh();
+        }
+
+        $result['flow'] = 'generate → pending approval (in_review) → calendar date → publish on schedule';
+        $result['note'] = 'UGC video draft queued for admin approval. Claude wrote the script; pixels used VIDEO_PROVIDER or local animation.';
+
+        return $result;
     }
 
     /**

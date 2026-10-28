@@ -40,14 +40,50 @@ TXT);
         $duration = (int) ($context['duration_ms'] ?? 4000);
         $seconds = max(2, (int) round($duration / 1000));
         $product = (string) ($context['product'] ?? 'Triada Designs jewellery piece');
+        $style = strtolower((string) ($context['style'] ?? 'editorial'));
         $storyboard = (string) ($context['storyboard'] ?? 'slow push-in on jewellery, soft light shift, gentle end frame with brand restraint');
+        $ugcLine = $style === 'ugc'
+            ? 'Format: authentic UGC / creator-style vertical (9:16), natural handheld feel, soft Gulf light, jewellery hero — not studio hard-sell.'
+            : 'Format: calm premium motion from stills or soft camera move.';
 
         return trim(<<<TXT
 Short marketing video / motion for Triada Designs jewellery ({$seconds}s).
 Subject: {$product}.
+Style: {$style}.
+{$ugcLine}
 Storyboard: {$storyboard}.
 Script/caption cue: {$scriptOrCaption}
-No loud effects, no fake urgency text overlays, no invented claims. Calm premium motion from stills or soft camera move.
+No loud effects, no fake urgency text overlays, no invented claims or logos.
+TXT);
+    }
+
+    public function ugcScriptSystemPrompt(): string
+    {
+        return 'You write short UGC-style jewellery video scripts for Triada Designs. '
+            .'Return compact JSON with keys: hook, script, storyboard, cta. '
+            .'Authentic creator voice, calm Gulf-light luxury, no fake claims, no invented discounts. '
+            .'Human approval is always required before public publish. Claude writes text only — never claim you rendered video pixels.';
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    public function ugcScriptUserPrompt(string $caption, array $context = []): string
+    {
+        $product = (string) ($context['product'] ?? 'Triada Designs jewellery');
+        $channel = (string) ($context['channel'] ?? 'instagram');
+        $seconds = (int) ($context['seconds'] ?? 8);
+        $style = (string) ($context['style'] ?? 'ugc');
+        $storyboardHint = (string) ($context['storyboard'] ?? '');
+        $captionClean = trim(preg_replace('/\s+/', ' ', $caption) ?: '');
+
+        return trim(<<<TXT
+Write a {$seconds}s {$style} video package for Triada Designs.
+Product: {$product}
+Channel: {$channel}
+Caption / brief: {$captionClean}
+Storyboard hint: {$storyboardHint}
+Respond with JSON only: {"hook":"...","script":"...","storyboard":"...","cta":"..."}.
 TXT);
     }
 

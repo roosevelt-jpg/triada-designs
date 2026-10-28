@@ -13,6 +13,10 @@
     {
       "path": "/api/cron/after-sale",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/content-publish",
+      "schedule": "0 10 * * *"
     }
   ],
   "headers": [
