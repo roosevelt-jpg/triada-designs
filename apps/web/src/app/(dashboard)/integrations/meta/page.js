@@ -17,17 +17,17 @@ const CHANNELS = [
   {
     key: "facebook",
     title: "Facebook Messenger",
-    blurb: "Pages + Messenger. Paste a Page access token when ready — local simulator works until then.",
+    blurb: "Pages + Messenger. Status from host Meta credentials on Vercel.",
   },
   {
     key: "instagram",
     title: "Instagram Messaging",
-    blurb: "Professional IG messaging via Meta. Connect the linked account from this dashboard.",
+    blurb: "Professional IG messaging via Meta. Day-to-day ops stay in this hub.",
   },
   {
     key: "whatsapp",
     title: "WhatsApp Cloud API",
-    blurb: "WABA phone number messaging with 24h window + template eligibility checks.",
+    blurb: "WABA phone messaging with 24h window and template eligibility checks.",
   },
 ];
 
@@ -45,11 +45,6 @@ export default function MetaIntegrationsPage() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
-  const [tokens, setTokens] = useState({
-    facebook: "",
-    instagram: "",
-    whatsapp: "",
-  });
   const [sim, setSim] = useState({
     channel: "facebook",
     body: "Hello from the Triada Meta simulator",
@@ -93,48 +88,6 @@ export default function MetaIntegrationsPage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  async function connect(channel) {
-    setBusy(`connect-${channel}`);
-    setNotice("");
-    try {
-      const data = await apiFetch("/v1/integrations/meta/connect", {
-        method: "POST",
-        body: {
-          channel,
-          access_token: tokens[channel] || undefined,
-          webhook_subscribed: true,
-        },
-      });
-      setStatus(data);
-      setNotice(
-        tokens[channel]
-          ? `${channel} token stored. Live Graph messaging starts once the host is in live mode.`
-          : `${channel} connected for dashboard ops. Add live Graph credentials when ready.`
-      );
-      setTokens((prev) => ({ ...prev, [channel]: "" }));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function disconnect(channel) {
-    setBusy(`disconnect-${channel}`);
-    try {
-      const data = await apiFetch("/v1/integrations/meta/disconnect", {
-        method: "POST",
-        body: { channel },
-      });
-      setStatus(data);
-      setNotice(`${channel} disconnected.`);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy("");
-    }
-  }
 
   async function toggleSubscribe(channel, subscribed) {
     setBusy(`sub-${channel}`);
@@ -288,10 +241,13 @@ export default function MetaIntegrationsPage() {
   return (
     <DashboardShell
       title="Meta messaging"
-      description="Manage Facebook, Instagram, and WhatsApp from Triada. One-time Meta Developer App / App Review may still require Meta; day-to-day messaging automation stays here."
+      description="Facebook, Instagram, and WhatsApp status from host credentials on Vercel. Day-to-day messaging ops stay here — API keys are never entered in the dashboard."
       actions={
         <div className="flex items-center gap-4">
           <BrandLogo variant="symbol" className="h-9 w-9" />
+          <Button size="sm" variant="secondary" onClick={load}>
+            Re-check status
+          </Button>
           <Link href="/integrations" className="text-sm text-brown-dark underline-offset-2 hover:underline">
             All integrations
           </Link>
@@ -375,46 +331,33 @@ export default function MetaIntegrationsPage() {
                         connectionLabel(info.status || health.status)}
                     </Badge>
                   </div>
-                  <p className="mt-3 text-sm text-muted">{health.message}</p>
-                  <ul className="mt-3 space-y-1 text-sm text-muted">
-                    {accountList.map((row) => (
-                      <li key={row.id}>
-                        {row.name || row.username || row.verified_name || row.id}
-                        {row.source ? ` · ${row.source}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-4 space-y-3">
-                    <Input
-                      label="Access token (paste later)"
-                      name={`${ch.key}-token`}
-                      type="password"
-                      value={tokens[ch.key]}
-                      onChange={(e) =>
-                        setTokens((prev) => ({ ...prev, [ch.key]: e.target.value }))
+                  <p className="mt-3 text-sm text-muted">
+                    {info.status === "connected" || health.status === "healthy"
+                      ? health.message || "Ready for dashboard messaging ops."
+                      : "Waiting credentials on Vercel."}
+                  </p>
+                  {accountList.length ? (
+                    <ul className="mt-3 space-y-1 text-sm text-muted">
+                      {accountList.map((row) => (
+                        <li key={row.id}>
+                          {row.name || row.username || row.verified_name || "Linked account"}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        toggleSubscribe(ch.key, !info.webhook_subscribed)
                       }
-                      placeholder="Optional until credentials are ready"
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <Button onClick={() => connect(ch.key)} disabled={!!busy}>
-                        Connect
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() =>
-                          toggleSubscribe(ch.key, !info.webhook_subscribed)
-                        }
-                        disabled={!!busy}
-                      >
-                        {info.webhook_subscribed ? "Unsubscribe webhook" : "Subscribe webhook"}
-                      </Button>
-                      <Button variant="secondary" onClick={() => testSend(ch.key)} disabled={!!busy}>
-                        Test send
-                      </Button>
-                      <Button variant="ghost" onClick={() => disconnect(ch.key)} disabled={!!busy}>
-                        Disconnect
-                      </Button>
-                    </div>
+                      disabled={!!busy}
+                    >
+                      {info.webhook_subscribed ? "Unsubscribe webhook" : "Subscribe webhook"}
+                    </Button>
+                    <Button variant="secondary" onClick={() => testSend(ch.key)} disabled={!!busy}>
+                      Test send
+                    </Button>
                   </div>
                 </Card>
               );
@@ -427,8 +370,8 @@ export default function MetaIntegrationsPage() {
                 <h2 className="font-display text-2xl">WhatsApp Cloud templates</h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted">
                   Create and submit jewellery message templates to Meta for approval from this
-                  dashboard. Live submit/sync use META_WA_* or Integrations-stored WhatsApp Cloud
-                  credentials; otherwise Triada uses the local jewellery catalog.
+                  dashboard. Live submit uses host WhatsApp credentials on Vercel; otherwise Triada
+                  uses the local jewellery catalog.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">

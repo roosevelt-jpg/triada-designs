@@ -104,7 +104,7 @@ export function metaStatusPayload(opts) {
     opts.summary ||
     (opts.connected
       ? "Meta messaging credentials are connected for dashboard ops."
-      : "Add Meta App ID, Page token, and WhatsApp Cloud credentials on Integrations.");
+      : "Waiting for Meta messaging credentials on Vercel.");
   return {
     has_app_id: Boolean(opts.has_app_id),
     has_app_secret: Boolean(opts.has_app_secret),
@@ -527,7 +527,7 @@ export function metaChannelHealth(key, ready) {
       status_label: connectionLabel(ready ? "healthy" : "awaiting_credentials"),
       message: ready
         ? `${providerNickname(key === "messenger" ? "facebook" : key)} is connected.`
-        : `${providerNickname(key === "messenger" ? "facebook" : key)} needs setup on Integrations.`,
+        : `${providerNickname(key === "messenger" ? "facebook" : key)} waiting credentials on Vercel.`,
     },
   };
 }

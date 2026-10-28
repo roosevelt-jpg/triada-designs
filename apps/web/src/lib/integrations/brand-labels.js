@@ -22,15 +22,15 @@ export function modelNickname(model) {
  */
 export function connectionLabel(status, opts = {}) {
   const s = String(status || "").toLowerCase();
-  if (opts.live || s === "live") return "AI connected";
+  if (opts.live || s === "live") return "Connected";
   if (s === "connected" || s === "healthy" || opts.hasCredentials) return "Connected";
-  if (s === "awaiting_credentials") return "Needs setup";
+  if (s === "awaiting_credentials") return "Waiting credentials";
   if (s === "seeded") return "Seeded catalog";
   if (s === "local" || s === "local_sim" || s === "local_seed") return "Local";
   if (s === "error" || s === "disconnected") return "Unavailable";
-  if (!s || s === "—") return "Needs setup";
+  if (!s || s === "—") return "Waiting credentials";
   // Never echo snake_case machine status strings to the UI.
-  if (s.includes("_")) return "Needs setup";
+  if (s.includes("_")) return "Waiting credentials";
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
@@ -54,13 +54,13 @@ export function providerNickname(provider) {
  * @param {{ status?: string, provider?: string, model?: string, has_credentials?: boolean }} llm
  */
 export function aiStatusSummary(llm) {
-  if (!llm) return "AI not configured yet.";
+  if (!llm) return "AI waiting for host credentials.";
   const live =
     llm.status === "live" ||
     llm.status === "connected" ||
     Boolean(llm.has_credentials);
   if (!live) {
-    return "Add an AI key on Integrations to enable live agents.";
+    return "Waiting for AI credentials on the host (Vercel).";
   }
   const who = providerNickname(llm.provider);
   const model = modelNickname(llm.model);

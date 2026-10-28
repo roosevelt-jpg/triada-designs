@@ -12,17 +12,17 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { connectionLabel } from "@/lib/integrations/brand-labels";
 
-/** Jewellery multi-channel list — credential paste + local simulator until live tokens. */
+/** Jewellery multi-channel list — status from host credentials on Vercel. */
 const CHANNELS = [
-  { key: "webchat", title: "Website / webchat", hint: "Widget token (local seed)" },
-  { key: "facebook", title: "Facebook", hint: "Page access token" },
-  { key: "instagram", title: "Instagram", hint: "IG messaging token" },
-  { key: "whatsapp", title: "WhatsApp", hint: "Cloud API token" },
-  { key: "shopify", title: "Shopify", hint: "Admin API access token" },
-  { key: "tiktok", title: "TikTok", hint: "Access token (when eligible)" },
-  { key: "linkedin", title: "LinkedIn", hint: "Access token" },
-  { key: "email", title: "Email", hint: "Provider API key" },
-  { key: "telegram", title: "Telegram", hint: "Bot token" },
+  { key: "webchat", title: "Website / webchat", blurb: "On-site chat widget." },
+  { key: "facebook", title: "Facebook", blurb: "Page messaging via Meta." },
+  { key: "instagram", title: "Instagram", blurb: "IG messaging via Meta." },
+  { key: "whatsapp", title: "WhatsApp", blurb: "Cloud API messaging." },
+  { key: "shopify", title: "Shopify", blurb: "Store catalog and orders." },
+  { key: "tiktok", title: "TikTok", blurb: "Short-form commerce channel." },
+  { key: "linkedin", title: "LinkedIn", blurb: "Professional outreach." },
+  { key: "email", title: "Email", blurb: "Transactional delivery." },
+  { key: "telegram", title: "Telegram", blurb: "Bot messaging." },
 ];
 
 function tone(status) {
@@ -40,7 +40,6 @@ export default function ChannelsIntegrationsPage() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
-  const [tokens, setTokens] = useState({});
   const [sim, setSim] = useState({
     channel: "webchat",
     body: "Hi — interested in a gold hoop pair from Triada Designs",
@@ -62,30 +61,6 @@ export default function ChannelsIntegrationsPage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  async function connect(channel) {
-    setBusy(`connect-${channel}`);
-    try {
-      const data = await apiFetch("/v1/integrations/channels/connect", {
-        method: "POST",
-        body: {
-          channel,
-          access_token: tokens[channel] || undefined,
-          bot_token: channel === "telegram" ? tokens[channel] || undefined : undefined,
-          api_key: channel === "email" ? tokens[channel] || undefined : undefined,
-        },
-      });
-      setStatus(data);
-      setTokens((prev) => ({ ...prev, [channel]: "" }));
-      setNotice(
-        `${channel} saved. Connection stays local until live tokens are present on the host.`
-      );
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy("");
-    }
-  }
 
   async function simulate() {
     setBusy("sim");
@@ -122,9 +97,12 @@ export default function ChannelsIntegrationsPage() {
   return (
     <DashboardShell
       title="Sales channels"
-      description="Jewellery retail across Facebook, Website, Shopify, TikTok, Instagram, WhatsApp, LinkedIn, Email, and Telegram. Connect credentials here; Meta deep-ops remain in the Meta hub."
+      description="Jewellery retail across Facebook, Website, Shopify, TikTok, Instagram, WhatsApp, LinkedIn, Email, and Telegram. Status only — credentials live on Vercel."
       actions={
         <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" onClick={load}>
+            Re-check status
+          </Button>
           <Link href="/templates">
             <Button size="sm">Templates</Button>
           </Link>
@@ -142,54 +120,46 @@ export default function ChannelsIntegrationsPage() {
 
       {!loading && status ? (
         <div className="space-y-6">
-          {status.summary || status.honesty ? (
-            <p className="text-sm text-muted">{status.summary || status.honesty}</p>
-          ) : null}
+          <p className="text-sm text-muted">
+            {status.summary ||
+              status.honesty ||
+              "Each channel shows Connected or Waiting credentials from the host environment."}
+          </p>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {CHANNELS.map((ch) => {
               const row = status.channels?.[ch.key] || {};
+              const connected =
+                row.status === "connected" ||
+                row.status === "healthy" ||
+                row.status === "seeded" ||
+                row.status === "local";
               return (
-                <Card key={ch.key} className="p-5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="font-display text-2xl">{ch.title}</h2>
+                <section key={ch.key} className="surface-card px-5 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="ops-section-title">{ch.title}</h2>
                     <Badge tone={tone(row.status)}>
-                      {row.status_label || connectionLabel(row.status || "disconnected")}
+                      {row.status_label ||
+                        connectionLabel(row.status || "awaiting_credentials", {
+                          hasCredentials: connected && row.status !== "awaiting_credentials",
+                        })}
                     </Badge>
                   </div>
-                  <p className="mt-2 text-xs text-muted">Webhook: {row.webhook_path}</p>
+                  <p className="mt-2 text-sm text-muted">{ch.blurb}</p>
                   {row.hub && row.hub !== "/integrations/channels" ? (
-                    <p className="mt-1 text-xs text-muted">
-                      Deep setup:{" "}
+                    <p className="mt-3 text-xs text-muted">
+                      Deep ops:{" "}
                       <Link href={row.hub} className="text-brown-dark underline">
-                        {row.hub}
+                        Open hub
                       </Link>
                     </p>
                   ) : null}
-                  <div className="mt-3">
-                    <Input
-                      label={ch.hint}
-                      type="password"
-                      value={tokens[ch.key] || ""}
-                      onChange={(e) =>
-                        setTokens((prev) => ({ ...prev, [ch.key]: e.target.value }))
-                      }
-                      autoComplete="off"
-                    />
-                  </div>
-                  <Button
-                    className="mt-3"
-                    disabled={busy === `connect-${ch.key}`}
-                    onClick={() => connect(ch.key)}
-                  >
-                    Connect / save
-                  </Button>
-                </Card>
+                </section>
               );
             })}
           </div>
 
           <Card className="p-5">
-            <h2 className="font-display text-2xl">Local inbound simulator</h2>
+            <h2 className="ops-section-title">Local inbound simulator</h2>
             <p className="mt-1 text-sm text-muted">
               Exercise jewellery inquiry flows without live provider tokens (Shopify excluded).
             </p>
@@ -222,9 +192,9 @@ export default function ChannelsIntegrationsPage() {
           </Card>
 
           <Card className="p-5">
-            <h2 className="font-display text-2xl">Website chat widget</h2>
+            <h2 className="ops-section-title">Website chat widget</h2>
             <p className="mt-2 text-sm text-muted">
-              Embed <code>/widget/chat.js</code> with public token. Rate-limited public endpoint:{" "}
+              Embed <code>/widget/chat.js</code> with the public widget token. Rate-limited endpoint:{" "}
               <code>POST /api/v1/webchat/messages</code>.
             </p>
             <p className="mt-2 text-sm">
