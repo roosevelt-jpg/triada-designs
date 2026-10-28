@@ -46,7 +46,6 @@ export default function CalendarPage() {
   const [timezone, setTimezone] = useState("UTC");
   const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()));
   const [scheduleDrafts, setScheduleDrafts] = useState({});
-  const [cronNote, setCronNote] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,9 +67,6 @@ export default function CalendarPage() {
       const cal = await apiFetch("/v1/calendar");
       setScheduled(cal.data || []);
       setPending(cal.pending_approval || []);
-      setCronNote(
-        cal.cron?.note || "Vercel Cron /api/cron/content-publish publishes due posts daily."
-      );
       setLoading(false);
 
       const [pubs, allContent] = await Promise.all([
@@ -149,7 +145,7 @@ export default function CalendarPage() {
         method: "POST",
         body: { scheduled_for: when },
       });
-      setNotice(`Scheduled “${item.title}” for ${formatDateTime(when)}. Cron publishes when due.`);
+      setNotice(`Scheduled “${item.title}” for ${formatDateTime(when)}.`);
       await load();
     } catch (err) {
       setError(err.message);
@@ -187,22 +183,11 @@ export default function CalendarPage() {
   return (
     <DashboardShell
       title="Content calendar"
-      description={`Approval queue + scheduled posts (workspace now: ${nowLabel || "…"} · ${timezone}). Flow: generate → pending approval → calendar date → cron publish.`}
+      description={`Approve, schedule, and publish · ${nowLabel || "…"} · ${timezone}`}
     >
       {loading ? <Skeleton className="h-28" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       {notice ? <p className="mb-4 text-sm text-brown-dark">{notice}</p> : null}
-
-      {!loading ? (
-        <section className="mb-6 surface-card space-y-2 p-5">
-          <h2 className="ops-section-title">Publish schedule</h2>
-          <p className="max-w-3xl text-sm text-muted">{cronNote}</p>
-          <p className="text-xs text-muted">
-            Hobby-safe Vercel Cron: <code className="text-ink">/api/cron/content-publish</code> daily
-            at 10:00 UTC. Manual Publish remains available on each scheduled row.
-          </p>
-        </section>
-      ) : null}
 
       {!loading ? (
         <section className="mb-8">
@@ -213,7 +198,7 @@ export default function CalendarPage() {
           {pending.length === 0 ? (
             <EmptyState
               title="No drafts awaiting approval"
-              description="Generate UGC or creative in Content Studio — items land here as in_review."
+              description="Generate content in Content Studio to review it here."
             />
           ) : (
             <div className="surface-card divide-y divide-line overflow-hidden">
@@ -350,7 +335,7 @@ export default function CalendarPage() {
       {!loading && scheduled.length === 0 ? (
         <EmptyState
           title="Nothing scheduled"
-          description="Approve content, then set a calendar date. Cron publishes when the date arrives."
+          description="Approve content, then set a calendar date to publish."
         />
       ) : null}
 

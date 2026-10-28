@@ -238,7 +238,7 @@ export default function AgentsPage() {
   return (
     <DashboardShell
       title="AI agents"
-      description="Eight seeded teammates share memory and tasks: AI Support, Content creator / Creative, Follow up, Marketing, Quality Control, Compliance, Leads Qualification, and Escalation officer. Admin can create agents and assign work. Live agents use Claude credentials on the host (Vercel)."
+      description="Eight seeded teammates share memory and tasks. Create agents, assign work, and collaborate from one place."
       actions={
         <div className="flex flex-wrap gap-2">
           <Link href="/agents/training">
@@ -266,18 +266,17 @@ export default function AgentsPage() {
             <Badge tone="neutral">{tasks.filter((t) => t.status === "open").length} open tasks</Badge>
           </div>
           <p className="max-w-3xl text-sm text-muted">
-            {llm.summary || aiStatusSummary(llm)} Shared memory/kv keeps collaboration context
-            across the team.
+            {llm.summary || aiStatusSummary(llm)}
           </p>
           {llm.status === "awaiting_credentials" ? (
             <div className="surface-card max-w-3xl space-y-2 p-4 text-sm">
               <p className="font-medium text-ink">Waiting credentials</p>
               <p className="text-muted">
-                Claude credentials live on Vercel. Check status on{" "}
+                Check status on{" "}
                 <a className="text-brown-dark underline" href="/integrations">
                   Integrations
                 </a>
-                . Until connected, agents stay on local assistance and still share memory.
+                . Agents stay available with local assistance until connected.
               </p>
             </div>
           ) : null}

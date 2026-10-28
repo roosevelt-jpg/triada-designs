@@ -557,7 +557,7 @@ export function buildIntegrationsHealth(opts = {}) {
     ),
     // Brand-safe summary for UI — avoid raw key/format dumps.
     summary: anthropicReady
-      ? "Claude is connected for agents and creative intelligence."
+      ? "Claude is connected on this host."
       : "Waiting for Claude credentials on Vercel.",
   };
 
@@ -662,8 +662,8 @@ export function buildIntegrationsHealth(opts = {}) {
       model: geminiModel,
       model_label: modelNickname(geminiModel),
       summary: gemini
-        ? "Gemini is connected for creative generation."
-        : "Gemini is not configured on this host yet.",
+        ? "Gemini is connected on this host."
+        : "Waiting for Gemini credentials on Vercel.",
     },
     google_places: places,
     resend: {

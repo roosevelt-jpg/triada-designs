@@ -585,7 +585,6 @@ export async function dispatchV1(method, segments, request, body) {
         content_id: contentId,
         content,
         script: content.creative_brief?.ugc_script || null,
-        flow: "generate → pending approval → calendar date → cron publish",
         asset: {
           id: `asset-${contentId}-${action}`,
           kind: action.includes("anim") ? "animation" : action.includes("video") ? "video" : "image",
@@ -629,6 +628,7 @@ export async function dispatchV1(method, segments, request, body) {
     const live = hasGeminiEnv();
     const videoProvider = String(process.env.VIDEO_PROVIDER || "gemini").toLowerCase();
     const videoLive = live || ["gemini", "veo", "runway", "luma", "http"].includes(videoProvider);
+    const videoMode = videoLive ? (live ? "gemini" : "live") : "local_sim";
     return jsonOk({
       mode: live ? "gemini" : "local_sim",
       mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
@@ -636,23 +636,15 @@ export async function dispatchV1(method, segments, request, body) {
       image: {
         mode: live ? "gemini" : "local_sim",
         mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
-        message: live
-          ? "Image generation is connected."
-          : "Image generation uses the local studio until Gemini is connected.",
+        message: live ? "Image generation is connected." : "Image generation is local.",
       },
       video: {
-        mode: videoLive ? (live ? "gemini" : videoProvider) : "local_sim",
-        mode_label: creativeModeLabel(videoLive ? (live ? "gemini" : videoProvider) : "local_sim"),
-        provider: videoProvider,
-        message: live
-          ? "Viral UGC and creative video use Gemini."
-          : "Viral UGC and creative video use Gemini when connected.",
+        mode: videoMode,
+        mode_label: creativeModeLabel(videoMode),
+        message: videoLive ? "Video generation is connected." : "Video generation is local.",
       },
       resize_engine: "triada",
-      honesty:
-        "Creative tools never auto-publish. Approve in Calendar, then schedule a publish date.",
-      summary:
-        "Generate UGC and creative with Gemini, approve in Calendar, then publish on schedule.",
+      summary: "Generate, approve, schedule, and publish.",
     });
   }
 
@@ -2101,10 +2093,8 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk({
       data: listScheduled(),
       pending_approval: listPendingApproval(),
-      flow: "generate → pending approval → calendar date → cron publish",
       cron: {
         path: "/api/cron/content-publish",
-        note: "Vercel Cron publishes due scheduled posts (approval gates enforced).",
       },
     });
   }

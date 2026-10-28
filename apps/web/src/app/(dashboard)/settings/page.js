@@ -142,12 +142,11 @@ export default function SettingsPage() {
           <section className="surface-card space-y-4 p-5">
             <h2 className="font-display text-2xl">AI agents</h2>
             <p className="max-w-2xl text-sm text-muted">
-              Connect Claude on{" "}
+              Check AI status on{" "}
               <Link href="/integrations" className="text-brown-dark underline">
                 Integrations
               </Link>
-              . Without a key, agents stay on local assistance — Triada never reports live AI success
-              without credentials.
+              . Agents stay on local assistance until credentials are connected.
             </p>
             <div className="flex flex-wrap gap-2">
               <Link href="/agents">

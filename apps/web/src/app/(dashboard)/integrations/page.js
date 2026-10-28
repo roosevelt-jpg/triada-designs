@@ -169,7 +169,7 @@ export default function IntegrationsPage() {
               <div>
                 <h2 className="ops-section-title">AI providers</h2>
                 <p className="mt-1 text-sm text-muted">
-                  Claude is primary for agents. Gemini powers creative tools when keyed on the host.
+                  Connection status for AI providers on this host.
                 </p>
               </div>
               <StatusPill
@@ -195,7 +195,7 @@ export default function IntegrationsPage() {
             />
             <ProviderRow
               title="Gemini"
-              summary={health?.gemini?.summary || "Creative AI on this host."}
+              summary={health?.gemini?.summary || "Gemini on this host."}
               status={health?.gemini?.status}
               hasCredentials={health?.gemini?.has_credentials}
               statusLabel={

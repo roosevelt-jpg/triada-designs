@@ -83,11 +83,8 @@ export default function ContentPage() {
     setBusyId(`approve-${id}`);
     try {
       const result = await apiFetch(`/v1/content/${id}/approve`, { method: "POST" });
-      const mode = result.creative?.mode || "local_sim";
       setNotice(
-        `Approved (v${result.content?.approval_version ?? "?"}). Creative pack ${
-          result.creative?.ok ? "ready" : "pending"
-        } (${mode}). Publish still requires the version gate.`
+        `Approved (v${result.content?.approval_version ?? "?"}). Ready to schedule.`
       );
       await load();
     } catch (err) {
@@ -110,7 +107,7 @@ export default function ContentPage() {
         body: { scheduled_for: when },
       });
       setNotice(
-        `Scheduled for ${formatDateTime(when)}. Appears on Calendar; Vercel Cron publishes when due.`
+        `Scheduled for ${formatDateTime(when)}. Appears on Calendar.`
       );
       await load();
     } catch (err) {
@@ -175,7 +172,7 @@ export default function ContentPage() {
       });
       const count = result.variants?.length || 0;
       setNotice(
-        `Generated ${count} platform variants (${result.mode}, engine: ${result.resize_engine || "n/a"}).`
+        `Generated ${count} platform variants (${creativeModeLabel(result.mode)}).`
       );
       await refreshMedia(item.id);
     } catch (err) {
@@ -197,7 +194,7 @@ export default function ContentPage() {
         },
       });
       setNotice(
-        `Short video drafted (${result.mode_label || result.mode || "ready"}). Open Calendar to approve and schedule.`
+        `Short video drafted (${result.mode_label || creativeModeLabel(result.mode) || "ready"}). Open Calendar to approve and schedule.`
       );
       await load();
     } catch (err) {
@@ -221,9 +218,8 @@ export default function ContentPage() {
           duration_ms: 8000,
         },
       });
-      const hook = result.script?.hook ? ` Hook: “${result.script.hook}”.` : "";
       setNotice(
-        `UGC video queued for approval (${result.mode_label || result.mode || "ready"}).${hook} Open Calendar to approve and set a publish date.`
+        `UGC video queued for approval (${result.mode_label || creativeModeLabel(result.mode) || "ready"}). Open Calendar to approve and schedule.`
       );
       await load();
     } catch (err) {
@@ -288,7 +284,7 @@ export default function ContentPage() {
   return (
     <DashboardShell
       title="Content studio"
-      description="Generate UGC and creative, send for approval, then schedule on the calendar for publish."
+      description="Generate, approve, schedule, and publish."
     >
       {loading ? <Skeleton className="h-64" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -305,10 +301,6 @@ export default function ContentPage() {
               Video: {creativeStatus.video?.mode_label || creativeModeLabel(videoMode)}
             </Badge>
           </div>
-          <p className="max-w-3xl text-sm text-muted">
-            {creativeStatus.summary ||
-              "Viral UGC and creative video use Gemini when connected. Nothing publishes until you approve and schedule it."}
-          </p>
         </section>
       ) : null}
 

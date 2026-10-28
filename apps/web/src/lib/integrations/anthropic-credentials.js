@@ -40,7 +40,7 @@ export function anthropicStatusPayload(opts) {
   const model = opts.model || envAnthropicModel();
   const status = has ? "connected" : "awaiting_credentials";
   const summary = has
-    ? "Claude is connected for agents and creative intelligence."
+    ? "Claude is connected on this host."
     : "Waiting for Claude credentials on Vercel.";
   return {
     provider: PROVIDER,
@@ -197,7 +197,7 @@ export async function getAnthropicStatus() {
       has_credentials: true,
       model: envAnthropicModel(),
       source: "env",
-      honesty: "Claude is connected for agents and creative intelligence.",
+      honesty: "Claude is connected on this host.",
     });
   }
 
@@ -207,7 +207,7 @@ export async function getAnthropicStatus() {
       has_credentials: true,
       model: stored.model || envAnthropicModel(),
       source: stored.storage,
-      honesty: "Claude is connected for agents and creative intelligence.",
+      honesty: "Claude is connected on this host.",
     });
   }
 
@@ -322,7 +322,7 @@ export async function saveAnthropicCredentials(input) {
     has_credentials: true,
     model,
     source: storage,
-    honesty: "Claude is connected for agents and creative intelligence.",
+    honesty: "Claude is connected on this host.",
   });
 
   return { ok: true, anthropic: status, storage };
