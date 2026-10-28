@@ -1,4 +1,7 @@
+import { formatIntlDate, formatIntlDateTime } from "@/lib/date-format";
 import { formatInWorkspace } from "@/lib/system-time";
+
+export { formatIntlDate, formatIntlDateTime };
 
 /** @param {number|string|null|undefined} value */
 export function formatCurrency(value, currency = "USD") {

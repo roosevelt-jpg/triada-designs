@@ -7,16 +7,12 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Input } from "@/components/ui/Input";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { apiFetch } from "@/lib/api-client";
+import { toIntlDateTimeValue } from "@/lib/date-format";
 import { creativeModeLabel } from "@/lib/integrations/brand-labels";
 import { formatDateTime } from "@/lib/formatters";
 import { nowDate, syncSystemTime } from "@/lib/system-time";
-
-function toLocalInputValue(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
 
 function modeTone(mode) {
   const label = creativeModeLabel(mode);
@@ -495,18 +491,18 @@ export default function ContentPage() {
                   ) : null}
                   {item.status === "approved" ? (
                     <>
-                      <Input
-                        type="datetime-local"
+                      <DatePicker
+                        mode="datetime"
                         label="Calendar date"
                         className="min-w-[12rem]"
                         value={
                           scheduleDrafts[item.id] ||
-                          toLocalInputValue(
+                          toIntlDateTimeValue(
                             new Date(nowDate().getTime() + 3 * 24 * 60 * 60 * 1000)
                           )
                         }
-                        onChange={(e) =>
-                          setScheduleDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
+                        onChange={(next) =>
+                          setScheduleDrafts((prev) => ({ ...prev, [item.id]: next }))
                         }
                       />
                       <Button

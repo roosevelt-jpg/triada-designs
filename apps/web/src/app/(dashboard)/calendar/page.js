@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { Input } from "@/components/ui/Input";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import { toIntlDateTimeValue } from "@/lib/date-format";
 import { formatDateTime } from "@/lib/formatters";
 import { getSystemTimeState, nowDate, syncSystemTime } from "@/lib/system-time";
 
@@ -26,11 +27,6 @@ function sameDay(a, b) {
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
   );
-}
-
-function toLocalInputValue(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export default function CalendarPage() {
@@ -176,7 +172,7 @@ export default function CalendarPage() {
 
   const monthLabel = monthCursor.toLocaleString(undefined, { month: "long", year: "numeric" });
   const today = nowDate();
-  const defaultScheduleValue = toLocalInputValue(
+  const defaultScheduleValue = toIntlDateTimeValue(
     new Date(nowDate().getTime() + 3 * 24 * 60 * 60 * 1000)
   );
 
@@ -249,12 +245,13 @@ export default function CalendarPage() {
                     <Badge tone="brand">approved · v{item.approval_version ?? 0}</Badge>
                   </div>
                   <div className="flex flex-wrap items-end gap-2">
-                    <Input
-                      type="datetime-local"
+                    <DatePicker
+                      mode="datetime"
                       label="Publish at"
+                      className="min-w-[12rem]"
                       value={scheduleDrafts[item.id] || defaultScheduleValue}
-                      onChange={(e) =>
-                        setScheduleDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
+                      onChange={(next) =>
+                        setScheduleDrafts((prev) => ({ ...prev, [item.id]: next }))
                       }
                     />
                     <Button
@@ -357,16 +354,18 @@ export default function CalendarPage() {
                 </div>
                 {(item.status === "scheduled" || item.status === "approved") && (
                   <>
-                    <Input
-                      type="datetime-local"
+                    <DatePicker
+                      mode="datetime"
                       label="Reschedule"
-                      className="min-w-[11rem]"
+                      className="min-w-[12rem]"
                       value={
                         scheduleDrafts[item.id] ||
-                        toLocalInputValue(item.scheduled_for ? new Date(item.scheduled_for) : nowDate())
+                        toIntlDateTimeValue(
+                          item.scheduled_for ? new Date(item.scheduled_for) : nowDate()
+                        )
                       }
-                      onChange={(e) =>
-                        setScheduleDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
+                      onChange={(next) =>
+                        setScheduleDrafts((prev) => ({ ...prev, [item.id]: next }))
                       }
                     />
                     <Button

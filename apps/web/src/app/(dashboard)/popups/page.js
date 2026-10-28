@@ -11,9 +11,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import { formatIntlDate, toIntlDateValue } from "@/lib/date-format";
 import { connectionLabel } from "@/lib/integrations/brand-labels";
 
 export default function PopupsPage() {
@@ -67,7 +69,7 @@ export default function PopupsPage() {
   useEffect(() => {
     const d = new Date();
     d.setDate(d.getDate() + 10);
-    setDeadline(d.toISOString().slice(0, 10));
+    setDeadline(toIntlDateValue(d));
     load();
   }, [load]);
 
@@ -169,10 +171,11 @@ export default function PopupsPage() {
             <form className="mt-3 space-y-4" onSubmit={addMarket}>
               <div className="grid gap-3 md:grid-cols-2">
                 <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
-                <Input
+                <DatePicker
+                  mode="date"
                   label="Application deadline"
                   value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
+                  onChange={setDeadline}
                 />
               </div>
 
@@ -204,7 +207,7 @@ export default function PopupsPage() {
                     <p className="font-medium text-ink">{m.name}</p>
                     <p className="text-muted">
                       {locationLine(m)} · fee {m.fee_aed ?? "—"} AED · deadline{" "}
-                      {m.application_deadline || "—"}
+                      {formatIntlDate(m.application_deadline) || "—"}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
