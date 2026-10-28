@@ -11,6 +11,10 @@ export const SEED_ADMIN = {
   password: "triada-local",
 };
 
+/**
+ * Sidebar navigation — short category bands, scan-friendly groups.
+ * Category labels render as non-route headers with stone/shadow band styling.
+ */
 export const DASHBOARD_NAV = [
   {
     label: "Workspace",
@@ -20,6 +24,10 @@ export const DASHBOARD_NAV = [
       { href: "/contacts", label: "Contacts" },
       { href: "/leads", label: "Leads" },
     ],
+  },
+  {
+    label: "Insights",
+    items: [{ href: "/analytics", label: "Analytics" }],
   },
   {
     label: "Commerce",
@@ -56,7 +64,6 @@ export const DASHBOARD_NAV = [
     items: [
       { href: "/integrations", label: "Integrations" },
       { href: "/integrations/channels", label: "Sales channels" },
-      { href: "/analytics", label: "Analytics" },
       { href: "/team", label: "Team" },
       { href: "/audit-logs", label: "Audit logs" },
       { href: "/settings", label: "Settings" },

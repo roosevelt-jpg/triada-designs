@@ -12,6 +12,39 @@ export const ADMIN_EMAIL = "info@triada-designs.com";
 export const ADMIN_PASSWORD = "triada-local";
 export const ADMIN_NAME = "Triada Admin";
 
+/** Bearer prefix for local dual-run when Supabase Auth env is unset. */
+export const LOCAL_SEED_TOKEN_PREFIX = "triada-local-seed.";
+
+/**
+ * Local seed auth is for dual-run hosts without Supabase keys
+ * (never enabled when anon credentials are present).
+ */
+export function localSeedAuthEnabled() {
+  if (hasSupabaseAnonCredentials()) return false;
+  if (process.env.TRIADA_DISABLE_LOCAL_SEED_AUTH === "1") return false;
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.TRIADA_LOCAL_SEED_AUTH === "1"
+  );
+}
+
+/** @returns {import('@supabase/supabase-js').User} */
+export function localSeedUser() {
+  return {
+    id: "local-seed-admin",
+    email: ADMIN_EMAIL,
+    user_metadata: { name: ADMIN_NAME },
+    app_metadata: { provider: "local_seed" },
+    aud: "authenticated",
+    created_at: "2026-01-01T00:00:00.000Z",
+  };
+}
+
+/** @param {string} token */
+export function isLocalSeedToken(token) {
+  return Boolean(token && token.startsWith(LOCAL_SEED_TOKEN_PREFIX));
+}
+
 /**
  * Sanctum-shaped workspace stub so the existing dashboard shell keeps working
  * while Laravel dual-run APIs are still migrating.
@@ -46,13 +79,14 @@ export function toAuthUser(user) {
  * @param {import('@supabase/supabase-js').User} user
  */
 export function loginResponsePayload(accessToken, user) {
+  const local = isLocalSeedToken(accessToken);
   return {
     token: accessToken,
     token_type: "Bearer",
     user: toAuthUser(user),
     workspace: defaultWorkspacePayload(),
     role: "admin",
-    auth_provider: "supabase",
+    auth_provider: local ? "local_seed" : "supabase",
   };
 }
 
@@ -147,6 +181,17 @@ export async function ensureAdminUser(
  */
 export async function signInWithPassword(email, password) {
   if (!hasSupabaseAnonCredentials()) {
+    if (
+      localSeedAuthEnabled() &&
+      email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
+      password === ADMIN_PASSWORD
+    ) {
+      return {
+        ok: true,
+        accessToken: `${LOCAL_SEED_TOKEN_PREFIX}${Date.now()}`,
+        user: localSeedUser(),
+      };
+    }
     return {
       ok: false,
       status: 503,
@@ -222,6 +267,9 @@ export async function signInWithPassword(email, password) {
 export async function getUserFromAccessToken(accessToken) {
   if (!accessToken) {
     return { ok: false, status: 401, message: "Unauthenticated." };
+  }
+  if (isLocalSeedToken(accessToken) && localSeedAuthEnabled()) {
+    return { ok: true, user: localSeedUser() };
   }
   if (!hasSupabaseAnonCredentials()) {
     return {

@@ -5,12 +5,15 @@
   --color-brand-brown: #9a7958;
   --color-brand-brown-dark: #70563f;
   --color-brand-champagne: #c7ae8a;
+  /* Brand gold for primary control labels on black surfaces */
+  --color-brand-gold: #c7ae8a;
   --color-brand-sand: #e8ded0;
   --color-brand-ivory: #faf8f4;
   --color-white: #ffffff;
   --color-stone: #f0eeea;
   --color-muted: #77716a;
   --color-border: #e4ded6;
+  --color-black: #0c0b0a;
 
   --color-success: #237a57;
   --color-warning: #946200;

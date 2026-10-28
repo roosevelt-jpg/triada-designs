@@ -9,6 +9,7 @@ import {
   SERVICES,
   WORKSPACE,
   buildAgents,
+  buildAnalyticsPayload,
   buildContacts,
   buildContent,
   buildConversations,
@@ -825,16 +826,7 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "analytics" && m === "GET") {
-    return jsonOk({
-      metrics: {
-        conversations: 12,
-        open_conversations: 4,
-        leads: 5,
-        qualified_leads: 2,
-        publications: 1,
-      },
-      by_channel: { instagram: 5, whatsapp: 4, facebook: 3 },
-    });
+    return jsonOk(buildAnalyticsPayload());
   }
 
   if (path === "team" && m === "GET") {

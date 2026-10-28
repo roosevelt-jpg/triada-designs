@@ -48,11 +48,18 @@ export function DashboardShell({ children, title, description, actions }) {
   }
 
   return (
-    <div className="min-h-screen bg-ivory text-ink">
-      <div className="mx-auto flex min-h-screen max-w-[1680px]">
+    <div className="ops-atmosphere relative min-h-screen text-ink">
+      <div
+        className="pointer-events-none absolute inset-0 -z-10 opacity-70 soft-pan"
+        aria-hidden
+      >
+        <div className="ops-atmosphere-glow" />
+      </div>
+
+      <div className="relative mx-auto flex min-h-screen max-w-[1680px]">
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-line bg-white transition-transform duration-200 lg:static lg:translate-x-0",
+            "fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-line/80 bg-white/92 backdrop-blur-md transition-transform duration-200 lg:static lg:translate-x-0",
             open ? "translate-x-0" : "-translate-x-full"
           )}
         >
@@ -74,12 +81,10 @@ export function DashboardShell({ children, title, description, actions }) {
             </button>
           </div>
 
-          <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4" aria-label="Dashboard">
+          <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4" aria-label="Dashboard">
             {DASHBOARD_NAV.map((section) => (
               <div key={section.label}>
-                <p className="rounded-sm bg-stone px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-                  {section.label}
-                </p>
+                <p className="nav-category-band">{section.label}</p>
                 <ul className="mt-1.5 space-y-0.5">
                   {section.items.map((item) => {
                     const active =
@@ -92,7 +97,7 @@ export function DashboardShell({ children, title, description, actions }) {
                           className={cn(
                             "block rounded-md px-2.5 py-2 text-[13.5px] transition-colors duration-150",
                             active
-                              ? "bg-sand font-medium text-brown-dark"
+                              ? "bg-sand font-medium text-brown-dark shadow-[inset_0_0_0_1px_rgba(154,121,88,0.18)]"
                               : "font-normal text-ink/80 hover:bg-ivory hover:text-ink"
                           )}
                         >
@@ -124,7 +129,7 @@ export function DashboardShell({ children, title, description, actions }) {
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-20 flex h-[68px] items-center justify-between gap-3 border-b border-line bg-ivory/95 px-4 md:px-6">
+          <header className="sticky top-0 z-20 flex h-[68px] items-center justify-between gap-3 border-b border-line/80 bg-ivory/85 px-4 backdrop-blur-md md:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
@@ -134,7 +139,7 @@ export function DashboardShell({ children, title, description, actions }) {
               >
                 <Menu size={18} />
               </button>
-              <div className="hidden min-w-[220px] max-w-md flex-1 items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm text-muted md:flex">
+              <div className="hidden min-w-[220px] max-w-md flex-1 items-center gap-2 rounded-md border border-line bg-white/90 px-3 py-2 text-sm text-muted md:flex">
                 <Search size={15} className="shrink-0 text-champagne" aria-hidden />
                 <span className="truncate">Search contacts, conversations, content</span>
               </div>
@@ -162,7 +167,8 @@ export function DashboardShell({ children, title, description, actions }) {
 
           <main className="flex-1 px-4 py-5 md:px-6 md:py-6">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div className="min-w-0">
+              <div className="min-w-0 fade-rise">
+                <div className="mb-2 h-px w-16 bg-gradient-to-r from-champagne via-brown to-transparent animate-pulse-soft" />
                 <h1 className="font-display text-[1.85rem] leading-tight tracking-[-0.02em] text-ink md:text-[2.15rem]">
                   {title}
                 </h1>
@@ -172,7 +178,7 @@ export function DashboardShell({ children, title, description, actions }) {
                   </p>
                 ) : null}
               </div>
-              {actions ? <div className="shrink-0">{actions}</div> : null}
+              {actions ? <div className="shrink-0 fade-rise-delay">{actions}</div> : null}
             </div>
             {children}
           </main>

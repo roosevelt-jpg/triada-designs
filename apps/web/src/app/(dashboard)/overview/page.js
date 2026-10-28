@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { AiInsightsPanel } from "@/components/dashboard/AiInsightsPanel";
 import { StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -14,6 +15,7 @@ import { nowDate, syncSystemTime } from "@/lib/system-time";
 
 export default function OverviewPage() {
   const [data, setData] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [today, setToday] = useState("");
@@ -24,8 +26,12 @@ export default function OverviewPage() {
     try {
       await syncSystemTime().catch(() => {});
       setToday(formatDateLong(nowDate()));
-      const response = await apiFetch("/v1/dashboard");
-      setData(response);
+      const [dashboard, analyticsPayload] = await Promise.all([
+        apiFetch("/v1/dashboard"),
+        apiFetch("/v1/analytics").catch(() => null),
+      ]);
+      setData(dashboard);
+      setAnalytics(analyticsPayload);
     } catch (err) {
       setError(err.message || "Failed to load dashboard");
     } finally {
@@ -37,58 +43,74 @@ export default function OverviewPage() {
     load();
   }, [load]);
 
+  const insights =
+    data?.ai_insights || analytics?.ai_insights || null;
+
   return (
     <DashboardShell
       title="Overview"
-      description={`Workspace pulse${today ? ` · ${today}` : ""}. Metrics come from persisted Triada records only.`}
+      description={`Workspace pulse${today ? ` · ${today}` : ""}. Metrics from Triada dual-run records.`}
       actions={
         <div className="flex flex-wrap gap-2">
           <Link href="/inbox">
-            <Button size="sm" variant="secondary">
-              Open inbox
-            </Button>
+            <Button size="sm">Open inbox</Button>
           </Link>
-          <Link href="/automations">
+          <Link href="/analytics">
             <Button size="sm" variant="secondary">
-              Workflows
+              Full analytics
             </Button>
           </Link>
         </div>
       }
     >
       {loading ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-24" />
-          ))}
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-24" />
+            ))}
+          </div>
+          <Skeleton className="h-64" />
         </div>
       ) : null}
 
       {error ? <ErrorState message={error} onRetry={load} /> : null}
 
       {!loading && !error && data ? (
-        <div className="space-y-5">
+        <div className="space-y-6">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="Open conversations" value={data.metrics.open_conversations} />
-            <StatCard label="Unanswered" value={data.metrics.unanswered_conversations} />
-            <StatCard label="Qualified leads" value={data.metrics.qualified_leads} />
             <StatCard
+              className="fade-rise"
+              label="Open conversations"
+              value={data.metrics.open_conversations}
+            />
+            <StatCard
+              className="fade-rise"
+              label="Unanswered"
+              value={data.metrics.unanswered_conversations}
+            />
+            <StatCard
+              className="fade-rise"
+              label="Qualified leads"
+              value={data.metrics.qualified_leads}
+            />
+            <StatCard
+              className="fade-rise"
               label="Awaiting approval"
               value={data.metrics.content_awaiting_approval}
             />
-            <StatCard
-              label="AI-mode conversations"
-              value={data.metrics.ai_handled_conversations}
-            />
+            <StatCard label="AI-mode conversations" value={data.metrics.ai_handled_conversations} />
             <StatCard label="Human escalations" value={data.metrics.human_escalations} />
             <StatCard label="Open tasks" value={data.metrics.open_tasks} />
             <StatCard label="Contacts" value={data.metrics.contacts} />
           </div>
 
-          <section className="surface-card overflow-hidden">
+          <AiInsightsPanel insights={insights} />
+
+          <section className="surface-card overflow-hidden fade-rise">
             <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
               <h2 className="ops-section-title">Channel health</h2>
-              <Badge tone="brand">Persisted integrations</Badge>
+              <Badge tone="brand">Integrations</Badge>
             </div>
             <div className="divide-y divide-line">
               {data.channel_health.map((item) => (

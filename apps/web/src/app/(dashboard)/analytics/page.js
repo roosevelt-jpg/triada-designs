@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { AiInsightsPanel } from "@/components/dashboard/AiInsightsPanel";
+import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
@@ -28,45 +31,46 @@ export default function AnalyticsPage() {
   }, [load]);
 
   const metrics = data?.metrics || {};
-  const byChannel = data?.conversations_by_channel || {};
 
   return (
     <DashboardShell
       title="Analytics"
-      description="Operational metrics from persisted workspace data — not fabricated dashboards."
+      description="Operational metrics from persisted workspace data via dual-run APIs."
+      actions={
+        <Link href="/overview">
+          <Button size="sm" variant="secondary">
+            Back to overview
+          </Button>
+        </Link>
+      }
     >
-      {loading ? <Skeleton className="h-40" /> : null}
+      {loading ? (
+        <div className="space-y-4">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-64" />
+        </div>
+      ) : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && data ? (
         <div className="space-y-6">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {Object.entries(metrics).map(([key, value]) => (
-              <div key={key} className="surface-card p-4">
-                <p className="text-xs uppercase tracking-wide text-muted">{key.replaceAll("_", " ")}</p>
-                <p className="mt-2 font-display text-3xl">{value}</p>
+              <div key={key} className="surface-card p-4 fade-rise">
+                <p className="text-xs uppercase tracking-wide text-muted">
+                  {key.replaceAll("_", " ")}
+                </p>
+                <p className="mt-2 font-display text-3xl tabular-nums text-ink">{value}</p>
               </div>
             ))}
           </div>
-          <section className="surface-card p-5">
-            <h2 className="font-display text-2xl">Conversations by channel</h2>
-            <ul className="mt-3 space-y-2">
-              {Object.keys(byChannel).length === 0 ? (
-                <li className="text-sm text-muted">No conversations yet.</li>
-              ) : (
-                Object.entries(byChannel).map(([channel, total]) => (
-                  <li key={channel} className="flex justify-between border-b border-line py-2 text-sm">
-                    <span className="capitalize">{channel}</span>
-                    <span>{total}</span>
-                  </li>
-                ))
-              )}
-            </ul>
-            {(data.notes || []).map((note) => (
-              <p key={note} className="mt-3 text-xs text-muted">
-                {note}
-              </p>
-            ))}
-          </section>
+
+          <AiInsightsPanel insights={data.ai_insights} />
+
+          {(data.notes || []).map((note) => (
+            <p key={note} className="text-xs text-muted">
+              {note}
+            </p>
+          ))}
         </div>
       ) : null}
     </DashboardShell>
