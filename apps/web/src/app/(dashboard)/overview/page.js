@@ -5,23 +5,12 @@ import Link from "next/link";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { AiInsightsPanel } from "@/components/dashboard/AiInsightsPanel";
 import { StatCard } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
-import { formatDateLong, formatDateTime } from "@/lib/formatters";
-import { connectionLabel } from "@/lib/integrations/brand-labels";
+import { formatDateLong } from "@/lib/formatters";
 import { nowDate, syncSystemTime } from "@/lib/system-time";
-
-function channelHealthTone(status) {
-  const s = String(status || "").toLowerCase();
-  if (s === "connected" || s === "healthy" || s === "live") return "success";
-  if (s === "seeded" || s === "local" || s === "local_sim") return "neutral";
-  if (s === "error" || s === "disconnected") return "danger";
-  if (s === "awaiting_credentials") return "warning";
-  return "neutral";
-}
 
 export default function OverviewPage() {
   const [data, setData] = useState(null);
@@ -116,31 +105,6 @@ export default function OverviewPage() {
           </div>
 
           <AiInsightsPanel insights={insights} />
-
-          <section className="surface-card overflow-hidden fade-rise">
-            <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
-              <h2 className="ops-section-title">Channel health</h2>
-              <Badge tone="brand">Integrations</Badge>
-            </div>
-            <div className="divide-y divide-line">
-              {data.channel_health.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex flex-col gap-2 px-5 py-3.5 transition-colors duration-150 hover:bg-stone/40 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium capitalize text-ink">{item.display_name}</p>
-                    <p className="text-sm text-muted">
-                      Last check: {formatDateTime(item.last_health_check_at)}
-                    </p>
-                  </div>
-                  <Badge tone={channelHealthTone(item.status)}>
-                    {item.status_label || connectionLabel(item.status)}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </section>
         </div>
       ) : null}
     </DashboardShell>
