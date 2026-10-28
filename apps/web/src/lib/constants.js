@@ -55,6 +55,7 @@ export const DASHBOARD_NAV = [
     items: [
       { href: "/automations", label: "Workflows" },
       { href: "/agents", label: "AI agents" },
+      { href: "/agents/training", label: "Training docs" },
       { href: "/knowledge", label: "Knowledge" },
       { href: "/jewellery-ops", label: "Jewellery ops" },
     ],

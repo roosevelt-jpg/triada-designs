@@ -149,9 +149,31 @@ export default function SettingsPage() {
               . Without a key, agents stay on local assistance — Triada never reports live AI success
               without credentials.
             </p>
-            <Link href="/agents">
-              <Button variant="secondary">Open agents</Button>
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/agents">
+                <Button variant="secondary">Open agents</Button>
+              </Link>
+              <Link href="/agents/training">
+                <Button variant="secondary">Training docs</Button>
+              </Link>
+            </div>
+          </section>
+
+          <section className="surface-card space-y-4 p-5">
+            <h2 className="font-display text-2xl">Brand on outbound</h2>
+            <p className="max-w-2xl text-sm text-muted">
+              WhatsApp, email, invoices, receipts, and channel templates include the Triada logo
+              header, address footer, and warm greetings. Logo sourced from{" "}
+              <a
+                href="https://triada-designs.com"
+                className="text-brown-dark underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                triada-designs.com
+              </a>
+              .
+            </p>
           </section>
 
           <section className="surface-card space-y-4 p-5">

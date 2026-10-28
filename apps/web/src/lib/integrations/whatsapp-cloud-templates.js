@@ -84,6 +84,8 @@ function extractBody(row) {
  * }} def
  */
 function seedRow(def) {
+  const logoUrl =
+    "https://triada-designs.com/wp-content/uploads/2025/07/TM_Schriftzug_vulcano.svg";
   return {
     id: def.id,
     name: def.name,
@@ -92,12 +94,28 @@ function seedRow(def) {
     language: "en",
     body: def.body,
     variables: def.variables || [],
-    components: [{ type: "BODY", text: def.body }],
+    components: [
+      {
+        type: "HEADER",
+        format: "IMAGE",
+        example: { header_handle: [logoUrl] },
+      },
+      { type: "BODY", text: def.body },
+      {
+        type: "FOOTER",
+        text: "Triada Designs · Timisoara · triada-designs.com",
+      },
+    ],
+    branded: true,
+    logo_url: logoUrl,
     source: "seeded",
     metadata: {
       vertical: "jewellery",
       campaign_type: def.campaign_type,
       from_automation_doc: true,
+      brand_header: true,
+      brand_footer: true,
+      warm_greeting: true,
     },
   };
 }
@@ -114,7 +132,7 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "jewellery_follow_up",
       category: "MARKETING",
       campaign_type: "inquiry_follow_up",
-      body: "Hi {{1}}, following up on your Triada Designs jewellery inquiry. Reply YES to continue, or visit triada-designs.com.",
+      body: "Warm greetings from Triada Designs, {{1}}. Following up on your jewellery inquiry. Reply YES to continue, or visit triada-designs.com. — Triada Designs · Strada Horia Creanga 22-24, Timisoara 300254, Romania · info@triada-designs.com",
       variables: ["name"],
     }),
     seedRow({
@@ -122,7 +140,7 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "jewellery_order_update",
       category: "UTILITY",
       campaign_type: "order_update",
-      body: "Your Triada Designs order {{1}} update: {{2}}. Reply STOP to opt out of marketing messages.",
+      body: "Warm greetings from Triada Designs. Your order {{1}} update: {{2}}. Reply STOP to opt out of marketing messages. — Triada Designs · info@triada-designs.com · triada-designs.com",
       variables: ["order_number", "status"],
     }),
     seedRow({
@@ -130,7 +148,7 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "jewellery_order_confirmed",
       category: "UTILITY",
       campaign_type: "order_confirmed",
-      body: "Your Triada Designs order {{1}} is confirmed. We handcraft each piece — about 7 days. Reply here with questions.",
+      body: "Warm greetings from Triada Designs. Your order {{1}} is confirmed. We handcraft each piece — about 7 days. Reply here with questions. — Triada Designs · Timisoara, Romania · info@triada-designs.com",
       variables: ["order_number"],
     }),
     seedRow({
@@ -138,7 +156,7 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "jewellery_order_in_production",
       category: "UTILITY",
       campaign_type: "order_in_production",
-      body: "Your Triada Designs order {{1}} is in production. We will message you when it ships.",
+      body: "Warm greetings from Triada Designs. Your order {{1}} is in production. We will message you when it ships. — Triada Designs · info@triada-designs.com",
       variables: ["order_number"],
     }),
     seedRow({
@@ -146,7 +164,7 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "jewellery_order_shipped",
       category: "UTILITY",
       campaign_type: "order_shipped",
-      body: "Your Triada Designs order {{1}} has shipped. Tracking: {{2}}. Reply here if you need help.",
+      body: "Warm greetings from Triada Designs. Your order {{1}} has shipped. Tracking: {{2}}. Reply here if you need help. — Triada Designs · info@triada-designs.com · triada-designs.com",
       variables: ["order_number", "tracking"],
     }),
     seedRow({
@@ -154,7 +172,7 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "jewellery_order_delivered",
       category: "UTILITY",
       campaign_type: "order_delivered",
-      body: "Your Triada Designs order {{1}} was delivered. Enjoy your piece — reply CARE for care tips.",
+      body: "Warm greetings, and thank you for choosing Triada Designs. Your order {{1}} was delivered. Enjoy your piece — reply CARE for care tips. — Triada Designs · info@triada-designs.com",
       variables: ["order_number"],
     }),
     seedRow({
@@ -163,14 +181,14 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       category: "MARKETING",
       campaign_type: "consultation",
       status: "PENDING",
-      body: "Triada Designs can arrange a personal jewellery consultation. Reply BOOK to request a time — a specialist will confirm.",
+      body: "Warm greetings from Triada Designs. We can arrange a personal jewellery consultation. Reply BOOK to request a time — a specialist will confirm. — Triada Designs · info@triada-designs.com",
     }),
     seedRow({
       id: "sim-wa-new-piece",
       name: "new_piece_preview",
       category: "MARKETING",
       campaign_type: "new_drop",
-      body: "{{1}}, a new Triada Designs piece is ready to view. Open the link we share in-session, or reply INTERESTED.",
+      body: "Warm greetings from Triada Designs, {{1}}. A new piece is ready to view. Open the link we share in-session, or reply INTERESTED. — Triada Designs · triada-designs.com",
       variables: ["name"],
     }),
     seedRow({
@@ -178,7 +196,7 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "cart_abandonment_remind",
       category: "MARKETING",
       campaign_type: "abandonment_cart",
-      body: "Hi {{1}}, your Triada Designs cart still has {{2}}. Reply YES and we will help you finish — or STOP to opt out.",
+      body: "Warm greetings from Triada Designs, {{1}}. Your cart still has {{2}}. Reply YES and we will help you finish — or STOP to opt out. — Triada Designs · info@triada-designs.com",
       variables: ["name", "piece"],
     }),
     seedRow({
@@ -186,7 +204,7 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "sizing_abandonment_remind",
       category: "MARKETING",
       campaign_type: "abandonment_sizing",
-      body: "Hi {{1}}, still deciding on size for your Triada Designs piece? Reply SIZE for our guide, or ask a specialist here.",
+      body: "Warm greetings from Triada Designs, {{1}}. Still deciding on size? Reply SIZE for our guide, or ask a specialist here. — Triada Designs · info@triada-designs.com",
       variables: ["name"],
     }),
     seedRow({
@@ -194,7 +212,7 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "waitlist_back_in_stock",
       category: "MARKETING",
       campaign_type: "waitlist",
-      body: "{{1}}, your waitlisted Triada Designs piece ({{2}}) is available again. Reply CLAIM to continue — limited stock.",
+      body: "Warm greetings from Triada Designs, {{1}}. Your waitlisted piece ({{2}}) is available again. Reply CLAIM to continue — limited stock. — Triada Designs · info@triada-designs.com",
       variables: ["name", "piece"],
     }),
     seedRow({
@@ -202,7 +220,7 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "vip_drop_first_access",
       category: "MARKETING",
       campaign_type: "vip_drop",
-      body: "{{1}}, VIP first access: a new Triada Designs drop is live for you. Reply VIP or open the private link we share in-session.",
+      body: "Warm greetings from Triada Designs, {{1}}. VIP first access: a new drop is live for you. Reply VIP or open the private link we share in-session. — Triada Designs · triada-designs.com",
       variables: ["name"],
     }),
     seedRow({
@@ -210,14 +228,14 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "after_sale_care_tips",
       category: "UTILITY",
       campaign_type: "after_sale_care",
-      body: "Care tips for your Triada Designs piece: store dry, wipe gently after wear, avoid harsh chemicals. Reply HELP for more.",
+      body: "Warm greetings, and thank you for choosing Triada Designs. Care tips: store dry, wipe gently after wear, avoid harsh chemicals. Reply HELP for more. — Triada Designs · info@triada-designs.com",
     }),
     seedRow({
       id: "sim-wa-after-sale-review",
       name: "after_sale_review_request",
       category: "MARKETING",
       campaign_type: "after_sale_review",
-      body: "Hi {{1}}, how is your Triada Designs piece? A short review helps others choose — reply REVIEW or visit the link we share.",
+      body: "Warm greetings from Triada Designs, {{1}}. How is your piece? A short review helps others choose — reply REVIEW or visit the link we share. — Triada Designs · info@triada-designs.com",
       variables: ["name"],
     }),
     seedRow({
@@ -225,7 +243,7 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "after_sale_complete_the_set",
       category: "MARKETING",
       campaign_type: "after_sale_complete_set",
-      body: "{{1}}, complete the set — pieces that pair with yours are ready. Reply SET for suggestions, or STOP to opt out.",
+      body: "Warm greetings from Triada Designs, {{1}}. Complete the set — pieces that pair with yours are ready. Reply SET for suggestions, or STOP to opt out. — Triada Designs · triada-designs.com",
       variables: ["name"],
     }),
     seedRow({
@@ -233,7 +251,7 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "ugc_tag_invite",
       category: "MARKETING",
       campaign_type: "ugc_invite",
-      body: "{{1}}, love your Triada Designs piece? Share a photo or reel and tag us for a thank-you reward. Reply TAG for details.",
+      body: "Warm greetings from Triada Designs, {{1}}. Love your piece? Share a photo or reel and tag us for a thank-you reward. Reply TAG for details. — Triada Designs · info@triada-designs.com",
       variables: ["name"],
     }),
   ];

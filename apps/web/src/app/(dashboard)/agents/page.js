@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
@@ -132,7 +133,14 @@ export default function AgentsPage() {
   return (
     <DashboardShell
       title="AI agents"
-      description="Support, sales, marketing, content, lead qualification, and sales ops. Connect Claude on Integrations to enable live agents."
+      description="Support, sales, marketing, content, lead qualification, and sales ops. Connect Claude on Integrations to enable live agents. Training docs set tone, timing, and open/close — agents retrieve them when unsure."
+      actions={
+        <Link href="/agents/training">
+          <Button variant="secondary" size="sm">
+            Training docs
+          </Button>
+        </Link>
+      }
     >
       {loading ? (
         <div className="space-y-3">
@@ -240,11 +248,22 @@ export default function AgentsPage() {
                 </Button>
                 {testResult ? (
                   <div className="space-y-1.5 rounded-md border border-line bg-stone/40 p-3 text-sm text-muted">
-                    <p>
+                    <p className="whitespace-pre-wrap text-ink">
                       {typeof testResult.output === "string"
                         ? testResult.output
-                        : "Dry run completed."}
+                        : typeof testResult.text === "string"
+                          ? testResult.text
+                          : "Dry run completed."}
                     </p>
+                    {Array.isArray(testResult.training_used) && testResult.training_used.length ? (
+                      <p className="text-xs">
+                        Training retrieved:{" "}
+                        {testResult.training_used.map((t) => t.title).join(" · ")}
+                      </p>
+                    ) : null}
+                    {testResult.mode ? (
+                      <p className="text-xs">Mode: {testResult.mode}</p>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

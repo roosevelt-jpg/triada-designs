@@ -139,19 +139,41 @@ export default function OrdersPage() {
           <section className="surface-card overflow-hidden">
             <div className="border-b border-line px-5 py-3.5">
               <h2 className="ops-section-title">Invoices</h2>
+              <p className="mt-1 text-sm text-muted">
+                Branded with Triada logo header, warm greeting, and address footer (HTML/PDF print path).
+              </p>
             </div>
             <div className="divide-y divide-line">
               {invoices.length === 0 ? <p className="px-5 py-4 text-sm text-muted">No invoices yet.</p> : null}
               {invoices.map((inv) => (
-                <div key={inv.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
-                  <div>
-                    <p className="font-medium text-ink">{inv.invoice_number}</p>
-                    <p className="text-sm text-muted">
-                      {inv.type} · {inv.amount} {inv.currency} · PDF {inv.pdf_mode}
-                      {inv.einvoice_provider ? ` · ${inv.einvoice_provider}:${inv.einvoice_status}` : ""}
-                    </p>
+                <div key={inv.id} className="space-y-2 px-5 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-ink">
+                        {inv.invoice_number || inv.id}
+                      </p>
+                      <p className="text-sm text-muted">
+                        {inv.type || "invoice"} · {inv.amount ?? inv.total} {inv.currency} · PDF{" "}
+                        {inv.pdf_mode || "html_print"}
+                        {inv.einvoice_provider ? ` · ${inv.einvoice_provider}:${inv.einvoice_status}` : ""}
+                        {inv.branded ? " · branded" : ""}
+                      </p>
+                      {inv.greeting ? (
+                        <p className="mt-1 text-sm text-brown-dark">{inv.greeting}</p>
+                      ) : null}
+                    </div>
+                    <Badge>{inv.status}</Badge>
                   </div>
-                  <Badge>{inv.status}</Badge>
+                  {inv.html ? (
+                    <details className="rounded-md border border-line bg-stone/30 p-2">
+                      <summary className="cursor-pointer text-sm text-muted">Preview branded invoice</summary>
+                      <iframe
+                        title={`Invoice ${inv.invoice_number || inv.id}`}
+                        srcDoc={inv.html}
+                        className="mt-2 h-80 w-full rounded-sm border border-line bg-white"
+                      />
+                    </details>
+                  ) : null}
                 </div>
               ))}
             </div>

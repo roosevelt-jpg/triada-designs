@@ -60,6 +60,18 @@ import {
   getUserFromAccessToken,
   readBearerToken,
 } from "@/lib/auth/supabase-auth";
+import { runAgentOrchestration } from "@/lib/agents/orchestrator";
+import {
+  deleteTrainingDoc,
+  listTrainingDocs,
+  retrieveTrainingDocs,
+  upsertTrainingDoc,
+} from "@/lib/training/training-docs-store";
+import { wrapChannelTemplate } from "@/lib/brand/wrap-template";
+import { wrapEmailMessage } from "@/lib/brand/wrap-email";
+import { wrapInvoiceDocument } from "@/lib/brand/wrap-invoice";
+import { ensureBrandedOutboundText } from "@/lib/brand/wrap-message";
+import { BRAND, brandLogoUrl } from "@/lib/brand/identity";
 
 /** @type {{ timezone: string, workflows: ReturnType<typeof buildWorkflows>, agents: ReturnType<typeof buildAgents> }} */
 const runtimeState = {
@@ -1120,23 +1132,36 @@ export async function dispatchV1(method, segments, request, body) {
         ? /** @type {Record<string, unknown>} */ (body)
         : {};
     const platform = String(input.platform || "whatsapp").toLowerCase();
+    const branded = wrapChannelTemplate({
+      platform,
+      name: String(input.name || ""),
+      body: String(input.body || ""),
+      subject: input.subject ? String(input.subject) : undefined,
+      greetingKind: input.greeting_kind ? String(input.greeting_kind) : "default",
+    });
     if (platform === "whatsapp") {
       // Create + submit to Meta Graph (or local_sim) so dashboard approval path is live-capable.
       const result = await createAndSubmitWhatsAppTemplate({
         name: input.name,
-        body: input.body,
+        body: branded.body,
         category: input.category || "MARKETING",
         language: input.language || "en",
         variables: input.variables,
-        components: input.components,
+        components: input.components || branded.components,
       });
       return jsonOk(
         {
-          template: result.template,
+          template: {
+            ...result.template,
+            branded: true,
+            logo_url: branded.logo_url,
+            greeting: branded.greeting,
+          },
           ok: result.ok,
           mode: result.mode,
           error: result.error,
           external: result.external,
+          branded: true,
         },
         result.ok ? 201 : 422,
       );
@@ -1147,7 +1172,15 @@ export async function dispatchV1(method, segments, request, body) {
           id: `ct-${Date.now()}`,
           status: "draft",
           platform,
-          ...(body && typeof body === "object" ? body : {}),
+          name: String(input.name || "template"),
+          category: input.category || "general",
+          body: branded.body,
+          html: branded.html || undefined,
+          subject: branded.subject || undefined,
+          branded: true,
+          logo_url: branded.logo_url,
+          greeting: branded.greeting,
+          preview: branded.preview,
         },
       },
       201,
@@ -1247,7 +1280,66 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk({ data: runtimeState.agents });
   }
 
+  // Training docs + brand preview before agents/:id catch-all
+  if (path === "agents/training-docs" && m === "GET") {
+    const listed = await listTrainingDocs();
+    return jsonOk({ data: listed.data, storage: listed.storage });
+  }
+
+  if (path === "agents/training-docs" && m === "POST") {
+    const title = String(body?.title || "").trim();
+    const docBody = String(body?.body || body?.file_text || "").trim();
+    if (!title || !docBody) {
+      return jsonErr("title and body are required.", 422);
+    }
+    const saved = await upsertTrainingDoc({
+      ...(body && typeof body === "object" ? body : {}),
+      title,
+      body: docBody,
+    });
+    return jsonOk({ ok: true, doc: saved.doc, storage: saved.storage }, 201);
+  }
+
+  if (path === "agents/training-docs/retrieve" && m === "POST") {
+    const query = String(body?.query || body?.message || "");
+    const hits = await retrieveTrainingDocs(query, {
+      limit: Number(body?.limit || 4),
+      categories: Array.isArray(body?.categories) ? body.categories : undefined,
+    });
+    return jsonOk({
+      data: hits,
+      query,
+      rule: "Agents must use retrieved training docs when unsure — never fabricate off-brand words.",
+    });
+  }
+
+  if (path.match(/^agents\/training-docs\/[^/]+$/) && m === "DELETE") {
+    const id = segments[2];
+    const result = await deleteTrainingDoc(id);
+    if (!result.ok) return jsonErr(result.message || "Delete failed", 400);
+    return jsonOk(result);
+  }
+
+  if (path.match(/^agents\/training-docs\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
+    const id = segments[2];
+    const saved = await upsertTrainingDoc({
+      ...(body && typeof body === "object" ? body : {}),
+      id,
+    });
+    return jsonOk({ ok: true, doc: saved.doc, storage: saved.storage });
+  }
+
   if (path.match(/^agents\/[^/]+$/) && (m === "PATCH" || m === "PUT")) {
+    const reserved = new Set([
+      "training-docs",
+      "llm",
+      "activity",
+      "test-run",
+      "orchestrate",
+    ]);
+    if (reserved.has(segments[1])) {
+      return jsonErr("Not found.", 404);
+    }
     const idx = runtimeState.agents.findIndex((a) => a.id === segments[1]);
     if (idx < 0) return jsonErr("Agent not found.", 404);
     runtimeState.agents[idx] = {
@@ -1281,30 +1373,115 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "agents/test-run" && m === "POST") {
-    const anthropic = await getAnthropicStatus();
-    return jsonOk({
-      ok: true,
-      mode: buildIntegrationsHealth({ anthropic }).llm.provider,
-      output: "Seeded answer-bot reply: silver with gold plating; ~7 days to make. Prices from approved catalog only.",
+    const agentId = String(body?.agent_id || body?.agent_key || "");
+    const agent =
+      runtimeState.agents.find(
+        (a) => a.id === agentId || a.key === agentId || a.name === agentId,
+      ) || runtimeState.agents[0];
+    const result = await runAgentOrchestration({
+      agent_key: agent?.id || agentId || "answer_bot",
+      agent,
+      purpose: String(body?.purpose || "draft_reply"),
+      message: String(body?.message || ""),
+      dry_run: body?.dry_run !== false,
+      context: body?.context && typeof body.context === "object" ? body.context : {},
     });
+    return jsonOk(result);
+  }
+
+  if (path === "agents/orchestrate" && m === "POST") {
+    const result = await runAgentOrchestration({
+      agent_key: String(body?.agent_key || body?.agent_id || "answer_bot"),
+      purpose: String(body?.purpose || "draft_reply"),
+      message: String(body?.message || ""),
+      dry_run: Boolean(body?.dry_run),
+      context: body?.context && typeof body.context === "object" ? body.context : {},
+    });
+    return jsonOk(result);
+  }
+
+  if (path === "brand/preview" && m === "POST") {
+    const channel = String(body?.channel || "whatsapp").toLowerCase();
+    const raw = String(body?.body || body?.message || "Thank you for choosing Triada Designs.");
+    if (channel === "email") {
+      return jsonOk(
+        wrapEmailMessage({
+          subject: body?.subject,
+          bodyText: raw,
+          customerName: body?.customer_name,
+          greetingKind: body?.greeting_kind,
+        }),
+      );
+    }
+    if (channel === "invoice" || channel === "receipt") {
+      return jsonOk(
+        wrapInvoiceDocument({
+          documentType: channel === "receipt" ? "receipt" : "invoice",
+          number: body?.number,
+          customerName: body?.customer_name,
+          customerEmail: body?.customer_email,
+          total: body?.total,
+          currency: body?.currency,
+          lineItems: body?.line_items,
+          orderId: body?.order_id,
+          notes: body?.notes,
+        }),
+      );
+    }
+    if (channel === "template") {
+      return jsonOk(
+        wrapChannelTemplate({
+          platform: body?.platform || "whatsapp",
+          name: body?.name,
+          body: raw,
+          subject: body?.subject,
+          greetingKind: body?.greeting_kind,
+          customerName: body?.customer_name,
+        }),
+      );
+    }
+    return jsonOk(
+      ensureBrandedOutboundText(raw, {
+        greetingKind: body?.greeting_kind,
+        customerName: body?.customer_name,
+      }),
+    );
   }
 
   if (path === "knowledge" && m === "GET") {
+    const training = await listTrainingDocs();
     return jsonOk({
       data: [
         {
           id: "ks-1",
           title: "Materials & making time",
+          source_type: "faq",
           status: "published",
+          body: "Silver with gold plating; 14K/18K on request. ~7 days to make. Prices from approved catalog only.",
+          tags: ["materials", "making"],
           updated_at: new Date().toISOString(),
         },
         {
           id: "ks-2",
           title: "Care & plating",
+          source_type: "faq",
           status: "published",
+          body: "Store dry, wipe gently after wear, avoid harsh chemicals.",
+          tags: ["care"],
           updated_at: new Date().toISOString(),
         },
+        ...training.data.map((doc) => ({
+          id: doc.id,
+          title: doc.title,
+          source_type: "training_doc",
+          status: doc.status,
+          body: doc.body,
+          tags: doc.tags,
+          category: doc.category,
+          updated_at: doc.updated_at,
+        })),
       ],
+      brand: { name: BRAND.name, logo_url: brandLogoUrl() },
     });
   }
 
@@ -1398,11 +1575,21 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "jewellery-ops/answer-bot" && m === "POST") {
+    const result = await runAgentOrchestration({
+      agent_key: "agent-answer",
+      purpose: "draft_reply",
+      message: String(body?.message || body?.query || ""),
+      dry_run: Boolean(body?.dry_run),
+      context: body && typeof body === "object" ? /** @type {Record<string, unknown>} */ (body) : {},
+    });
     return jsonOk({
       ok: true,
-      reply:
-        "Our Salt & Spirit pieces are silver with gold plating; 14K/18K gold on request. About 7 days to make. Prices come from the approved catalog only.",
-      mode: "local_seed",
+      reply: result.text,
+      mode: result.mode,
+      provider: result.provider,
+      training_used: result.training_used,
+      branded: true,
+      logo_url: result.logo_url,
       handoff: false,
     });
   }
@@ -1458,6 +1645,23 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "jewellery-ops/invoices" && m === "GET") {
+    const branded = wrapInvoiceDocument({
+      documentType: "invoice",
+      number: "INV-TD-1001",
+      orderId: "ord-1",
+      customerName: "Layla Al Maktoum",
+      total: 1450,
+      currency: "AED",
+      status: "draft",
+      lineItems: [
+        {
+          title: "Aura Signet Ring",
+          sku: "TD-RING-AURA-01",
+          qty: 1,
+          price: 1450,
+        },
+      ],
+    });
     return jsonOk({
       data: [
         {
@@ -1467,9 +1671,39 @@ export async function dispatchV1(method, segments, request, body) {
           total: 1450,
           currency: "AED",
           source: "local_seed",
+          branded: true,
+          logo_url: branded.logo_url,
+          greeting: branded.greeting,
+          html: branded.html,
+          pdf_mode: branded.pdf_mode,
         },
       ],
     });
+  }
+
+  if (path === "jewellery-ops/invoices" && m === "POST") {
+    const input = body && typeof body === "object" ? body : {};
+    const branded = wrapInvoiceDocument({
+      documentType: input.document_type === "receipt" ? "receipt" : "invoice",
+      number: input.number || input.invoice_number,
+      orderId: input.order_id,
+      customerName: input.customer_name,
+      customerEmail: input.customer_email,
+      total: input.total,
+      currency: input.currency || "AED",
+      status: input.status || "issued",
+      lineItems: Array.isArray(input.line_items) ? input.line_items : [],
+      notes: input.notes,
+    });
+    return jsonOk(
+      {
+        ok: true,
+        invoice: branded.summary,
+        document: branded,
+        branded: true,
+      },
+      201,
+    );
   }
 
   if (path === "jewellery-ops/manufacturer" && m === "GET") {
