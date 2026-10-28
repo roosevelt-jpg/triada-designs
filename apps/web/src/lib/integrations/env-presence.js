@@ -41,7 +41,7 @@ export function hasMetaPageToken() {
 }
 
 export function hasMetaAppId() {
-  return envPresent("META_APP_ID");
+  return envPresentAny("META_APP_ID", "FACEBOOK_APP_ID");
 }
 
 /** WhatsApp Cloud access token (META_WA_* + WHATSAPP_* mirrors). */
@@ -60,13 +60,26 @@ export function hasWhatsAppBusinessId() {
   );
 }
 
-/** Facebook / Instagram ready when page token or app id is present. */
+/**
+ * Facebook Messenger / Instagram Messaging: require App ID + Page token
+ * (aliases honored). Matches Meta Graph setup; App ID alone is not Connected.
+ */
+export function hasMetaPageMessagingEnv() {
+  return hasMetaAppId() && hasMetaPageToken();
+}
+
+/** @deprecated Prefer hasMetaPageMessagingEnv — kept for call sites. */
 export function hasMetaMessagingEnv() {
-  return hasMetaPageToken() || hasMetaAppId();
+  return hasMetaPageMessagingEnv();
+}
+
+/** WhatsApp Cloud ready when a WA access token alias is present. */
+export function hasWhatsAppMessagingEnv() {
+  return hasWhatsAppToken();
 }
 
 export function hasMetaAnyEnv() {
-  return hasMetaMessagingEnv() || hasWhatsAppToken();
+  return hasMetaPageMessagingEnv() || hasWhatsAppMessagingEnv();
 }
 
 export function hasTelegramEnv() {

@@ -48,6 +48,14 @@ export default function IntegrationsPage() {
   const [zohoRefreshToken, setZohoRefreshToken] = useState("");
   const [zohoOrgId, setZohoOrgId] = useState("");
   const [zohoStatus, setZohoStatus] = useState("");
+  const [metaAppId, setMetaAppId] = useState("");
+  const [metaAppSecret, setMetaAppSecret] = useState("");
+  const [metaPageToken, setMetaPageToken] = useState("");
+  const [metaWaToken, setMetaWaToken] = useState("");
+  const [metaWaPhoneId, setMetaWaPhoneId] = useState("");
+  const [metaWaBusinessId, setMetaWaBusinessId] = useState("");
+  const [metaVerifyToken, setMetaVerifyToken] = useState("");
+  const [metaStatus, setMetaStatus] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -163,6 +171,55 @@ export default function IntegrationsPage() {
       load();
     } catch (err) {
       setZohoStatus(err.message);
+    }
+  }
+
+  async function saveMeta(event) {
+    event.preventDefault();
+    setMetaStatus("");
+    try {
+      const result = await apiFetch("/v1/integrations/meta", {
+        method: "POST",
+        body: {
+          app_id: metaAppId || undefined,
+          app_secret: metaAppSecret || undefined,
+          page_access_token: metaPageToken || undefined,
+          wa_access_token: metaWaToken || undefined,
+          wa_phone_number_id: metaWaPhoneId || undefined,
+          wa_business_account_id: metaWaBusinessId || undefined,
+          verify_token: metaVerifyToken || undefined,
+        },
+      });
+      setMetaAppId("");
+      setMetaAppSecret("");
+      setMetaPageToken("");
+      setMetaWaToken("");
+      setMetaWaPhoneId("");
+      setMetaWaBusinessId("");
+      setMetaVerifyToken("");
+      const channels = result.health?.channels || result.meta?.channels || {};
+      const connectedKeys = ["facebook", "instagram", "whatsapp"]
+        .filter((k) => channels[k]?.status === "connected")
+        .join(", ");
+      setMetaStatus(
+        result.meta?.connected
+          ? `Meta connected${connectedKeys ? ` (${connectedKeys})` : ""}. Status updates without redeploying Vercel env.`
+          : result.meta?.summary || "Saved.",
+      );
+      load();
+    } catch (err) {
+      setMetaStatus(err.message);
+    }
+  }
+
+  async function clearMeta() {
+    setMetaStatus("");
+    try {
+      await apiFetch("/v1/integrations/meta/clear", { method: "POST" });
+      setMetaStatus("Stored Meta credentials cleared.");
+      load();
+    } catch (err) {
+      setMetaStatus(err.message);
     }
   }
 
@@ -362,15 +419,23 @@ export default function IntegrationsPage() {
                 <div>
                   <h2 className="ops-section-title">Meta messaging</h2>
                   <p className="mt-1 text-sm text-muted">
-                    Facebook, Instagram, and WhatsApp managed from Triada after one-time Meta
-                    Developer setup.
+                    Save App ID + Page token for Facebook / Messenger / Instagram, and WhatsApp
+                    Cloud credentials. Connected flips from this save (or host META_* env).
                   </p>
                 </div>
-                <Link href="/integrations/meta">
-                  <Button size="sm" variant="secondary">
-                    Open Meta hub
-                  </Button>
-                </Link>
+                <div className="flex flex-wrap gap-2">
+                  <Badge tone={toneForStatus(health.meta.status, health.meta.connected)}>
+                    {health.meta.status_label ||
+                      connectionLabel(health.meta.status, {
+                        hasCredentials: health.meta.connected,
+                      })}
+                  </Badge>
+                  <Link href="/integrations/meta">
+                    <Button size="sm" variant="secondary">
+                      Open Meta hub
+                    </Button>
+                  </Link>
+                </div>
               </div>
               <div className="grid gap-0 md:grid-cols-3 md:divide-x md:divide-line">
                 {["facebook", "instagram", "whatsapp"].map((key) => {
@@ -378,7 +443,9 @@ export default function IntegrationsPage() {
                   return (
                     <div key={key} className="border-t border-line px-5 py-4 md:border-t-0">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium capitalize text-ink">{key}</p>
+                        <p className="font-medium capitalize text-ink">
+                          {key === "facebook" ? "Messenger" : key}
+                        </p>
                         <Badge
                           tone={toneForStatus(
                             ch?.health?.status || ch?.status,
@@ -397,6 +464,87 @@ export default function IntegrationsPage() {
                   );
                 })}
               </div>
+              <form className="space-y-3 border-t border-line px-5 py-4" onSubmit={saveMeta}>
+                <p className="text-sm text-muted">
+                  {health.meta.summary ||
+                    "Paste Meta credentials below. Blank fields keep any previously stored values."}
+                </p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input
+                    label="Meta App ID"
+                    name="meta_app_id"
+                    autoComplete="off"
+                    placeholder={
+                      health.meta.channels?.facebook?.status === "connected"
+                        ? "•••• stored — paste to replace"
+                        : "META_APP_ID"
+                    }
+                    value={metaAppId}
+                    onChange={(e) => setMetaAppId(e.target.value)}
+                  />
+                  <Input
+                    label="Meta App Secret"
+                    name="meta_app_secret"
+                    type="password"
+                    autoComplete="off"
+                    placeholder="META_APP_SECRET (optional)"
+                    value={metaAppSecret}
+                    onChange={(e) => setMetaAppSecret(e.target.value)}
+                  />
+                  <Input
+                    label="Page access token"
+                    name="meta_page_access_token"
+                    type="password"
+                    autoComplete="off"
+                    placeholder="META_PAGE_ACCESS_TOKEN"
+                    value={metaPageToken}
+                    onChange={(e) => setMetaPageToken(e.target.value)}
+                  />
+                  <Input
+                    label="Webhook verify token"
+                    name="meta_verify_token"
+                    type="password"
+                    autoComplete="off"
+                    placeholder="META_VERIFY_TOKEN (optional)"
+                    value={metaVerifyToken}
+                    onChange={(e) => setMetaVerifyToken(e.target.value)}
+                  />
+                  <Input
+                    label="WhatsApp access token"
+                    name="meta_wa_access_token"
+                    type="password"
+                    autoComplete="off"
+                    placeholder="META_WA_ACCESS_TOKEN"
+                    value={metaWaToken}
+                    onChange={(e) => setMetaWaToken(e.target.value)}
+                  />
+                  <Input
+                    label="WhatsApp phone number ID"
+                    name="meta_wa_phone_number_id"
+                    autoComplete="off"
+                    placeholder="META_WA_PHONE_NUMBER_ID"
+                    value={metaWaPhoneId}
+                    onChange={(e) => setMetaWaPhoneId(e.target.value)}
+                  />
+                  <Input
+                    label="WhatsApp business account ID"
+                    name="meta_wa_business_account_id"
+                    autoComplete="off"
+                    placeholder="META_WA_BUSINESS_ACCOUNT_ID"
+                    value={metaWaBusinessId}
+                    onChange={(e) => setMetaWaBusinessId(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="submit" size="sm">
+                    Save Meta
+                  </Button>
+                  <Button type="button" size="sm" variant="secondary" onClick={clearMeta}>
+                    Clear
+                  </Button>
+                </div>
+                {metaStatus ? <p className="text-sm text-muted">{metaStatus}</p> : null}
+              </form>
             </section>
           ) : null}
 
@@ -526,7 +674,9 @@ export default function IntegrationsPage() {
               <h2 className="ops-section-title">Registered integrations</h2>
             </div>
             <div className="divide-y divide-line">
-              {integrations.map((item) => (
+              {integrations
+                .filter((item) => item.provider !== "messenger")
+                .map((item) => (
                 <div
                   key={item.id}
                   className="flex flex-col gap-2 px-5 py-3.5 transition-colors duration-150 hover:bg-stone/40 sm:flex-row sm:items-center sm:justify-between"

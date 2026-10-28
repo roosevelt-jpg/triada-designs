@@ -26,6 +26,11 @@ import {
   saveAnthropicCredentials,
 } from "@/lib/integrations/anthropic-credentials";
 import {
+  clearMetaCredentials,
+  getMetaStatus,
+  saveMetaCredentials,
+} from "@/lib/integrations/meta-credentials";
+import {
   hasGeminiEnv,
   hasMetaPageToken,
   hasShopifyEnv,
@@ -278,18 +283,22 @@ export async function dispatchV1(method, segments, request, body) {
 
   // ---- integrations ----
   if (path === "integrations" && m === "GET") {
-    const anthropic = await getAnthropicStatus();
+    const [anthropic, meta] = await Promise.all([getAnthropicStatus(), getMetaStatus()]);
     return jsonOk({
       data: buildIntegrationsList({
         anthropicHasCredentials: anthropic.has_credentials,
         anthropicModel: anthropic.model,
+        metaFacebookReady: meta.facebook_ready,
+        metaMessengerReady: meta.messenger_ready,
+        metaInstagramReady: meta.instagram_ready,
+        metaWhatsAppReady: meta.whatsapp_ready,
       }),
     });
   }
 
   if (path === "integrations/health" && m === "GET") {
-    const anthropic = await getAnthropicStatus();
-    return jsonOk(buildIntegrationsHealth({ anthropic }));
+    const [anthropic, meta] = await Promise.all([getAnthropicStatus(), getMetaStatus()]);
+    return jsonOk(buildIntegrationsHealth({ anthropic, meta }));
   }
 
   if (path === "integrations/wordpress/drafts" && m === "POST") {
@@ -374,15 +383,48 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "integrations/meta/status" && m === "GET") {
-    return jsonOk(buildIntegrationsHealth().meta);
+    const meta = await getMetaStatus();
+    return jsonOk(buildIntegrationsHealth({ meta }).meta);
+  }
+
+  if (path === "integrations/meta" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, string>} */ (body)
+        : {};
+    const result = await saveMetaCredentials(input);
+    if (!result.ok) {
+      return jsonErr(result.message, result.status || 422);
+    }
+    return jsonOk({
+      ok: true,
+      meta: result.meta,
+      health: buildIntegrationsHealth({ meta: result.meta }).meta,
+      storage: result.storage,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "integrations/meta/clear" && m === "POST") {
+    const result = await clearMetaCredentials();
+    return jsonOk({
+      ok: true,
+      meta: result.meta,
+      health: buildIntegrationsHealth({ meta: result.meta }).meta,
+      storage: result.storage,
+      source: "next_dual_run",
+    });
   }
 
   if (path === "integrations/meta/accounts" && m === "GET") {
     const url = new URL(request.url);
     const channel = url.searchParams.get("channel") || "facebook";
+    const meta = await getMetaStatus();
+    const pageReady =
+      channel === "whatsapp" ? meta.whatsapp_ready : meta.facebook_ready;
     return jsonOk({
       channel,
-      data: hasMetaPageToken()
+      data: pageReady || hasMetaPageToken()
         ? [
             {
               id: `${channel}-page-1`,
@@ -394,15 +436,72 @@ export async function dispatchV1(method, segments, request, body) {
     });
   }
 
+  if (path === "integrations/meta/connect" && m === "POST") {
+    // Prefer credential persist when body carries Meta keys; else ack connect.
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, string>} */ (body)
+        : {};
+    const hasCredFields = Boolean(
+      input.app_id ||
+        input.page_access_token ||
+        input.wa_access_token ||
+        input.api_key ||
+        input.access_token,
+    );
+    if (hasCredFields) {
+      const normalized = {
+        app_id: input.app_id,
+        app_secret: input.app_secret,
+        page_access_token:
+          input.page_access_token || input.access_token || input.api_key,
+        wa_access_token: input.wa_access_token,
+        wa_phone_number_id: input.wa_phone_number_id || input.phone_number_id,
+        wa_business_account_id:
+          input.wa_business_account_id || input.business_account_id,
+        verify_token: input.verify_token,
+      };
+      const result = await saveMetaCredentials(normalized);
+      if (!result.ok) {
+        return jsonErr(result.message, result.status || 422);
+      }
+      return jsonOk({
+        ok: true,
+        mode: "next_dual_run",
+        meta: result.meta,
+        health: buildIntegrationsHealth({ meta: result.meta }).meta,
+        storage: result.storage,
+        message: "Meta credentials saved. Channels marked Connected.",
+        verify_token_hint: "triada-meta-verify-2026",
+      });
+    }
+    return jsonOk({
+      ok: true,
+      mode: "next_dual_run",
+      message: "integrations/meta/connect accepted on Next dual-run (Laravel offline).",
+      verify_token_hint: "triada-meta-verify-2026",
+    });
+  }
+
   if (
-    (path === "integrations/meta/connect" ||
-      path === "integrations/meta/disconnect" ||
+    (path === "integrations/meta/disconnect" ||
       path === "integrations/meta/webhook/subscribe" ||
       path === "integrations/meta/verify-token/rotate" ||
       path === "integrations/meta/test-send" ||
       path === "integrations/meta/simulate-inbound") &&
     m === "POST"
   ) {
+    if (path === "integrations/meta/disconnect") {
+      const result = await clearMetaCredentials();
+      return jsonOk({
+        ok: true,
+        mode: "next_dual_run",
+        meta: result.meta,
+        health: buildIntegrationsHealth({ meta: result.meta }).meta,
+        message: "Stored Meta credentials cleared.",
+        verify_token_hint: "triada-meta-verify-2026",
+      });
+    }
     return jsonOk({
       ok: true,
       mode: "next_dual_run",
@@ -452,10 +551,12 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "integrations/whatsapp/status" && m === "GET") {
-    const connected = hasWhatsAppToken();
+    const meta = await getMetaStatus();
+    const connected = meta.whatsapp_ready || hasWhatsAppToken();
     return jsonOk({
       connected,
-      phone_number_id_present: hasWhatsAppPhoneId(),
+      phone_number_id_present:
+        meta.has_wa_phone_number_id || hasWhatsAppPhoneId(),
       status: connected ? "connected" : "awaiting_credentials",
       status_label: connected ? "Connected" : "Needs setup",
     });

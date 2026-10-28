@@ -7,12 +7,12 @@ import {
   credentialsPresenceMatrix,
   envPresent,
   hasGeminiEnv,
-  hasMetaMessagingEnv,
+  hasMetaPageMessagingEnv,
   hasResendEnv,
   hasShopifyEnv,
   hasSupabaseEnv,
   hasTelegramEnv,
-  hasWhatsAppToken,
+  hasWhatsAppMessagingEnv,
   hasZohoBooksOrg,
   hasZohoEnv,
   integrationRuntimeMode,
@@ -22,6 +22,7 @@ import {
   modelNickname,
   providerNickname,
 } from "@/lib/integrations/brand-labels";
+import { metaChannelHealth } from "@/lib/integrations/meta-credentials";
 
 export { envPresent } from "@/lib/integrations/env-presence";
 
@@ -231,11 +232,34 @@ export const SERVICES = [
 ];
 
 /**
- * @param {{ anthropicHasCredentials?: boolean, anthropicModel?: string }} [opts]
+ * @param {{
+ *   anthropicHasCredentials?: boolean,
+ *   anthropicModel?: string,
+ *   metaFacebookReady?: boolean,
+ *   metaInstagramReady?: boolean,
+ *   metaMessengerReady?: boolean,
+ *   metaWhatsAppReady?: boolean,
+ * }} [opts]
  */
 export function buildIntegrationsList(opts = {}) {
-  const metaReady = hasMetaMessagingEnv();
-  const waReady = hasWhatsAppToken();
+  const envPageReady = hasMetaPageMessagingEnv();
+  const envWaReady = hasWhatsAppMessagingEnv();
+  const metaReady =
+    opts.metaFacebookReady !== undefined
+      ? Boolean(opts.metaFacebookReady)
+      : envPageReady;
+  const messengerReady =
+    opts.metaMessengerReady !== undefined
+      ? Boolean(opts.metaMessengerReady)
+      : metaReady;
+  const igReady =
+    opts.metaInstagramReady !== undefined
+      ? Boolean(opts.metaInstagramReady)
+      : metaReady;
+  const waReady =
+    opts.metaWhatsAppReady !== undefined
+      ? Boolean(opts.metaWhatsAppReady)
+      : envWaReady;
   const gemini = hasGeminiEnv();
   const resend = hasResendEnv();
   const anthropicReady =
@@ -292,13 +316,29 @@ export function buildIntegrationsList(opts = {}) {
       last_health_check_at: nowIso(),
       last_error_code: null,
       capabilities: ["messages.send", "messages.receive", "webhooks", "pages"],
+      // MetaChannelRegistry treats messenger as an alias of facebook.
+      aliases: ["messenger"],
+    },
+    {
+      id: "int-messenger",
+      provider: "messenger",
+      display_name: "Messenger",
+      status: messengerReady ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(
+        messengerReady ? "connected" : "awaiting_credentials",
+      ),
+      external_account_id: "messenger-primary",
+      last_health_check_at: nowIso(),
+      last_error_code: null,
+      capabilities: ["messages.send", "messages.receive", "webhooks", "pages"],
+      aliases: ["facebook"],
     },
     {
       id: "int-instagram",
       provider: "instagram",
       display_name: "Instagram Messaging",
-      status: metaReady ? "connected" : "awaiting_credentials",
-      status_label: connectionLabel(metaReady ? "connected" : "awaiting_credentials"),
+      status: igReady ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(igReady ? "connected" : "awaiting_credentials"),
       external_account_id: "instagram-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
@@ -415,11 +455,49 @@ export function buildIntegrationsList(opts = {}) {
 }
 
 /**
- * @param {{ anthropic?: Record<string, unknown> }} [opts]
+ * @param {{
+ *   anthropic?: Record<string, unknown>,
+ *   meta?: {
+ *     facebook_ready?: boolean,
+ *     messenger_ready?: boolean,
+ *     instagram_ready?: boolean,
+ *     whatsapp_ready?: boolean,
+ *     connected?: boolean,
+ *     status?: string,
+ *     status_label?: string,
+ *     summary?: string,
+ *     source?: string,
+ *     has_app_id?: boolean,
+ *     has_page_access_token?: boolean,
+ *     has_wa_access_token?: boolean,
+ *     has_wa_phone_number_id?: boolean,
+ *   },
+ * }} [opts]
  */
 export function buildIntegrationsHealth(opts = {}) {
-  const metaReady = hasMetaMessagingEnv();
-  const waReady = hasWhatsAppToken();
+  const envPageReady = hasMetaPageMessagingEnv();
+  const envWaReady = hasWhatsAppMessagingEnv();
+  const metaFromStore = opts.meta && typeof opts.meta === "object" ? opts.meta : null;
+  const metaReady =
+    metaFromStore?.facebook_ready !== undefined
+      ? Boolean(metaFromStore.facebook_ready)
+      : envPageReady;
+  const messengerReady =
+    metaFromStore?.messenger_ready !== undefined
+      ? Boolean(metaFromStore.messenger_ready)
+      : metaReady;
+  const igReady =
+    metaFromStore?.instagram_ready !== undefined
+      ? Boolean(metaFromStore.instagram_ready)
+      : metaReady;
+  const waReady =
+    metaFromStore?.whatsapp_ready !== undefined
+      ? Boolean(metaFromStore.whatsapp_ready)
+      : envWaReady;
+  const metaConnected =
+    metaFromStore?.connected !== undefined
+      ? Boolean(metaFromStore.connected)
+      : metaReady || waReady;
   const gemini = hasGeminiEnv();
   const resend = hasResendEnv();
   const supabase = hasSupabaseEnv();
@@ -437,17 +515,7 @@ export function buildIntegrationsHealth(opts = {}) {
   const geminiModel =
     (process.env.GEMINI_MODEL || "").trim() || "gemini-2.0-flash";
 
-  const channelHealth = (key, ready) => ({
-    status: ready ? "connected" : "awaiting_credentials",
-    status_label: connectionLabel(ready ? "connected" : "awaiting_credentials"),
-    health: {
-      status: ready ? "healthy" : "awaiting_credentials",
-      status_label: connectionLabel(ready ? "healthy" : "awaiting_credentials"),
-      message: ready
-        ? `${providerNickname(key)} is connected.`
-        : `${providerNickname(key)} needs setup on Integrations.`,
-    },
-  });
+  const channelHealth = metaChannelHealth;
 
   const anthropicBase = anthropicFromStore || {
     provider: "anthropic",
@@ -477,8 +545,24 @@ export function buildIntegrationsHealth(opts = {}) {
       : "local-heuristic";
   const llmLive = anthropicReady || gemini;
   const liveCredentials =
-    anthropicReady || gemini || resend || metaReady || waReady || supabase;
+    anthropicReady || gemini || resend || metaConnected || supabase;
   const presence = credentialsPresenceMatrix({ anthropic: anthropicReady });
+  // Overlay stored Meta presence onto the env-only matrix (booleans only).
+  if (metaFromStore) {
+    presence.meta = {
+      present: metaConnected,
+      page_token: Boolean(
+        metaFromStore.has_page_access_token ?? presence.meta.page_token,
+      ),
+      app_id: Boolean(metaFromStore.has_app_id ?? presence.meta.app_id),
+      whatsapp_token: Boolean(
+        metaFromStore.has_wa_access_token ?? presence.meta.whatsapp_token,
+      ),
+      whatsapp_phone_id: Boolean(
+        metaFromStore.has_wa_phone_number_id ?? presence.meta.whatsapp_phone_id,
+      ),
+    };
+  }
 
   return {
     mode: integrationRuntimeMode(liveCredentials),
@@ -516,13 +600,21 @@ export function buildIntegrationsHealth(opts = {}) {
         : "Zoho Books needs an organization ID for invoices.",
     },
     meta: {
-      connected: metaReady || waReady,
-      status_label: connectionLabel(
-        metaReady || waReady ? "connected" : "awaiting_credentials",
-      ),
+      connected: metaConnected,
+      status: metaConnected ? "connected" : "awaiting_credentials",
+      status_label:
+        metaFromStore?.status_label ||
+        connectionLabel(metaConnected ? "connected" : "awaiting_credentials"),
+      summary:
+        metaFromStore?.summary ||
+        (metaConnected
+          ? "Meta messaging credentials are connected for dashboard ops."
+          : "Add Meta App ID, Page token, and WhatsApp Cloud credentials on Integrations."),
+      source: metaFromStore?.source || (metaConnected ? "env" : "none"),
       channels: {
         facebook: channelHealth("facebook", metaReady),
-        instagram: channelHealth("instagram", metaReady),
+        messenger: channelHealth("messenger", messengerReady),
+        instagram: channelHealth("instagram", igReady),
         whatsapp: channelHealth("whatsapp", waReady),
       },
     },

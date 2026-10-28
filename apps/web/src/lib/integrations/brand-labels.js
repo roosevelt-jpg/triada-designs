@@ -41,6 +41,7 @@ export function providerNickname(provider) {
   if (p === "gemini" || p === "google") return "Gemini";
   if (p === "local" || p === "local_sim") return "Local assistant";
   if (p === "resend" || p === "email") return "Email";
+  if (p === "messenger") return "Messenger";
   if (p === "meta" || p === "facebook" || p === "instagram" || p === "whatsapp") {
     return p.charAt(0).toUpperCase() + p.slice(1);
   }
