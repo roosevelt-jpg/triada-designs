@@ -50,36 +50,48 @@ export function geminiBaseUrl() {
  * @returns {Promise<{ ok: boolean, models: string[], error?: string }>}
  */
 async function listGeminiModels(apiKey) {
-  const base = geminiBaseUrl();
-  try {
-    const response = await fetch(`${base}/models`, {
-      method: "GET",
-      headers: { "x-goog-api-key": apiKey },
-    });
-    const json = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      // Retry query-param auth (some AI Studio keys prefer it).
-      const alt = await fetch(`${base}/models?key=${encodeURIComponent(apiKey)}`);
-      const altJson = await alt.json().catch(() => ({}));
-      if (!alt.ok) {
-        return {
-          ok: false,
-          models: [],
-          error: `models.list HTTP ${response.status}/${alt.status}: ${String(json?.error?.message || altJson?.error?.message || "").slice(0, 200)}`,
-        };
+  // Always try the canonical Google AI Studio host first — stale IMAGE_BASE_URL /
+  // GEMINI_BASE_URL on Vercel has been observed to 404 every media call.
+  const bases = Array.from(
+    new Set([
+      DEFAULT_BASE,
+      geminiBaseUrl(),
+      "https://generativelanguage.googleapis.com/v1",
+    ].filter(Boolean)),
+  );
+  const errors = [];
+  for (const base of bases) {
+    try {
+      const response = await fetch(`${base}/models?key=${encodeURIComponent(apiKey)}`);
+      const json = await response.json().catch(() => ({}));
+      if (response.ok) {
+        const names = (json.models || [])
+          .map((m) => String(m.name || "").replace(/^models\//, ""))
+          .filter(Boolean);
+        return { ok: true, models: names, base };
       }
-      const names = (altJson.models || [])
-        .map((m) => String(m.name || "").replace(/^models\//, ""))
-        .filter(Boolean);
-      return { ok: true, models: names };
+      const hdr = await fetch(`${base}/models`, {
+        headers: { "x-goog-api-key": apiKey },
+      });
+      const hdrJson = await hdr.json().catch(() => ({}));
+      if (hdr.ok) {
+        const names = (hdrJson.models || [])
+          .map((m) => String(m.name || "").replace(/^models\//, ""))
+          .filter(Boolean);
+        return { ok: true, models: names, base };
+      }
+      errors.push(
+        `${base}→${response.status}/${hdr.status}:${String(json?.error?.message || hdrJson?.error?.message || "").slice(0, 120)}`,
+      );
+    } catch (error) {
+      errors.push(`${base}→${String(error?.message || error)}`);
     }
-    const names = (json.models || [])
-      .map((m) => String(m.name || "").replace(/^models\//, ""))
-      .filter(Boolean);
-    return { ok: true, models: names };
-  } catch (error) {
-    return { ok: false, models: [], error: String(error?.message || error) };
   }
+  return {
+    ok: false,
+    models: [],
+    error: `models.list failed (${errors.join(" | ")})`,
+  };
 }
 
 /**
@@ -212,57 +224,62 @@ function extractInteractionMedia(interaction, kind) {
  * }} opts
  */
 async function callInteractions(opts) {
-  const base = geminiBaseUrl();
+  const bases = Array.from(
+    new Set([DEFAULT_BASE, geminiBaseUrl(), opts.base].filter(Boolean)),
+  );
   const timeoutMs = Number(opts.timeoutMs || 120000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const body = {
+    model: opts.model,
+    // Docs accept string or typed parts; typed parts are the canonical form.
+    input: [{ type: "text", text: opts.prompt }],
+    response_format: {
+      type: opts.kind,
+      aspect_ratio: opts.aspectRatio,
+    },
+  };
 
   try {
-    const body = {
-      model: opts.model,
-      // Docs accept string or typed parts; typed parts are the canonical form.
-      input: [{ type: "text", text: opts.prompt }],
-      response_format: {
-        type: opts.kind,
-        aspect_ratio: opts.aspectRatio,
-      },
-    };
+    let lastError = "Interactions failed";
+    for (const base of bases) {
+      const response = await fetch(`${base}/interactions`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": opts.apiKey,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
 
-    const response = await fetch(`${base}/interactions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-goog-api-key": opts.apiKey,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        lastError = `Interactions HTTP ${response.status} @ ${base}: ${String(json?.error?.message || json?.message || "").slice(0, 200)}`;
+        continue;
+      }
 
-    const json = await response.json().catch(() => ({}));
-    if (!response.ok) {
+      const media = extractInteractionMedia(json, opts.kind);
+      if (!media?.data) {
+        lastError = `Interactions ${opts.model} @ ${base} returned no ${opts.kind} bytes`;
+        continue;
+      }
+
       return {
-        ok: false,
-        error: `Interactions HTTP ${response.status}: ${String(json?.error?.message || json?.message || "").slice(0, 240)}`,
+        ok: true,
+        bytesBase64: media.data,
+        mimeType: media.mimeType,
         model: opts.model,
-      };
-    }
-
-    const media = extractInteractionMedia(json, opts.kind);
-    if (!media?.data) {
-      return {
-        ok: false,
-        error: `Interactions ${opts.model} returned no ${opts.kind} bytes`,
-        model: opts.model,
+        provider: "gemini",
+        path: "interactions",
+        base,
       };
     }
 
     return {
-      ok: true,
-      bytesBase64: media.data,
-      mimeType: media.mimeType,
+      ok: false,
+      error: lastError,
       model: opts.model,
-      provider: "gemini",
-      path: "interactions",
     };
   } catch (error) {
     return {
@@ -276,17 +293,20 @@ async function callInteractions(opts) {
 }
 
 /**
- * Legacy generateContent image path (still used by some Nano Banana models).
+ * generateContent image path (Nano Banana / Flash Image).
  * @param {{
  *   apiKey: string,
  *   model: string,
  *   prompt: string,
  *   aspectRatio: string,
  *   timeoutMs?: number,
+ *   base?: string,
  * }} opts
  */
 async function callGenerateContentImage(opts) {
-  const base = geminiBaseUrl();
+  const bases = Array.from(
+    new Set([DEFAULT_BASE, geminiBaseUrl(), opts.base, "https://generativelanguage.googleapis.com/v1"].filter(Boolean)),
+  );
   const timeoutMs = Number(opts.timeoutMs || 90000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -300,24 +320,10 @@ async function callGenerateContentImage(opts) {
   };
 
   try {
-    /** @type {Response} */
-    let response = await fetch(
-      `${base}/models/${encodeURIComponent(opts.model)}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-goog-api-key": opts.apiKey,
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      },
-    );
-
-    let json = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      // Fallback auth style used by many AI Studio curl samples.
-      response = await fetch(
+    let lastError = "generateContent failed";
+    for (const base of bases) {
+      /** @type {Response} */
+      let response = await fetch(
         `${base}/models/${encodeURIComponent(opts.model)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`,
         {
           method: "POST",
@@ -326,35 +332,49 @@ async function callGenerateContentImage(opts) {
           signal: controller.signal,
         },
       );
-      json = await response.json().catch(() => ({}));
-    }
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        error: `generateContent HTTP ${response.status}: ${String(json?.error?.message || "").slice(0, 240)}`,
-        model: opts.model,
-      };
-    }
-
-    const parts = json?.candidates?.[0]?.content?.parts || [];
-    for (const part of parts) {
-      const inline = part?.inlineData || part?.inline_data;
-      if (inline?.data) {
-        return {
-          ok: true,
-          bytesBase64: String(inline.data),
-          mimeType: String(inline.mimeType || inline.mime_type || "image/png"),
-          model: opts.model,
-          provider: "gemini",
-          path: "generateContent",
-        };
+      let json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        response = await fetch(
+          `${base}/models/${encodeURIComponent(opts.model)}:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-goog-api-key": opts.apiKey,
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          },
+        );
+        json = await response.json().catch(() => ({}));
       }
+
+      if (!response.ok) {
+        lastError = `generateContent HTTP ${response.status} @ ${base}: ${String(json?.error?.message || "").slice(0, 200)}`;
+        continue;
+      }
+
+      const parts = json?.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        const inline = part?.inlineData || part?.inline_data;
+        if (inline?.data) {
+          return {
+            ok: true,
+            bytesBase64: String(inline.data),
+            mimeType: String(inline.mimeType || inline.mime_type || "image/png"),
+            model: opts.model,
+            provider: "gemini",
+            path: "generateContent",
+            base,
+          };
+        }
+      }
+      lastError = `generateContent ${opts.model} @ ${base} returned no image parts`;
     }
 
     return {
       ok: false,
-      error: `generateContent ${opts.model} returned no image parts`,
+      error: lastError,
       model: opts.model,
     };
   } catch (error) {
@@ -406,13 +426,26 @@ export async function generateGeminiImage(input) {
     (process.env.GEMINI_IMAGE_MODEL || "").trim();
   const errors = [];
 
+  if (/^sk-ant/i.test(apiKey) || apiKey.toLowerCase().includes("anthropic")) {
+    return {
+      ok: false,
+      error: "GEMINI_API_KEY looks like an Anthropic key — set a Google AI Studio Gemini key on Vercel",
+      mode: "error",
+    };
+  }
+
   const listed = await listGeminiModels(apiKey);
   const discovered = listed.ok ? pickImageModels(listed.models) : GEMINI_IMAGE_MODELS;
   if (!listed.ok) {
     errors.push(`models.list: ${listed.error}`);
   }
 
-  const cascade = modelList(preferred, [...discovered, ...GEMINI_IMAGE_MODELS], "image");
+  const cascade = modelList(
+    preferred,
+    listed.ok ? discovered : GEMINI_IMAGE_MODELS.slice(0, 3),
+    "image",
+  );
+  const workingBase = listed.base || DEFAULT_BASE;
 
   for (const model of cascade) {
     // Primary: Interactions (Gemini apps path)
@@ -422,6 +455,7 @@ export async function generateGeminiImage(input) {
       prompt: input.prompt,
       kind: "image",
       aspectRatio,
+      base: workingBase,
       timeoutMs: Number(process.env.IMAGE_TIMEOUT || 120000),
     });
     if (result.ok) {
@@ -440,6 +474,7 @@ export async function generateGeminiImage(input) {
       model,
       prompt: input.prompt,
       aspectRatio,
+      base: workingBase,
       timeoutMs: Number(process.env.IMAGE_TIMEOUT || 90000),
     });
     if (gc.ok) {
@@ -454,8 +489,8 @@ export async function generateGeminiImage(input) {
   }
 
   const availableHint = listed.ok
-    ? ` available_imageish=${discovered.slice(0, 8).join(",") || "none"}; sample=${listed.models.slice(0, 8).join(",")}`
-    : "";
+    ? ` base=${workingBase}; available_imageish=${discovered.slice(0, 8).join(",") || "none"}; sample=${listed.models.slice(0, 8).join(",")}`
+    : ` tip=check Vercel GEMINI_API_KEY is a Google AI Studio key (not Claude) and unset bad GEMINI_BASE_URL/IMAGE_BASE_URL`;
 
   return {
     ok: false,
