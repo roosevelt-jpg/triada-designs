@@ -535,7 +535,7 @@ export function buildIntegrationsHealth(opts = {}) {
     // Brand-safe summary for UI — avoid raw key/format dumps.
     summary: anthropicReady
       ? "Claude is connected for agents and creative intelligence."
-      : "Add your Claude API key to enable live agents.",
+      : "Waiting for Claude credentials on Vercel.",
   };
 
   const llmProvider = anthropicReady ? "anthropic" : gemini ? "gemini" : "local";
@@ -579,7 +579,7 @@ export function buildIntegrationsHealth(opts = {}) {
       status_label: connectionLabel(zohoReady ? "connected" : "awaiting_credentials"),
       message: zohoReady
         ? "Zoho CRM credentials are present on this host."
-        : "Zoho CRM needs setup on Integrations.",
+        : "Waiting for Zoho CRM credentials on Vercel.",
       credentials: {
         has_credentials: zohoReady,
         status: zohoReady ? "connected" : "awaiting_credentials",
@@ -610,7 +610,7 @@ export function buildIntegrationsHealth(opts = {}) {
         metaFromStore?.summary ||
         (metaConnected
           ? "Meta messaging credentials are connected for dashboard ops."
-          : "Add Meta App ID, Page token, and WhatsApp Cloud credentials on Integrations."),
+          : "Waiting for Meta messaging credentials on Vercel."),
       source: metaFromStore?.source || (metaConnected ? "env" : "none"),
       channels: {
         facebook: channelHealth("facebook", metaReady),
@@ -664,9 +664,9 @@ export function buildIntegrationsHealth(opts = {}) {
       has_credentials: llmLive,
       summary: llmLive
         ? anthropicReady
-          ? "AI connected · Claude Sonnet"
-          : `AI connected · ${modelNickname(llmModel)}`
-        : "Add an AI key on Integrations to go live.",
+          ? "Claude connected · Claude Sonnet"
+          : `${providerNickname(llmProvider)} connected · ${modelNickname(llmModel)}`
+        : "Waiting for AI credentials on Vercel.",
     },
     wordpress_posts: [
       {

@@ -238,7 +238,7 @@ export default function AgentsPage() {
   return (
     <DashboardShell
       title="AI agents"
-      description="Eight seeded teammates share memory and tasks: AI Support, Content creator / Creative, Follow up, Marketing, Quality Control, Compliance, Leads Qualification, and Escalation officer. Admin can create agents and assign work."
+      description="Eight seeded teammates share memory and tasks: AI Support, Content creator / Creative, Follow up, Marketing, Quality Control, Compliance, Leads Qualification, and Escalation officer. Admin can create agents and assign work. Live agents use Claude credentials on the host (Vercel)."
       actions={
         <div className="flex flex-wrap gap-2">
           <Link href="/agents/training">
@@ -271,13 +271,13 @@ export default function AgentsPage() {
           </p>
           {llm.status === "awaiting_credentials" ? (
             <div className="surface-card max-w-3xl space-y-2 p-4 text-sm">
-              <p className="font-medium text-ink">Connect Claude to enable live agents</p>
+              <p className="font-medium text-ink">Waiting credentials</p>
               <p className="text-muted">
-                Paste your API key on{" "}
+                Claude credentials live on Vercel. Check status on{" "}
                 <a className="text-brown-dark underline" href="/integrations">
                   Integrations
                 </a>
-                . Until then, agents stay on local assistance and still share memory.
+                . Until connected, agents stay on local assistance and still share memory.
               </p>
             </div>
           ) : null}

@@ -15,15 +15,6 @@ import {
   connectionLabel,
 } from "@/lib/integrations/brand-labels";
 
-const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
-
-/** Friendly options — values stay API model ids; UI never labels with raw ids. */
-const ANTHROPIC_MODEL_OPTIONS = [
-  { value: "claude-sonnet-4-20250514", label: "Claude Sonnet" },
-  { value: "claude-opus-4-20250514", label: "Claude Opus" },
-  { value: "claude-haiku-4-20250514", label: "Claude Haiku" },
-];
-
 function toneForStatus(status, hasCredentials) {
   if (hasCredentials || status === "live" || status === "connected" || status === "healthy") {
     return "success";
@@ -33,6 +24,39 @@ function toneForStatus(status, hasCredentials) {
   return "neutral";
 }
 
+function StatusPill({ status, hasCredentials, label }) {
+  return (
+    <Badge tone={toneForStatus(status, hasCredentials)}>
+      {label ||
+        connectionLabel(status, {
+          live: status === "live",
+          hasCredentials,
+        })}
+    </Badge>
+  );
+}
+
+function ProviderRow({ title, summary, status, hasCredentials, statusLabel, href, hrefLabel }) {
+  return (
+    <div className="flex flex-col gap-3 border-t border-line px-5 py-4 first:border-t-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <p className="font-medium text-ink">{title}</p>
+        {summary ? <p className="mt-1 text-sm text-muted">{summary}</p> : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusPill status={status} hasCredentials={hasCredentials} label={statusLabel} />
+        {href ? (
+          <Link href={href}>
+            <Button size="sm" variant="secondary">
+              {hrefLabel || "Open"}
+            </Button>
+          </Link>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export default function IntegrationsPage() {
   const [health, setHealth] = useState(null);
   const [integrations, setIntegrations] = useState([]);
@@ -40,22 +64,6 @@ export default function IntegrationsPage() {
   const [loading, setLoading] = useState(true);
   const [draftTitle, setDraftTitle] = useState("Quiet materials, considered care");
   const [draftStatus, setDraftStatus] = useState("");
-  const [anthropicKey, setAnthropicKey] = useState("");
-  const [anthropicModel, setAnthropicModel] = useState(DEFAULT_ANTHROPIC_MODEL);
-  const [anthropicStatus, setAnthropicStatus] = useState("");
-  const [zohoClientId, setZohoClientId] = useState("");
-  const [zohoClientSecret, setZohoClientSecret] = useState("");
-  const [zohoRefreshToken, setZohoRefreshToken] = useState("");
-  const [zohoOrgId, setZohoOrgId] = useState("");
-  const [zohoStatus, setZohoStatus] = useState("");
-  const [metaAppId, setMetaAppId] = useState("");
-  const [metaAppSecret, setMetaAppSecret] = useState("");
-  const [metaPageToken, setMetaPageToken] = useState("");
-  const [metaWaToken, setMetaWaToken] = useState("");
-  const [metaWaPhoneId, setMetaWaPhoneId] = useState("");
-  const [metaWaBusinessId, setMetaWaBusinessId] = useState("");
-  const [metaVerifyToken, setMetaVerifyToken] = useState("");
-  const [metaStatus, setMetaStatus] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,9 +75,6 @@ export default function IntegrationsPage() {
       ]);
       setIntegrations(list.data || []);
       setHealth(healthData);
-      if (healthData?.anthropic?.model) {
-        setAnthropicModel(healthData.anthropic.model);
-      }
     } catch (err) {
       setError(err.message || "Failed to load integrations");
     } finally {
@@ -99,130 +104,6 @@ export default function IntegrationsPage() {
     }
   }
 
-  async function saveAnthropic(event) {
-    event.preventDefault();
-    setAnthropicStatus("");
-    try {
-      const result = await apiFetch("/v1/integrations/anthropic", {
-        method: "POST",
-        body: {
-          api_key: anthropicKey || undefined,
-          model: anthropicModel || undefined,
-        },
-      });
-      setAnthropicKey("");
-      setAnthropicStatus(
-        result.anthropic?.has_credentials
-          ? "Claude connected. Agents and creative intelligence will use this key."
-          : result.anthropic?.summary || result.anthropic?.honesty || "Saved."
-      );
-      load();
-    } catch (err) {
-      setAnthropicStatus(err.message);
-    }
-  }
-
-  async function clearAnthropic() {
-    setAnthropicStatus("");
-    try {
-      await apiFetch("/v1/integrations/anthropic/clear", { method: "POST" });
-      setAnthropicStatus("Stored Claude key cleared.");
-      load();
-    } catch (err) {
-      setAnthropicStatus(err.message);
-    }
-  }
-
-  async function saveZoho(event) {
-    event.preventDefault();
-    setZohoStatus("");
-    try {
-      const result = await apiFetch("/v1/integrations/zoho", {
-        method: "POST",
-        body: {
-          client_id: zohoClientId || undefined,
-          client_secret: zohoClientSecret || undefined,
-          refresh_token: zohoRefreshToken || undefined,
-          organization_id: zohoOrgId || undefined,
-        },
-      });
-      setZohoClientId("");
-      setZohoClientSecret("");
-      setZohoRefreshToken("");
-      setZohoStatus(
-        result.zoho?.has_credentials
-          ? result.zoho?.has_books_org
-            ? "Zoho CRM and Books organization saved."
-            : "Zoho CRM saved. Add a Books organization ID for invoices when ready."
-          : result.zoho?.summary || result.zoho?.honesty || "Saved."
-      );
-      load();
-    } catch (err) {
-      setZohoStatus(err.message);
-    }
-  }
-
-  async function clearZoho() {
-    setZohoStatus("");
-    try {
-      await apiFetch("/v1/integrations/zoho/clear", { method: "POST" });
-      setZohoOrgId("");
-      setZohoStatus("Stored Zoho credentials cleared.");
-      load();
-    } catch (err) {
-      setZohoStatus(err.message);
-    }
-  }
-
-  async function saveMeta(event) {
-    event.preventDefault();
-    setMetaStatus("");
-    try {
-      const result = await apiFetch("/v1/integrations/meta", {
-        method: "POST",
-        body: {
-          app_id: metaAppId || undefined,
-          app_secret: metaAppSecret || undefined,
-          page_access_token: metaPageToken || undefined,
-          wa_access_token: metaWaToken || undefined,
-          wa_phone_number_id: metaWaPhoneId || undefined,
-          wa_business_account_id: metaWaBusinessId || undefined,
-          verify_token: metaVerifyToken || undefined,
-        },
-      });
-      setMetaAppId("");
-      setMetaAppSecret("");
-      setMetaPageToken("");
-      setMetaWaToken("");
-      setMetaWaPhoneId("");
-      setMetaWaBusinessId("");
-      setMetaVerifyToken("");
-      const channels = result.health?.channels || result.meta?.channels || {};
-      const connectedKeys = ["facebook", "instagram", "whatsapp"]
-        .filter((k) => channels[k]?.status === "connected")
-        .join(", ");
-      setMetaStatus(
-        result.meta?.connected
-          ? `Meta connected${connectedKeys ? ` (${connectedKeys})` : ""}. Status updates without redeploying Vercel env.`
-          : result.meta?.summary || "Saved.",
-      );
-      load();
-    } catch (err) {
-      setMetaStatus(err.message);
-    }
-  }
-
-  async function clearMeta() {
-    setMetaStatus("");
-    try {
-      await apiFetch("/v1/integrations/meta/clear", { method: "POST" });
-      setMetaStatus("Stored Meta credentials cleared.");
-      load();
-    } catch (err) {
-      setMetaStatus(err.message);
-    }
-  }
-
   const llmLabel =
     health?.llm?.status_label ||
     connectionLabel(health?.llm?.status, {
@@ -235,10 +116,12 @@ export default function IntegrationsPage() {
       hasCredentials: health?.anthropic?.has_credentials,
     });
 
+  const metaChannels = ["facebook", "instagram", "whatsapp"];
+
   return (
     <DashboardShell
       title="Integrations"
-      description="Connect Claude, Meta, Shopify, email, and sales channels. Status reflects credentials on this host — never shown as healthy without tokens."
+      description="Channel and provider status from host credentials on Vercel. Connected or Waiting credentials — keys are never entered here."
       actions={
         <div className="flex flex-wrap gap-2">
           <Link href="/integrations/meta">
@@ -277,110 +160,55 @@ export default function IntegrationsPage() {
               {health?.mode_label || (health?.mode === "live" ? "Live" : "Local")}
             </Badge>
             <Button size="sm" variant="secondary" onClick={load}>
-              Re-check health
+              Re-check status
             </Button>
           </div>
-
-          {health?.llm ? (
-            <section className="surface-card overflow-hidden">
-              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
-                <div>
-                  <h2 className="ops-section-title">AI</h2>
-                  <p className="mt-1 text-sm text-muted">
-                    Claude is primary for agents. Gemini powers creative tools when keyed on the host.
-                  </p>
-                </div>
-                <Badge
-                  tone={toneForStatus(health.llm.status, health.llm.has_credentials)}
-                >
-                  {llmLabel}
-                </Badge>
-              </div>
-              <div className="space-y-1 px-5 py-4 text-sm text-muted">
-                <p>{health.llm.summary || aiStatusSummary(health.llm)}</p>
-              </div>
-            </section>
-          ) : null}
 
           <section className="surface-card overflow-hidden">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
               <div>
-                <h2 className="ops-section-title">Claude — primary AI</h2>
+                <h2 className="ops-section-title">AI providers</h2>
                 <p className="mt-1 text-sm text-muted">
-                  Paste your API key for agents and creative intelligence. Without a key, Triada stays on local
-                  assistance and never reports live Claude success.
+                  Claude is primary for agents. Gemini powers creative tools when keyed on the host.
                 </p>
               </div>
-              <Badge
-                tone={toneForStatus(
-                  health?.anthropic?.status,
-                  health?.anthropic?.has_credentials,
-                )}
-              >
-                {anthropicLabel}
-              </Badge>
+              <StatusPill
+                status={health?.llm?.status}
+                hasCredentials={health?.llm?.has_credentials}
+                label={llmLabel}
+              />
             </div>
-            <div className="space-y-3 px-5 py-4">
-              <p className="text-sm text-muted">
-                {health?.anthropic?.summary ||
-                  (health?.anthropic?.has_credentials
-                    ? "Claude is connected."
-                    : "Add your Claude API key to enable live agents.")}
-              </p>
-              <form className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-end" onSubmit={saveAnthropic}>
-                <Input
-                  label="Claude API key"
-                  name="anthropic_api_key"
-                  type="password"
-                  autoComplete="off"
-                  placeholder={
-                    health?.anthropic?.has_credentials
-                      ? "•••• stored — paste to replace"
-                      : "Paste API key"
-                  }
-                  value={anthropicKey}
-                  onChange={(e) => setAnthropicKey(e.target.value)}
-                />
-                <label className="block space-y-1.5">
-                  <span className="block text-[13px] font-medium text-ink">Model preference</span>
-                  <select
-                    name="anthropic_model"
-                    className="h-11 w-full rounded-sm border border-line bg-white px-3 text-sm text-ink transition-colors duration-150 focus:border-brown focus:outline-none"
-                    value={
-                      ANTHROPIC_MODEL_OPTIONS.some((o) => o.value === anthropicModel)
-                        ? anthropicModel
-                        : DEFAULT_ANTHROPIC_MODEL
-                    }
-                    onChange={(e) => setAnthropicModel(e.target.value)}
-                  >
-                    {ANTHROPIC_MODEL_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="flex gap-2">
-                  <Button type="submit" size="sm">
-                    Save key
-                  </Button>
-                  <Button type="button" size="sm" variant="secondary" onClick={clearAnthropic}>
-                    Clear
-                  </Button>
-                </div>
-              </form>
-              {anthropicStatus ? <p className="text-sm text-muted">{anthropicStatus}</p> : null}
+            <div className="space-y-1 px-5 py-3 text-sm text-muted">
+              <p>{health?.llm?.summary || aiStatusSummary(health?.llm)}</p>
             </div>
+            <ProviderRow
+              title="Claude"
+              summary={
+                health?.anthropic?.summary ||
+                (health?.anthropic?.has_credentials
+                  ? "Claude is connected on this host."
+                  : "Waiting for Claude credentials on Vercel.")
+              }
+              status={health?.anthropic?.status}
+              hasCredentials={health?.anthropic?.has_credentials}
+              statusLabel={anthropicLabel}
+            />
+            <ProviderRow
+              title="Gemini"
+              summary={health?.gemini?.summary || "Creative AI on this host."}
+              status={health?.gemini?.status}
+              hasCredentials={health?.gemini?.has_credentials}
+              statusLabel={
+                health?.gemini?.status_label ||
+                connectionLabel(health?.gemini?.status, {
+                  hasCredentials: health?.gemini?.has_credentials,
+                })
+              }
+            />
           </section>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             {[
-              {
-                key: "gemini",
-                title: "Gemini",
-                row: health?.gemini,
-                fallback: "Creative AI on this host.",
-              },
               {
                 key: "resend",
                 title: "Email",
@@ -397,18 +225,18 @@ export default function IntegrationsPage() {
               <section key={card.key} className="surface-card px-5 py-4">
                 <div className="flex items-start justify-between gap-2">
                   <h2 className="ops-section-title">{card.title}</h2>
-                  <Badge
-                    tone={toneForStatus(card.row?.status, card.row?.has_credentials)}
-                  >
-                    {card.row?.status_label ||
+                  <StatusPill
+                    status={card.row?.status}
+                    hasCredentials={card.row?.has_credentials}
+                    label={
+                      card.row?.status_label ||
                       connectionLabel(card.row?.status, {
                         hasCredentials: card.row?.has_credentials,
-                      })}
-                  </Badge>
+                      })
+                    }
+                  />
                 </div>
-                <p className="mt-2 text-sm text-muted">
-                  {card.row?.summary || card.fallback}
-                </p>
+                <p className="mt-2 text-sm text-muted">{card.row?.summary || card.fallback}</p>
               </section>
             ))}
           </div>
@@ -419,17 +247,20 @@ export default function IntegrationsPage() {
                 <div>
                   <h2 className="ops-section-title">Meta messaging</h2>
                   <p className="mt-1 text-sm text-muted">
-                    Save App ID + Page token for Facebook / Messenger / Instagram, and WhatsApp
-                    Cloud credentials. Connected flips from this save (or host META_* env).
+                    Facebook Messenger, Instagram, and WhatsApp status from host Meta credentials.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Badge tone={toneForStatus(health.meta.status, health.meta.connected)}>
-                    {health.meta.status_label ||
+                  <StatusPill
+                    status={health.meta.status}
+                    hasCredentials={health.meta.connected}
+                    label={
+                      health.meta.status_label ||
                       connectionLabel(health.meta.status, {
                         hasCredentials: health.meta.connected,
-                      })}
-                  </Badge>
+                      })
+                    }
+                  />
                   <Link href="/integrations/meta">
                     <Button size="sm" variant="secondary">
                       Open Meta hub
@@ -438,113 +269,36 @@ export default function IntegrationsPage() {
                 </div>
               </div>
               <div className="grid gap-0 md:grid-cols-3 md:divide-x md:divide-line">
-                {["facebook", "instagram", "whatsapp"].map((key) => {
+                {metaChannels.map((key) => {
                   const ch = health.meta.channels?.[key];
+                  const connected = ch?.status === "connected";
                   return (
                     <div key={key} className="border-t border-line px-5 py-4 md:border-t-0">
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-medium capitalize text-ink">
                           {key === "facebook" ? "Messenger" : key}
                         </p>
-                        <Badge
-                          tone={toneForStatus(
-                            ch?.health?.status || ch?.status,
-                            ch?.status === "connected",
-                          )}
-                        >
-                          {ch?.status_label ||
+                        <StatusPill
+                          status={ch?.health?.status || ch?.status}
+                          hasCredentials={connected}
+                          label={
+                            ch?.status_label ||
                             ch?.health?.status_label ||
-                            connectionLabel(ch?.status || ch?.health?.status)}
-                        </Badge>
+                            connectionLabel(ch?.status || ch?.health?.status, {
+                              hasCredentials: connected,
+                            })
+                          }
+                        />
                       </div>
                       <p className="mt-2 text-xs leading-relaxed text-muted">
-                        {ch?.health?.message}
+                        {connected
+                          ? "Ready for dashboard messaging ops."
+                          : "Waiting credentials on Vercel."}
                       </p>
                     </div>
                   );
                 })}
               </div>
-              <form className="space-y-3 border-t border-line px-5 py-4" onSubmit={saveMeta}>
-                <p className="text-sm text-muted">
-                  {health.meta.summary ||
-                    "Paste Meta credentials below. Blank fields keep any previously stored values."}
-                </p>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <Input
-                    label="Meta App ID"
-                    name="meta_app_id"
-                    autoComplete="off"
-                    placeholder={
-                      health.meta.channels?.facebook?.status === "connected"
-                        ? "•••• stored — paste to replace"
-                        : "META_APP_ID"
-                    }
-                    value={metaAppId}
-                    onChange={(e) => setMetaAppId(e.target.value)}
-                  />
-                  <Input
-                    label="Meta App Secret"
-                    name="meta_app_secret"
-                    type="password"
-                    autoComplete="off"
-                    placeholder="META_APP_SECRET (optional)"
-                    value={metaAppSecret}
-                    onChange={(e) => setMetaAppSecret(e.target.value)}
-                  />
-                  <Input
-                    label="Page access token"
-                    name="meta_page_access_token"
-                    type="password"
-                    autoComplete="off"
-                    placeholder="META_PAGE_ACCESS_TOKEN"
-                    value={metaPageToken}
-                    onChange={(e) => setMetaPageToken(e.target.value)}
-                  />
-                  <Input
-                    label="Webhook verify token"
-                    name="meta_verify_token"
-                    type="password"
-                    autoComplete="off"
-                    placeholder="META_VERIFY_TOKEN (optional)"
-                    value={metaVerifyToken}
-                    onChange={(e) => setMetaVerifyToken(e.target.value)}
-                  />
-                  <Input
-                    label="WhatsApp access token"
-                    name="meta_wa_access_token"
-                    type="password"
-                    autoComplete="off"
-                    placeholder="META_WA_ACCESS_TOKEN"
-                    value={metaWaToken}
-                    onChange={(e) => setMetaWaToken(e.target.value)}
-                  />
-                  <Input
-                    label="WhatsApp phone number ID"
-                    name="meta_wa_phone_number_id"
-                    autoComplete="off"
-                    placeholder="META_WA_PHONE_NUMBER_ID"
-                    value={metaWaPhoneId}
-                    onChange={(e) => setMetaWaPhoneId(e.target.value)}
-                  />
-                  <Input
-                    label="WhatsApp business account ID"
-                    name="meta_wa_business_account_id"
-                    autoComplete="off"
-                    placeholder="META_WA_BUSINESS_ACCOUNT_ID"
-                    value={metaWaBusinessId}
-                    onChange={(e) => setMetaWaBusinessId(e.target.value)}
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="submit" size="sm">
-                    Save Meta
-                  </Button>
-                  <Button type="button" size="sm" variant="secondary" onClick={clearMeta}>
-                    Clear
-                  </Button>
-                </div>
-                {metaStatus ? <p className="text-sm text-muted">{metaStatus}</p> : null}
-              </form>
             </section>
           ) : null}
 
@@ -557,10 +311,13 @@ export default function IntegrationsPage() {
                     CMS knowledge source and draft publishing path via REST API.
                   </p>
                 </div>
-                <Badge tone={toneForStatus(health?.wordpress?.status)}>
-                  {health?.wordpress?.status_label ||
-                    connectionLabel(health?.wordpress?.status)}
-                </Badge>
+                <StatusPill
+                  status={health?.wordpress?.status}
+                  label={
+                    health?.wordpress?.status_label ||
+                    connectionLabel(health?.wordpress?.status)
+                  }
+                />
               </div>
               <p className="mt-3 text-sm text-muted">{health?.wordpress?.message}</p>
               <ul className="mt-4 space-y-2">
@@ -593,66 +350,32 @@ export default function IntegrationsPage() {
                 <div>
                   <h2 className="ops-section-title">Zoho CRM + Books</h2>
                   <p className="mt-1 text-sm text-muted">
-                    CRM for contacts and leads. Zoho Books for invoice PDF and UAE e-invoice.
+                    Contacts, leads, and invoice PDF — credentials live on the host.
                   </p>
                 </div>
-                <Badge tone={toneForStatus(health?.zoho?.status, health?.zoho?.credentials?.has_credentials)}>
-                  {health?.zoho?.status_label || connectionLabel(health?.zoho?.status)}
-                </Badge>
-              </div>
-              <p className="mt-3 text-sm text-muted">{health?.zoho?.message}</p>
-              <p className="mt-1 text-xs text-muted">
-                Books: {health?.zoho_books?.message || health?.zoho?.books?.message || "—"}
-              </p>
-              <form className="mt-4 grid gap-3" onSubmit={saveZoho}>
-                <Input
-                  label="Client ID"
-                  name="zoho_client_id"
-                  type="password"
-                  autoComplete="off"
-                  placeholder={
-                    health?.zoho?.credentials?.has_credentials
-                      ? "•••• stored — paste to replace"
-                      : "Zoho API console client ID"
+                <StatusPill
+                  status={health?.zoho?.status}
+                  hasCredentials={health?.zoho?.credentials?.has_credentials}
+                  label={
+                    health?.zoho?.status_label ||
+                    connectionLabel(health?.zoho?.status, {
+                      hasCredentials: health?.zoho?.credentials?.has_credentials,
+                    })
                   }
-                  value={zohoClientId}
-                  onChange={(e) => setZohoClientId(e.target.value)}
                 />
-                <Input
-                  label="Client secret"
-                  name="zoho_client_secret"
-                  type="password"
-                  autoComplete="off"
-                  placeholder="Client secret"
-                  value={zohoClientSecret}
-                  onChange={(e) => setZohoClientSecret(e.target.value)}
-                />
-                <Input
-                  label="Refresh token"
-                  name="zoho_refresh_token"
-                  type="password"
-                  autoComplete="off"
-                  placeholder="OAuth refresh token (CRM + Books scopes)"
-                  value={zohoRefreshToken}
-                  onChange={(e) => setZohoRefreshToken(e.target.value)}
-                />
-                <Input
-                  label="Books organization ID"
-                  name="zoho_organization_id"
-                  placeholder="Required for invoice PDF / UAE e-invoice"
-                  value={zohoOrgId}
-                  onChange={(e) => setZohoOrgId(e.target.value)}
-                />
-                <div className="flex flex-wrap gap-2">
-                  <Button type="submit" size="sm">
-                    Save Zoho
-                  </Button>
-                  <Button type="button" size="sm" variant="secondary" onClick={clearZoho}>
-                    Clear
-                  </Button>
-                </div>
-                {zohoStatus ? <p className="text-sm text-muted">{zohoStatus}</p> : null}
-              </form>
+              </div>
+              <p className="mt-3 text-sm text-muted">
+                {health?.zoho?.has_credentials || health?.zoho?.credentials?.has_credentials
+                  ? health?.zoho?.message || "Zoho CRM is connected."
+                  : "Waiting credentials on Vercel."}
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                Books:{" "}
+                {health?.zoho_books?.status_label ||
+                  health?.zoho?.books?.status_label ||
+                  connectionLabel(health?.zoho_books?.status || health?.zoho?.books?.status) ||
+                  "—"}
+              </p>
               <ul className="mt-4 space-y-2">
                 {(health?.zoho_leads || []).map((lead) => (
                   <li
@@ -672,23 +395,27 @@ export default function IntegrationsPage() {
           <section className="surface-card overflow-hidden">
             <div className="border-b border-line px-5 py-3.5">
               <h2 className="ops-section-title">Registered integrations</h2>
+              <p className="mt-1 text-sm text-muted">
+                Presence-only status for each channel and provider.
+              </p>
             </div>
             <div className="divide-y divide-line">
               {integrations
                 .filter((item) => item.provider !== "messenger")
                 .map((item) => (
-                <div
-                  key={item.id}
-                  className="flex flex-col gap-2 px-5 py-3.5 transition-colors duration-150 hover:bg-stone/40 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <p className="font-medium text-ink">{item.display_name}</p>
+                  <div
+                    key={item.id}
+                    className="flex flex-col gap-2 px-5 py-3.5 transition-colors duration-150 hover:bg-stone/40 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-medium text-ink">{item.display_name}</p>
+                    </div>
+                    <StatusPill
+                      status={item.status}
+                      label={item.status_label || connectionLabel(item.status)}
+                    />
                   </div>
-                  <Badge tone={toneForStatus(item.status)}>
-                    {item.status_label || connectionLabel(item.status)}
-                  </Badge>
-                </div>
-              ))}
+                ))}
             </div>
           </section>
         </div>

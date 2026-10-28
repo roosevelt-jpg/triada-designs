@@ -40,7 +40,7 @@ export function anthropicStatusPayload(opts) {
   const status = has ? "connected" : "awaiting_credentials";
   const summary = has
     ? "Claude is connected for agents and creative intelligence."
-    : "Add your Claude API key to enable live agents.";
+    : "Waiting for Claude credentials on Vercel.";
   return {
     provider: PROVIDER,
     configured_provider: has ? "anthropic" : "local",
@@ -55,7 +55,7 @@ export function anthropicStatusPayload(opts) {
     summary,
     // Kept for older clients; UI should prefer summary / status_label.
     honesty: opts.honesty || summary,
-    ui_hint: "Paste your Claude API key on Integrations. Optional model preference below.",
+    ui_hint: "Claude credentials are managed on the host (Vercel).",
   };
 }
 

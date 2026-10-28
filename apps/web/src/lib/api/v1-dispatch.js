@@ -706,7 +706,7 @@ export async function dispatchV1(method, segments, request, body) {
         ? waStatus.mode === "live"
           ? "Live Cloud API"
           : "Connected"
-        : "Needs setup",
+        : "Waiting credentials",
     });
   }
 
@@ -716,10 +716,10 @@ export async function dispatchV1(method, segments, request, body) {
       connected,
       store: "jwtjzw-nu.myshopify.com",
       status: connected ? "connected" : "awaiting_credentials",
-      status_label: connected ? "Connected" : "Needs setup",
+      status_label: connected ? "Connected" : "Waiting credentials",
       summary: connected
         ? "Shopify Admin API is connected."
-        : "Connect Shopify Admin API on Integrations → Shopify.",
+        : "Waiting for Shopify Admin API credentials on Vercel.",
     });
   }
 
