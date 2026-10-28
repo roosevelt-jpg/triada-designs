@@ -23,24 +23,32 @@ class ImageGenerationService
      */
     public function status(): array
     {
-        $provider = $this->normalizeProvider((string) config('creative.image.provider', 'anthropic'));
+        $provider = $this->normalizeProvider((string) config('creative.image.provider', 'gemini'));
         $configured = $this->hasApiKey();
         $mode = strtolower((string) config('integrations.mode', 'local'));
 
-        // Anthropic is the intelligence path (prompts/agents). Pixel generation stays local_sim
-        // unless a dedicated image provider (e.g. gemini/imagen) is selected with live mode.
-        if ($provider === 'anthropic' || $provider === 'local' || ! $configured) {
+        if ($provider === 'local' || ! $configured) {
             return [
-                'status' => $configured || $provider === 'anthropic' ? 'local' : 'awaiting_credentials',
+                'status' => $configured ? 'local' : 'awaiting_credentials',
                 'mode' => 'local_sim',
                 'provider' => $provider,
                 'configured' => $configured,
-                'message' => $provider === 'anthropic'
-                    ? 'Creative intelligence uses Anthropic when keyed; image pixels use local jewellery SVG simulator until a dedicated image provider is live.'
-                    : ($configured
-                        ? 'Image API key present but INTEGRATION_MODE is not live — using local jewellery SVG simulator.'
-                        : 'Add Anthropic on Integrations for agent/creative prompts. Image pixels stay local_sim without a dedicated IMAGE provider.'),
-                'engine_hint' => 'Paste Anthropic API key on Integrations. Optional IMAGE_PROVIDER=gemini + IMAGE_API_KEY for live pixels.',
+                'message' => $configured
+                    ? 'Image credentials present but provider is local — jewellery preview only.'
+                    : 'Add GEMINI_API_KEY for live photoreal jewellery images.',
+                'engine_hint' => 'Set GEMINI_API_KEY (+ optional IMAGE_MODEL) for live pixels.',
+            ];
+        }
+
+        // Gemini/Imagen pixel path is live whenever keyed (Production Vercel keys).
+        if (in_array($provider, ['gemini', 'imagen'], true) && $configured) {
+            return [
+                'status' => 'live',
+                'mode' => 'live',
+                'provider' => $provider,
+                'configured' => true,
+                'message' => 'Live Gemini image path enabled ('.$provider.').',
+                'engine_hint' => '',
             ];
         }
 
@@ -50,7 +58,7 @@ class ImageGenerationService
                 'mode' => 'local_sim',
                 'provider' => $provider,
                 'configured' => true,
-                'message' => 'Credentials present; INTEGRATION_MODE is not live — local_sim only. Never report live-healthy without tokens + live mode.',
+                'message' => 'Credentials present; INTEGRATION_MODE is not live — local_sim only.',
                 'engine_hint' => 'Set INTEGRATION_MODE=live to enable provider calls.',
             ];
         }
@@ -70,6 +78,16 @@ class ImageGenerationService
         $status = $this->status();
 
         return ($status['mode'] ?? 'local_sim') !== 'live';
+    }
+
+    /**
+     * Public wrapper for video poster stills (VideoGenerationService fallback).
+     *
+     * @return array{ok:bool,bytes?:string,mime_type?:string,error?:string,model?:string,provider?:string,path?:string}
+     */
+    public function callPublicGeminiImageForPoster(string $prompt, int $width = 1080, int $height = 1920): array
+    {
+        return $this->callGeminiImage($prompt, $width, $height);
     }
 
     /**
@@ -99,13 +117,14 @@ class ImageGenerationService
         }
 
         try {
-            $live = $this->callGeminiImage($prompt);
+            $live = $this->callGeminiImage($prompt, $width, $height);
             if (! ($live['ok'] ?? false)) {
-                // Honest fallback — do not pretend live succeeded.
+                // Honest: do not label SVG as live Gemini success.
                 $local = $this->persistLocalSvg($workspace, $item, $prompt, $width, $height, array_merge($merged, [
                     'fallback_reason' => $live['error'] ?? 'provider_failed',
                 ]));
-                $local['error'] = $live['error'] ?? 'Image provider failed; wrote local_sim asset.';
+                $local['ok'] = false;
+                $local['error'] = $live['error'] ?? 'Image provider failed';
                 $local['mode'] = 'local_sim';
 
                 return $local;
@@ -120,14 +139,18 @@ class ImageGenerationService
                 $width,
                 $height,
                 'live',
-                (string) config('creative.image.provider', 'gemini'),
-                $merged
+                (string) ($live['provider'] ?? config('creative.image.provider', 'gemini')),
+                array_merge($merged, [
+                    'model' => $live['model'] ?? null,
+                    'media_path' => $live['path'] ?? null,
+                ])
             );
         } catch (\Throwable $e) {
             Log::warning('creative.image_failed', ['error' => $e->getMessage()]);
             $local = $this->persistLocalSvg($workspace, $item, $prompt, $width, $height, array_merge($merged, [
                 'fallback_reason' => $e->getMessage(),
             ]));
+            $local['ok'] = false;
             $local['error'] = $e->getMessage();
 
             return $local;
@@ -236,6 +259,9 @@ class ImageGenerationService
             'metadata' => [
                 'product' => $context['product'] ?? null,
                 'jewellery_aware' => true,
+                'realistic_3d' => true,
+                'model' => $context['model'] ?? null,
+                'media_path' => $context['media_path'] ?? null,
             ],
         ]);
 
@@ -249,32 +275,200 @@ class ImageGenerationService
     }
 
     /**
-     * @return array{ok:bool,bytes?:string,mime_type?:string,error?:string}
+     * Cascade: Interactions (Gemini apps path) → generateContent → Imagen predict.
+     *
+     * @return array{ok:bool,bytes?:string,mime_type?:string,error?:string,model?:string,provider?:string,path?:string}
      */
-    protected function callGeminiImage(string $prompt): array
+    protected function callGeminiImage(string $prompt, int $width, int $height): array
     {
         $key = $this->apiKey();
-        $model = (string) config('creative.image.model', 'imagen-3.0-generate-002');
+        if ($key === '') {
+            return ['ok' => false, 'error' => 'GEMINI_API_KEY missing'];
+        }
+
+        $primary = (string) config('creative.image.model', 'gemini-3-pro-image');
+        $fallbacks = (array) config('creative.image.fallback_models', []);
+        $models = array_values(array_unique(array_filter(array_merge([$primary], $fallbacks))));
+        $aspect = $this->aspectRatioLabel($width, $height);
+        $errors = [];
+
+        foreach ($models as $model) {
+            $model = (string) $model;
+            if ($model === '') {
+                continue;
+            }
+
+            if (str_starts_with($model, 'imagen-')) {
+                $imagen = $this->callImagenPredict($prompt, $model, $aspect, $key);
+                if ($imagen['ok'] ?? false) {
+                    return $imagen;
+                }
+                $errors[] = $model.': '.($imagen['error'] ?? 'failed');
+
+                continue;
+            }
+
+            $interaction = $this->callInteractionsImage($prompt, $model, $aspect, $key);
+            if ($interaction['ok'] ?? false) {
+                return $interaction;
+            }
+            $errors[] = 'interactions:'.$model.': '.($interaction['error'] ?? 'failed');
+
+            $gc = $this->callGenerateContentImage($prompt, $model, $aspect, $key);
+            if ($gc['ok'] ?? false) {
+                return $gc;
+            }
+            $errors[] = 'generateContent:'.$model.': '.($gc['error'] ?? 'failed');
+        }
+
+        return [
+            'ok' => false,
+            'error' => implode(' | ', array_slice($errors, 0, 6)) ?: 'Gemini image generation failed',
+        ];
+    }
+
+    /**
+     * @return array{ok:bool,bytes?:string,mime_type?:string,error?:string,model?:string,provider?:string,path?:string}
+     */
+    protected function callInteractionsImage(string $prompt, string $model, string $aspect, string $key): array
+    {
         $base = rtrim((string) config('creative.image.base_url'), '/');
-
-        // Imagen predict endpoint (production path). Failures return ok=false — never fake success.
-        $url = $base.'/models/'.$model.':predict';
-
-        $response = Http::timeout((int) config('creative.image.timeout', 60))
-            ->withHeaders(['x-goog-api-key' => $key])
-            ->post($url, [
-                'instances' => [
-                    ['prompt' => $prompt],
-                ],
-                'parameters' => [
-                    'sampleCount' => 1,
+        $response = Http::timeout((int) config('creative.image.timeout', 90))
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->post($base.'/interactions?key='.urlencode($key), [
+                'model' => $model,
+                'input' => $prompt,
+                'response_format' => [
+                    'type' => 'image',
+                    'aspect_ratio' => $aspect,
                 ],
             ]);
 
         if (! $response->successful()) {
             return [
                 'ok' => false,
-                'error' => 'Image provider HTTP '.$response->status(),
+                'error' => 'Interactions HTTP '.$response->status(),
+                'model' => $model,
+            ];
+        }
+
+        $json = $response->json();
+        $b64 = data_get($json, 'output_image.data')
+            ?? data_get($json, 'outputImage.data');
+        $mime = data_get($json, 'output_image.mime_type')
+            ?? data_get($json, 'outputImage.mimeType')
+            ?? 'image/png';
+
+        if (! is_string($b64) || $b64 === '') {
+            foreach ((array) data_get($json, 'steps', []) as $step) {
+                foreach ((array) data_get($step, 'content', []) as $part) {
+                    $type = strtolower((string) data_get($part, 'type', ''));
+                    if ($type === 'image' && is_string(data_get($part, 'data'))) {
+                        $b64 = (string) data_get($part, 'data');
+                        $mime = (string) (data_get($part, 'mime_type') ?: 'image/png');
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        if (! is_string($b64) || $b64 === '') {
+            return ['ok' => false, 'error' => 'Interactions returned no image', 'model' => $model];
+        }
+
+        $bytes = base64_decode($b64, true);
+        if ($bytes === false) {
+            return ['ok' => false, 'error' => 'Invalid image base64', 'model' => $model];
+        }
+
+        return [
+            'ok' => true,
+            'bytes' => $bytes,
+            'mime_type' => is_string($mime) ? $mime : 'image/png',
+            'model' => $model,
+            'provider' => 'gemini',
+            'path' => 'interactions',
+        ];
+    }
+
+    /**
+     * @return array{ok:bool,bytes?:string,mime_type?:string,error?:string,model?:string,provider?:string,path?:string}
+     */
+    protected function callGenerateContentImage(string $prompt, string $model, string $aspect, string $key): array
+    {
+        $base = rtrim((string) config('creative.image.base_url'), '/');
+        $response = Http::timeout((int) config('creative.image.timeout', 90))
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->post($base.'/models/'.$model.':generateContent?key='.urlencode($key), [
+                'contents' => [
+                    ['role' => 'user', 'parts' => [['text' => $prompt]]],
+                ],
+                'generationConfig' => [
+                    'responseModalities' => ['TEXT', 'IMAGE'],
+                    'imageConfig' => [
+                        'aspectRatio' => $aspect,
+                    ],
+                ],
+            ]);
+
+        if (! $response->successful()) {
+            return [
+                'ok' => false,
+                'error' => 'generateContent HTTP '.$response->status(),
+                'model' => $model,
+            ];
+        }
+
+        $parts = data_get($response->json(), 'candidates.0.content.parts', []);
+        foreach ((array) $parts as $part) {
+            $b64 = data_get($part, 'inlineData.data') ?? data_get($part, 'inline_data.data');
+            if (is_string($b64) && $b64 !== '') {
+                $bytes = base64_decode($b64, true);
+                if ($bytes === false) {
+                    return ['ok' => false, 'error' => 'Invalid generateContent base64', 'model' => $model];
+                }
+
+                return [
+                    'ok' => true,
+                    'bytes' => $bytes,
+                    'mime_type' => (string) (
+                        data_get($part, 'inlineData.mimeType')
+                        ?? data_get($part, 'inline_data.mime_type')
+                        ?? 'image/png'
+                    ),
+                    'model' => $model,
+                    'provider' => 'gemini',
+                    'path' => 'generateContent',
+                ];
+            }
+        }
+
+        return ['ok' => false, 'error' => 'generateContent returned no image parts', 'model' => $model];
+    }
+
+    /**
+     * @return array{ok:bool,bytes?:string,mime_type?:string,error?:string,model?:string,provider?:string,path?:string}
+     */
+    protected function callImagenPredict(string $prompt, string $model, string $aspect, string $key): array
+    {
+        $base = rtrim((string) config('creative.image.base_url'), '/');
+        $response = Http::timeout((int) config('creative.image.timeout', 90))
+            ->withHeaders(['x-goog-api-key' => $key])
+            ->post($base.'/models/'.$model.':predict', [
+                'instances' => [
+                    ['prompt' => $prompt],
+                ],
+                'parameters' => [
+                    'sampleCount' => 1,
+                    'aspectRatio' => $aspect,
+                ],
+            ]);
+
+        if (! $response->successful()) {
+            return [
+                'ok' => false,
+                'error' => 'Imagen HTTP '.$response->status(),
+                'model' => $model,
             ];
         }
 
@@ -284,30 +478,34 @@ class ImageGenerationService
         if (! is_string($b64) || $b64 === '') {
             return [
                 'ok' => false,
-                'error' => 'Image provider returned no image bytes',
+                'error' => 'Imagen returned no image bytes',
+                'model' => $model,
             ];
         }
 
         $bytes = base64_decode($b64, true);
         if ($bytes === false) {
-            return ['ok' => false, 'error' => 'Invalid base64 image payload'];
+            return ['ok' => false, 'error' => 'Invalid Imagen base64', 'model' => $model];
         }
 
         return [
             'ok' => true,
             'bytes' => $bytes,
             'mime_type' => 'image/png',
+            'model' => $model,
+            'provider' => 'imagen',
+            'path' => 'predict',
         ];
     }
 
     protected function hasApiKey(): bool
     {
-        return filled(config('creative.image.api_key'));
+        return filled($this->apiKey());
     }
 
     protected function apiKey(): string
     {
-        return (string) config('creative.image.api_key', '');
+        return trim((string) config('creative.image.api_key', ''));
     }
 
     protected function normalizeProvider(string $provider): string
@@ -318,8 +516,33 @@ class ImageGenerationService
             'claude', 'anthropic_claude' => 'anthropic',
             'gemini', 'google', 'imagen', 'google_imagen' => 'gemini',
             'local', 'sim', 'simulator' => 'local',
-            default => $normalized !== '' ? $normalized : 'anthropic',
+            default => $normalized !== '' ? $normalized : 'gemini',
         };
+    }
+
+    protected function aspectRatioLabel(int $width, int $height): string
+    {
+        if ($height <= 0) {
+            return '1:1';
+        }
+        $r = $width / $height;
+        if (abs($r - 1) < 0.08) {
+            return '1:1';
+        }
+        if ($r < 0.7) {
+            return '9:16';
+        }
+        if ($r > 1.7) {
+            return '16:9';
+        }
+        if ($r > 1.2) {
+            return '5:4';
+        }
+        if ($r < 0.85) {
+            return '4:5';
+        }
+
+        return '1:1';
     }
 
     protected function aspect(int $width, int $height): string

@@ -6,49 +6,58 @@ return [
     | Image generation
     |--------------------------------------------------------------------------
     |
-    | IMAGE_PROVIDER=anthropic|gemini|local
-    | IMAGE_API_KEY falls back to ANTHROPIC_API_KEY (primary) then GEMINI_API_KEY.
-    | Creative intelligence (prompts / agent tools) goes through Anthropic.
-    | Without a key the stack uses the local jewellery SVG simulator and reports
-    | mode local_sim / awaiting_credentials — never fake live-healthy image APIs.
+    | IMAGE_PROVIDER=gemini|imagen|local (default gemini)
+    | IMAGE_API_KEY falls back to GEMINI_API_KEY.
+    | Creative intelligence (prompts / agent tools / scripts) goes through Anthropic.
+    | Gemini pixels are live whenever GEMINI_API_KEY is present — INTEGRATION_MODE
+    | is not required for the Gemini image path.
+    | Without a key the stack uses the local jewellery SVG simulator.
     |
     */
     'image' => [
         // Pixels: Gemini when keyed. Claude remains the copy/script path via VideoScriptService.
         'provider' => env('IMAGE_PROVIDER', 'gemini'),
-        'api_key' => env('IMAGE_API_KEY', env('GEMINI_API_KEY', env('ANTHROPIC_API_KEY'))),
-        'model' => env('IMAGE_MODEL', env('GEMINI_IMAGE_MODEL', 'gemini-2.0-flash-preview-image-generation')),
+        'api_key' => env('IMAGE_API_KEY', env('GEMINI_API_KEY', env('GOOGLE_GEMINI_API_KEY'))),
+        'model' => env('IMAGE_MODEL', env('GEMINI_IMAGE_MODEL', 'gemini-3-pro-image')),
+        'fallback_models' => array_values(array_filter(array_map('trim', explode(',', (string) env(
+            'IMAGE_FALLBACK_MODELS',
+            'gemini-nano-banana-2.1,gemini-3.1-flash-image,gemini-2.5-flash-image,imagen-4.0-generate-001,imagen-3.0-generate-002'
+        ))))),
         'base_url' => env(
             'IMAGE_BASE_URL',
             env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta')
         ),
-        'timeout' => (int) env('IMAGE_TIMEOUT', 60),
+        'timeout' => (int) env('IMAGE_TIMEOUT', 90),
         'default_width' => 1080,
         'default_height' => 1080,
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | Video / short animation generation (dual path)
+    | Video / short animation generation
     |--------------------------------------------------------------------------
     |
     | Anthropic/Claude writes scripts & storyboards only — it cannot render
     | video pixels. Pixel path needs a dedicated provider:
-    |   VIDEO_PROVIDER=local|animation|http|gemini|veo|runway|luma
+    |   VIDEO_PROVIDER=local|animation|http|gemini|veo|omni|runway|luma
     | Keys:
     |   VIDEO_API_KEY / VIDEO_MODEL / VIDEO_BASE_URL / VIDEO_TIMEOUT
-    |   GEMINI_API_KEY is used as fallback when VIDEO_PROVIDER=gemini|veo
-    |   INTEGRATION_MODE=live required for live provider calls
+    |   GEMINI_API_KEY is used as fallback when VIDEO_PROVIDER=gemini|veo|omni
+    |   Gemini Omni is live whenever keyed — INTEGRATION_MODE not required
     | Without keys, creative generate-video/animation uses local SVG + mp4 stub.
     |
     */
     'video' => [
-        // Default Gemini/Veo for viral UGC pixels when keyed; local animation remains operable without keys.
+        // Default Gemini Omni for jewellery video pixels when keyed.
         'provider' => env('VIDEO_PROVIDER', 'gemini'),
-        'api_key' => env('VIDEO_API_KEY', env('GEMINI_API_KEY')),
-        'model' => env('VIDEO_MODEL', 'veo-2.0-generate-001'),
+        'api_key' => env('VIDEO_API_KEY', env('GEMINI_API_KEY', env('GOOGLE_GEMINI_API_KEY'))),
+        'model' => env('VIDEO_MODEL', 'gemini-omni-1.1-flash'),
+        'fallback_models' => array_values(array_filter(array_map('trim', explode(',', (string) env(
+            'VIDEO_FALLBACK_MODELS',
+            'gemini-omni-1.1-flash'
+        ))))),
         'base_url' => env('VIDEO_BASE_URL', ''),
-        'timeout' => (int) env('VIDEO_TIMEOUT', 120),
+        'timeout' => (int) env('VIDEO_TIMEOUT', 180),
         'default_duration_ms' => 8000,
         'default_width' => 1080,
         'default_height' => 1920,

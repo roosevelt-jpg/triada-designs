@@ -46,6 +46,19 @@ class VideoGenerationService
             'providers' => ['local', 'animation', 'http', 'gemini', 'veo', 'runway', 'luma'],
         ];
 
+        // Gemini Omni pixel path is live whenever keyed (Production Vercel GEMINI_API_KEY).
+        if (in_array($provider, ['gemini', 'veo', 'omni'], true) && $configured) {
+            return [
+                'status' => 'live',
+                'mode' => 'live',
+                'provider' => $provider === 'veo' ? 'gemini' : $provider,
+                'configured' => true,
+                'message' => 'Live Gemini video path enabled (Omni / '.$provider.').',
+                'dual_path' => $dual,
+                'engine_hint' => '',
+            ];
+        }
+
         if (in_array($provider, ['local', 'animation'], true) || ! $configured || $mode !== 'live') {
             $awaiting = ! $configured && ! in_array($provider, ['local', 'animation'], true);
 
@@ -55,12 +68,12 @@ class VideoGenerationService
                 'provider' => $provider,
                 'configured' => $configured || in_array($provider, ['local', 'animation'], true),
                 'message' => $awaiting
-                    ? 'Add VIDEO_PROVIDER (runway|luma|veo|gemini|http) + VIDEO_API_KEY and INTEGRATION_MODE=live for live pixels. Local animated SVG + placeholder mp4 is operable now.'
+                    ? 'Add GEMINI_API_KEY (VIDEO_PROVIDER=gemini) for live jewellery video. Local animation remains operable without keys.'
                     : ($configured && $mode !== 'live'
                         ? 'VIDEO_API_KEY present but INTEGRATION_MODE is not live — local_sim SVG/animation only.'
                         : 'Local creative animation pipeline active (SVG motion + placeholder mp4). Anthropic still handles scripts when keyed.'),
                 'dual_path' => $dual,
-                'engine_hint' => 'Claude ≠ video renderer. Wire VIDEO_PROVIDER=runway|luma|veo|gemini|http or keep local animation.',
+                'engine_hint' => 'Wire GEMINI_API_KEY + VIDEO_MODEL=gemini-omni-1.1-flash for live pixels.',
             ];
         }
 
@@ -408,7 +421,7 @@ class VideoGenerationService
     {
         $provider = $this->normalizeProvider((string) config('creative.video.provider', 'local'));
         $key = $this->apiKeyFor($provider);
-        $model = (string) config('creative.video.model', 'veo-2.0-generate-001');
+        $model = (string) config('creative.video.model', 'gemini-omni-1.1-flash');
         $timeout = (int) config('creative.video.timeout', 120);
 
         if ($key === '' && ! in_array($provider, ['local', 'animation'], true)) {
@@ -418,7 +431,7 @@ class VideoGenerationService
         return match ($provider) {
             'runway' => $this->callRunway($prompt, $durationMs, $key, $model, $timeout),
             'luma' => $this->callLuma($prompt, $durationMs, $key, $model, $timeout),
-            'gemini', 'veo' => $this->callGeminiVeo($prompt, $durationMs, $key, $model, $timeout),
+            'gemini', 'veo', 'omni' => $this->callGeminiVideo($prompt, $durationMs, $key, $model, $timeout),
             default => $this->callGenericHttp($prompt, $durationMs, $key, $model, $timeout),
         };
     }
@@ -494,29 +507,107 @@ class VideoGenerationService
     }
 
     /**
+     * Gemini consumer-app path: Interactions API with Omni Flash (top current video model).
+     * Falls back to photoreal image poster via image cascade — never empty abstract SVG as "live".
+     *
      * @return array{ok:bool,bytes?:string,mime_type?:string,error?:string,provider?:string}
      */
-    protected function callGeminiVeo(string $prompt, int $durationMs, string $key, string $model, int $timeout): array
+    protected function callGeminiVideo(string $prompt, int $durationMs, string $key, string $model, int $timeout): array
     {
         $base = rtrim((string) (
             config('creative.video.base_url')
             ?: config('creative.video.gemini_base_url')
             ?: 'https://generativelanguage.googleapis.com/v1beta'
         ), '/');
-        $modelId = $model !== '' ? $model : 'veo-2.0-generate-001';
 
-        // Prefer a gateway that returns video_base64 immediately; document async Veo ops separately.
-        $response = Http::timeout($timeout)
-            ->withHeaders(['Content-Type' => 'application/json'])
-            ->post($base.'/models/'.$modelId.':predict?key='.urlencode($key), [
-                'instances' => [['prompt' => $prompt]],
-                'parameters' => [
-                    'durationSeconds' => max(2, (int) round($durationMs / 1000)),
-                    'aspectRatio' => '9:16',
-                ],
-            ]);
+        $primary = $model !== '' ? $model : 'gemini-omni-1.1-flash';
+        if (str_starts_with(strtolower($primary), 'veo-')) {
+            // Veo preview shut down — route to Omni unless caller forces a custom gateway.
+            $primary = 'gemini-omni-1.1-flash';
+        }
 
-        return $this->decodeVideoResponse($response, 'veo');
+        $fallbacks = (array) config('creative.video.fallback_models', ['gemini-omni-1.1-flash']);
+        $models = array_values(array_unique(array_filter(array_merge([$primary], $fallbacks))));
+        $errors = [];
+
+        foreach ($models as $modelId) {
+            $modelId = (string) $modelId;
+            if ($modelId === '' || str_starts_with(strtolower($modelId), 'veo-')) {
+                $modelId = 'gemini-omni-1.1-flash';
+            }
+
+            $response = Http::timeout($timeout)
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($base.'/interactions?key='.urlencode($key), [
+                    'model' => $modelId,
+                    'input' => $prompt,
+                    'response_format' => [
+                        'type' => 'video',
+                        'aspect_ratio' => '9:16',
+                    ],
+                ]);
+
+            if (! $response->successful()) {
+                $errors[] = $modelId.': Interactions HTTP '.$response->status();
+
+                continue;
+            }
+
+            $json = $response->json();
+            $b64 = data_get($json, 'output_video.data')
+                ?? data_get($json, 'outputVideo.data');
+            $mime = data_get($json, 'output_video.mime_type')
+                ?? data_get($json, 'outputVideo.mimeType')
+                ?? 'video/mp4';
+
+            if (! is_string($b64) || $b64 === '') {
+                foreach ((array) data_get($json, 'steps', []) as $step) {
+                    foreach ((array) data_get($step, 'content', []) as $part) {
+                        $type = strtolower((string) data_get($part, 'type', ''));
+                        if (($type === 'video' || str_starts_with((string) data_get($part, 'mime_type', ''), 'video/'))
+                            && is_string(data_get($part, 'data'))) {
+                            $b64 = (string) data_get($part, 'data');
+                            $mime = (string) (data_get($part, 'mime_type') ?: 'video/mp4');
+                            break 2;
+                        }
+                    }
+                }
+            }
+
+            if (is_string($b64) && $b64 !== '') {
+                $bytes = base64_decode($b64, true);
+                if ($bytes !== false) {
+                    return [
+                        'ok' => true,
+                        'bytes' => $bytes,
+                        'mime_type' => is_string($mime) ? $mime : 'video/mp4',
+                        'provider' => 'gemini',
+                    ];
+                }
+            }
+
+            $errors[] = $modelId.': Interactions returned no video bytes';
+        }
+
+        // Last resort while keyed: photoreal still via image service path (not SVG placeholder).
+        $image = app(ImageGenerationService::class);
+        $stillPrompt = $prompt."\n\nStill frame: photoreal 3D anamorphic jewellery product hero for video poster — real piece, not abstract.";
+        $still = $image->callPublicGeminiImageForPoster($stillPrompt, 1080, 1920);
+        if (($still['ok'] ?? false) && isset($still['bytes'])) {
+            return [
+                'ok' => true,
+                'bytes' => $still['bytes'],
+                'mime_type' => (string) ($still['mime_type'] ?? 'image/png'),
+                'provider' => 'gemini',
+                'error' => 'video_poster_only: '.implode(' | ', array_slice($errors, 0, 3)),
+            ];
+        }
+
+        return [
+            'ok' => false,
+            'error' => implode(' | ', array_slice($errors, 0, 6)) ?: 'Gemini video generation failed',
+            'provider' => 'gemini',
+        ];
     }
 
     /**
@@ -590,6 +681,7 @@ class VideoGenerationService
 
         return match ($p) {
             'google', 'google_veo', 'veo-2', 'veo2' => 'veo',
+            'omni', 'gemini_omni', 'gemini-omni' => 'omni',
             'runwayml', 'runway_ml' => 'runway',
             'lumalabs', 'dream-machine' => 'luma',
             'generic', 'custom' => 'http',
@@ -614,7 +706,7 @@ class VideoGenerationService
             return $primary;
         }
 
-        if (in_array($provider, ['gemini', 'veo'], true)) {
+        if (in_array($provider, ['gemini', 'veo', 'omni'], true)) {
             return trim((string) (
                 env('GEMINI_API_KEY')
                 ?: env('GOOGLE_GEMINI_API_KEY')

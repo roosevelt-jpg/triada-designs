@@ -9,7 +9,9 @@ namespace App\Services\Creative;
  */
 class JewelleryPromptBuilder
 {
-    public const PROMPT_VERSION = 2;
+    public const PROMPT_VERSION = 3;
+
+    public const REALISM_MEDIA_DIRECTIVE = 'CRITICAL OUTPUT: photorealistic 3D anamorphic jewellery product media — looks like a real Triada Designs piece on a real surface, not abstract art, blank canvas, logo mark, typography poster, gradient blob, or empty placeholder. Show a tangible wearable: ring, pendant, necklace, bracelet, or earrings with readable metal, plating, stone, clasp, and micro-scratches/reflections. Anamorphic 3D product look: slight perspective foreshortening, soft contact shadow, specular highlights on metal, subsurface glow on stones — studio-product or handheld UGC still that could ship on Shopify. Full-bleed product hero: jewellery fills most of the frame; no large empty negative space, no floating text badges, no watermark spam, no UI chrome.';
 
     /**
      * @param  array<string, mixed>  $context
@@ -25,22 +27,26 @@ class JewelleryPromptBuilder
 
         $captionClean = trim(preg_replace('/\s+/', ' ', $caption) ?: '');
         $ugcLine = $style === 'ugc'
-            ? 'Look: authentic UGC / creator phone still — natural desk or soft window light, jewellery hero, lived-in elegance, not glossy catalog hard-sell.'
-            : 'Look: refined editorial product photography — photoreal or high-end studio, restrained luxury.';
+            ? 'Look: authentic UGC / creator phone still — natural desk or soft window light, jewellery hero filling the frame, lived-in elegance, photoreal product — not glossy catalog hard-sell and never abstract.'
+            : 'Look: refined editorial product photography — photoreal 3D jewellery on linen or marble, restrained luxury studio light.';
 
-        return trim(<<<TXT
-Premium jewellery visual for Triada Designs — high-converting social creative.
-Piece/focus: {$product}.
-Materials: {$materials}.
-Campaign objective: {$objective} (drive saves, DMs, soft shop intent).
-Channel: {$channel} (Meta/IG/TikTok/WhatsApp ready crop).
-Mood: {$mood}.
-{$ugcLine}
-Composition: jewellery dominates frame; shallow depth; tactile metal/stone detail; warm ivory–champagne neutrals.
-Avoid: neon, purple glow, fake badges, invented logos, watermark spam, text-heavy overlays, medical claims.
-Caption alignment: {$captionClean}
-Style keywords for generation: viral UGC jewellery, soft Gulf light, quiet luxury, conversion-ready still.
-TXT);
+        $captionLine = $captionClean !== '' ? "Caption alignment: {$captionClean}" : '';
+
+        return trim(implode("\n", array_filter([
+            'Photorealistic 3D anamorphic jewellery product image for Triada Designs — must look like a real sellable piece.',
+            self::REALISM_MEDIA_DIRECTIVE,
+            "Piece/focus: {$product}.",
+            "Materials: {$materials}.",
+            "Campaign objective: {$objective} (drive saves, DMs, soft shop intent).",
+            "Channel: {$channel} (Meta/IG/TikTok/WhatsApp ready crop).",
+            "Mood: {$mood}.",
+            $ugcLine,
+            'Composition: jewellery dominates frame; shallow depth of field; tactile metal/stone micro-detail; warm ivory–champagne neutrals; soft contact shadow under the piece.',
+            'Lighting: soft Gulf window or warm key + gentle rim; accurate metal reflections; no neon, no purple glow, no CGI plastic look.',
+            'Avoid: blank/empty canvases, abstract shapes, floating logos, fake badges, invented brand marks, watermark spam, text-heavy overlays, medical claims, surreal melting metal, flat 2D icons.',
+            $captionLine,
+            'Style keywords: photoreal 3D anamorphic jewellery, real product photography, soft Gulf light, quiet luxury, conversion-ready still.',
+        ])));
     }
 
     /**
@@ -53,27 +59,29 @@ TXT);
         $product = (string) ($context['product'] ?? 'Triada Designs jewellery piece');
         $style = strtolower((string) ($context['style'] ?? 'ugc'));
         $channel = (string) ($context['channel'] ?? 'instagram');
-        $storyboard = (string) ($context['storyboard'] ?? '0-1s hook close-up; mid authentic voiceover + soft light shift; end brand-restrained CTA frame');
+        $storyboard = (string) ($context['storyboard'] ?? '0-1s hook close-up of real jewellery; mid authentic light shift on metal; end brand-restrained product hero');
         $hook = trim((string) ($context['hook'] ?? ''));
         $ugcLine = $style === 'ugc'
-            ? 'Format: authentic UGC / creator-style vertical 9:16, natural handheld micro-shake, soft Gulf window light, jewellery hero — scroll-stopping first frame, not studio hard-sell.'
-            : 'Format: calm premium motion from stills or soft camera push-in; conversion-ready end frame.';
+            ? 'Format: authentic UGC / creator-style vertical 9:16, natural handheld micro-shake, soft Gulf window light, photoreal jewellery hero — scroll-stopping first frame of a real piece, not studio hard-sell or abstract motion graphics.'
+            : 'Format: calm premium camera push-in / orbit on a photoreal 3D jewellery product; conversion-ready end frame.';
         $hookLine = $hook !== ''
             ? "Opening hook cue: {$hook}"
-            : 'Opening: pattern-interrupt close-up of the piece in the first second.';
+            : 'Opening: pattern-interrupt extreme close-up of the real piece in the first second (metal specular + stone catchlight).';
 
-        return trim(<<<TXT
-Short high-converting marketing video for Triada Designs jewellery ({$seconds}s).
-Subject: {$product}.
-Style: {$style}. Channel: {$channel} (Reels / TikTok / Stories / WhatsApp Status).
-{$ugcLine}
-{$hookLine}
-Storyboard: {$storyboard}.
-Script/caption cue: {$scriptOrCaption}
-Pacing: hook → desire → soft CTA. End frame calm brand restraint.
-Avoid: loud effects, fake urgency text overlays, invented claims/logos, neon glows, stock influencer clichés.
-Generation keywords: viral jewellery UGC, Gulf light, quiet luxury, Meta/TikTok native.
-TXT);
+        return trim(implode("\n", [
+            "Photorealistic short marketing video of Triada Designs jewellery ({$seconds}s) — real 3D anamorphic product motion, not blank or abstract.",
+            self::REALISM_MEDIA_DIRECTIVE,
+            "Subject: {$product}.",
+            "Style: {$style}. Channel: {$channel} (Reels / TikTok / Stories / WhatsApp Status).",
+            $ugcLine,
+            $hookLine,
+            "Storyboard: {$storyboard}.",
+            'Script/caption cue: '.trim($scriptOrCaption),
+            'Camera: slow orbit, soft push-in, or gentle tilt that reveals form, thickness, and how light travels across metal.',
+            'Pacing: hook → desire → soft CTA. End on a clear product hero frame suitable for commerce.',
+            'Avoid: loud effects, fake urgency text overlays, invented claims/logos, neon glows, blank frames, abstract morphs, stock influencer clichés.',
+            'Generation keywords: photoreal 3D anamorphic jewellery, real product motion, Gulf light, quiet luxury, Meta/TikTok native.',
+        ]));
     }
 
     public function ugcScriptSystemPrompt(): string
@@ -90,6 +98,7 @@ TXT);
             '- Authentic creator voice: handheld, natural, conversational — not studio hard-sell or celebrity polish.',
             '- Captions: scannable, 1–3 short lines + optional emoji sparingly; hashtags 3–6 brand-safe max.',
             '- Materials truth only when stated: silver with gold plating; 14K/18K gold on request; ~7 day make time.',
+            '- Describe the physical piece clearly (shape, metal, stone, how it sits on skin/surface) so media can render a real product.',
             '- Never invent prices, stock, reviews, celebrity endorsements, or medical/wellness claims.',
             '- Human approval is always required before public publish.',
             '- You write text packages only. Do not claim you rendered video or image pixels.',
@@ -120,6 +129,7 @@ Product: {$product}
 Objective: {$objective}
 {$briefLine}
 {$storyLine}
+Describe the piece as a real wearable so media can render photoreal 3D product footage.
 Respond with JSON only: {"hook":"...","script":"...","storyboard":"...","cta":"...","caption":"...","hashtags":["..."],"platform_notes":"..."}.
 TXT);
     }
