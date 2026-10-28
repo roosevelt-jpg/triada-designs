@@ -45,6 +45,20 @@ export function geminiBaseUrl() {
 }
 
 /**
+ * Normalize timeout env values.
+ * Laravel-era Vercel vars used seconds (e.g. IMAGE_TIMEOUT=90); Next needs ms.
+ * @param {string|number|undefined} raw
+ * @param {number} fallbackMs
+ */
+export function resolveTimeoutMs(raw, fallbackMs) {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return fallbackMs;
+  // Values under 1000 are almost certainly seconds (90 → 90s, not 90ms).
+  if (n < 1000) return Math.round(n * 1000);
+  return Math.round(n);
+}
+
+/**
  * List models visible to this API key (used to pick live image/video endpoints).
  * @param {string} apiKey
  * @returns {Promise<{ ok: boolean, models: string[], error?: string }>}
@@ -102,8 +116,11 @@ function pickImageModels(available) {
   const set = new Set(available.map((m) => m.toLowerCase()));
   const preferred = [
     "gemini-nano-banana-2.1",
+    "nano-banana-pro-preview",
     "gemini-3-pro-image",
+    "gemini-3-pro-image-preview",
     "gemini-3.1-flash-image",
+    "gemini-3.1-flash-image-preview",
     "gemini-3.1-flash-lite-image",
     "gemini-2.5-flash-image",
     "gemini-2.5-flash-image-preview",
@@ -227,7 +244,7 @@ async function callInteractions(opts) {
   const bases = Array.from(
     new Set([DEFAULT_BASE, geminiBaseUrl(), opts.base].filter(Boolean)),
   );
-  const timeoutMs = Number(opts.timeoutMs || 120000);
+  const timeoutMs = resolveTimeoutMs(opts.timeoutMs, 120000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const body = {
@@ -307,7 +324,7 @@ async function callGenerateContentImage(opts) {
   const bases = Array.from(
     new Set([DEFAULT_BASE, geminiBaseUrl(), opts.base, "https://generativelanguage.googleapis.com/v1"].filter(Boolean)),
   );
-  const timeoutMs = Number(opts.timeoutMs || 90000);
+  const timeoutMs = resolveTimeoutMs(opts.timeoutMs, 120000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -440,12 +457,14 @@ export async function generateGeminiImage(input) {
     errors.push(`models.list: ${listed.error}`);
   }
 
+  // Prefer preview ids the key actually lists (e.g. gemini-3-pro-image-preview).
   const cascade = modelList(
     preferred,
     listed.ok ? discovered : GEMINI_IMAGE_MODELS.slice(0, 3),
     "image",
   );
   const workingBase = listed.base || DEFAULT_BASE;
+  const timeoutMs = resolveTimeoutMs(process.env.IMAGE_TIMEOUT, 120000);
 
   for (const model of cascade) {
     // Primary: Interactions (Gemini apps path)
@@ -456,7 +475,7 @@ export async function generateGeminiImage(input) {
       kind: "image",
       aspectRatio,
       base: workingBase,
-      timeoutMs: Number(process.env.IMAGE_TIMEOUT || 120000),
+      timeoutMs,
     });
     if (result.ok) {
       return {
@@ -475,7 +494,7 @@ export async function generateGeminiImage(input) {
       prompt: input.prompt,
       aspectRatio,
       base: workingBase,
-      timeoutMs: Number(process.env.IMAGE_TIMEOUT || 90000),
+      timeoutMs,
     });
     if (gc.ok) {
       return {
@@ -526,8 +545,24 @@ export async function generateGeminiVideo(input) {
     (process.env.VIDEO_MODEL || "").trim() ||
     (process.env.GEMINI_VIDEO_MODEL || "").trim();
   const errors = [];
+  const timeoutMs = resolveTimeoutMs(process.env.VIDEO_TIMEOUT, 180000);
 
-  for (const model of modelList(preferred, GEMINI_VIDEO_MODELS, "video")) {
+  // Prefer omni models visible to this key when listable.
+  const listed = await listGeminiModels(apiKey);
+  const videoCascade = [];
+  if (listed.ok) {
+    for (const name of listed.models) {
+      const lower = name.toLowerCase();
+      if (lower.includes("omni") || lower.includes("veo")) videoCascade.push(name);
+    }
+  }
+  const models = modelList(
+    preferred,
+    videoCascade.length ? videoCascade : GEMINI_VIDEO_MODELS,
+    "video",
+  );
+
+  for (const model of models) {
     // Dead Veo ids → Omni (current top Gemini video model)
     const modelId = String(model).startsWith("veo-") ? "gemini-omni-1.1-flash" : model;
 
@@ -537,7 +572,8 @@ export async function generateGeminiVideo(input) {
       prompt: input.prompt,
       kind: "video",
       aspectRatio: aspectRatio === "1:1" ? "9:16" : aspectRatio,
-      timeoutMs: Number(process.env.VIDEO_TIMEOUT || 180000),
+      base: listed.base || DEFAULT_BASE,
+      timeoutMs,
     });
 
     if (result.ok) {
