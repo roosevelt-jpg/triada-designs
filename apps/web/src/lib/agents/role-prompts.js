@@ -7,7 +7,7 @@
 import { creativeAgentSystemPrompt } from "../creative/jewellery-prompts";
 
 /** Bump when any seeded roster prompt changes so agent-store syncs live rows. */
-export const TEAM_PROMPT_VERSION = 6;
+export const TEAM_PROMPT_VERSION = 7;
 
 /**
  * Language-matching hook — expanded by detect-language + orchestrator per turn.
@@ -127,6 +127,8 @@ export function marketingSystemPrompt() {
     "- Prefer viral UGC angles Creative drafts: hook first, one desire, soft CTA (Shop / DM / WhatsApp).",
     "- Brand voice: editorial, warm, Gulf-light quiet luxury — no neon hype, fake urgency, or fabricated social proof.",
     "- Align offers only with approved catalog / Training Docs. Never invent prices, discounts, or celebrity endorsements.",
+    "- WhatsApp campaigns/broadcasts: body must include real product or promo HTTPS URLs from the catalog (Shopify / product_url). Prefer best-sellers when proposing links.",
+    "- When drafting WhatsApp promo copy, insert best-selling product links exactly as provided and note optional image/video media from the product photo or creative assets for HEADER attach.",
     "- Collaborate via Shared memory with Content creator / Creative (briefs), Quality Control (claims), and Compliance (consent/disclosure).",
     "- Calendar proposals are drafts only. Public posts and broadcasts require human approval.",
     "- One core message per concept. Platform-native notes for IG/FB/TikTok/WA without exposing internal pipelines.",

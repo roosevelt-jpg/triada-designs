@@ -53,6 +53,12 @@ import {
 import { listProducts, getProduct } from "@/lib/commerce/products-store";
 import { shopifyStatusPayload } from "@/lib/commerce/shopify-admin";
 import {
+  buildPromoComponentsForContact,
+  draftWhatsAppCampaignWithBestsellers,
+  listBestSellingProducts,
+  resolveCampaignPromoPayload,
+} from "@/lib/integrations/whatsapp-campaign-promo";
+import {
   upsertWordpressProductPost,
   wordpressStatusPayload,
 } from "@/lib/commerce/wordpress-products";
@@ -432,6 +438,17 @@ export async function dispatchV1(method, segments, request, body) {
       shopify: shopifyStatusPayload(),
       wordpress: wordpressStatusPayload(),
       source: "next_dual_run",
+    });
+  }
+
+  if (path === "products/bestsellers" && m === "GET") {
+    const url = new URL(request.url);
+    const limit = Number(url.searchParams.get("limit") || 5);
+    const listed = await listBestSellingProducts({ limit });
+    return jsonOk({
+      data: listed.data,
+      mode: listed.mode,
+      source: listed.source,
     });
   }
 
@@ -1521,14 +1538,27 @@ export async function dispatchV1(method, segments, request, body) {
       : jsonErr("Contact not found.", 404);
   }
 
+  if (path === "integrations/whatsapp/campaign-draft" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const draft = await draftWhatsAppCampaignWithBestsellers(input);
+    return jsonOk(draft);
+  }
+
   if (path === "integrations/whatsapp/campaign-send" && m === "POST") {
     const input =
       body && typeof body === "object"
         ? /** @type {Record<string, unknown>} */ (body)
         : {};
+    const sendMode = String(input.send_mode || input.mode || "template")
+      .trim()
+      .toLowerCase();
     const templateName = String(input.template_name || "").trim();
-    if (!templateName) {
-      return jsonErr("template_name is required.", 422);
+    const wantsSession = sendMode === "session" || sendMode === "media";
+    if (!wantsSession && !templateName) {
+      return jsonErr("template_name is required (or send_mode=session).", 422);
     }
     if (input.marketing_opt_out === true && input.purpose !== "transactional") {
       return {
@@ -1541,6 +1571,7 @@ export async function dispatchV1(method, segments, request, body) {
       };
     }
 
+    const promo = await resolveCampaignPromoPayload(input);
     const listed = await listWhatsAppCampaignRecipients();
     let recipients = listed.data;
     if (Array.isArray(input.contact_ids) && input.contact_ids.length) {
@@ -1553,6 +1584,15 @@ export async function dispatchV1(method, segments, request, body) {
       100,
     );
     recipients = recipients.slice(0, limit);
+
+    const mediaFields = {
+      ...extractWhatsAppMediaInput({ ...input, ...promo.media }),
+      media_id: promo.media.media_id || undefined,
+      media_url: promo.media.media_url || undefined,
+      media_link: promo.media.media_link || undefined,
+      media_base64: promo.media.media_base64 || undefined,
+      media_type: promo.media.media_type || undefined,
+    };
 
     const results = [];
     for (const contact of recipients) {
@@ -1577,13 +1617,39 @@ export async function dispatchV1(method, segments, request, body) {
         });
         continue;
       }
-      const media = extractWhatsAppMediaInput(input);
+
+      if (wantsSession) {
+        const send = await sendWhatsAppMediaMessage({
+          to,
+          caption: promo.body,
+          ...mediaFields,
+          media_type: mediaFields.media_type || "image",
+        });
+        // Session text-only fallback when no media: still deliver promo body as caption on image path fails — use media with caption when media present
+        results.push({
+          contact_id: contact.id,
+          name: contact.name,
+          to,
+          phone_e164: contact.phone_e164,
+          ok: send.ok,
+          mode: send.mode,
+          provider_message_id: send.provider_message_id,
+          media_id: send.media_id || null,
+          media_type: send.media_type || mediaFields.media_type || null,
+          send_mode: "session",
+          promo_url: promo.promo_url,
+          error: send.error,
+        });
+        continue;
+      }
+
+      const components = buildPromoComponentsForContact(promo, contact, input);
       const send = await sendWhatsAppTemplateMessage({
         to,
         template_name: templateName,
         language: input.language ? String(input.language) : "en",
-        components: Array.isArray(input.components) ? input.components : [],
-        ...media,
+        components,
+        ...mediaFields,
       });
       results.push({
         contact_id: contact.id,
@@ -1594,22 +1660,30 @@ export async function dispatchV1(method, segments, request, body) {
         mode: send.mode,
         provider_message_id: send.provider_message_id,
         media_id: send.media_id || null,
-        media_type: send.media_type || null,
+        media_type: send.media_type || mediaFields.media_type || null,
+        send_mode: "template",
+        promo_url: promo.promo_url,
         error: send.error,
       });
     }
 
-    const mediaMeta = extractWhatsAppMediaInput(input);
     return jsonOk({
       ok: results.every((r) => r.ok),
       mode: listed.mode,
-      template_name: templateName,
+      template_name: templateName || null,
+      send_mode: wantsSession ? "session" : "template",
+      body: promo.body,
+      promo_url: promo.promo_url,
+      product_urls: promo.product_urls,
+      products: promo.products,
+      urls_injected: promo.urls_injected,
       media_attached: Boolean(
-        mediaMeta.media_id ||
-          mediaMeta.media_url ||
-          mediaMeta.media_link ||
-          mediaMeta.media_base64,
+        mediaFields.media_id ||
+          mediaFields.media_url ||
+          mediaFields.media_link ||
+          mediaFields.media_base64,
       ),
+      media_type: mediaFields.media_type || null,
       attempted: results.length,
       sent: results.filter((r) => r.ok).length,
       failed: results.filter((r) => !r.ok).length,

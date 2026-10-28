@@ -61,6 +61,8 @@ const BODY_EXAMPLE_BY_VAR = {
   tracking: "TRK123456",
   piece: "Aura ring",
   product: "Aura ring",
+  product_url: "https://jwtjzw-nu.myshopify.com/products/the-priest-ring",
+  promo_url: "https://jwtjzw-nu.myshopify.com/products/the-priest-ring",
 };
 
 /**
@@ -259,6 +261,28 @@ function seedRow(def) {
   const bodyComponent = { type: "BODY", text: def.body };
   const bodyExample = bodyTextExample(def.body, variables);
   if (bodyExample) bodyComponent.example = bodyExample;
+  /** @type {Record<string, unknown>[]} */
+  const graphComponents = [
+    { type: "HEADER", format: "TEXT", text: "Triada Designs" },
+    bodyComponent,
+    {
+      type: "FOOTER",
+      text: "Triada Designs · Timisoara · triada-designs.com",
+    },
+  ];
+  // Optional CTA URL button when template carries a product/promo URL variable.
+  if (variables.includes("product_url") || variables.includes("promo_url")) {
+    graphComponents.push({
+      type: "BUTTONS",
+      buttons: [
+        {
+          type: "URL",
+          text: "Shop the piece",
+          url: "https://jwtjzw-nu.myshopify.com/products/the-priest-ring",
+        },
+      ],
+    });
+  }
   return {
     id: def.id,
     name: def.name,
@@ -269,17 +293,10 @@ function seedRow(def) {
     body: def.body,
     variables,
     // TEXT header — IMAGE requires a Resumable Upload media handle, not a public URL.
-    components: normalizeWhatsAppGraphComponents(
-      [
-        { type: "HEADER", format: "TEXT", text: "Triada Designs" },
-        bodyComponent,
-        {
-          type: "FOOTER",
-          text: "Triada Designs · Timisoara · triada-designs.com",
-        },
-      ],
-      { body: def.body, variables },
-    ),
+    components: normalizeWhatsAppGraphComponents(graphComponents, {
+      body: def.body,
+      variables,
+    }),
     branded: true,
     logo_url: logoUrl,
     source: "seeded",
@@ -290,6 +307,9 @@ function seedRow(def) {
       brand_header: true,
       brand_footer: true,
       warm_greeting: true,
+      supports_product_url: Boolean(
+        variables.includes("product_url") || variables.includes("promo_url"),
+      ),
     },
   };
 }
@@ -362,8 +382,16 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "new_piece_preview",
       category: "MARKETING",
       campaign_type: "new_drop",
-      body: "Warm greetings from Triada Designs, {{1}}. A new piece is ready to view. Open the link we share in-session, or reply INTERESTED. — Triada Designs · triada-designs.com",
-      variables: ["name"],
+      body: "Warm greetings from Triada Designs, {{1}}. A new piece is ready to view. Shop: {{2}} — or reply INTERESTED. — Triada Designs · triada-designs.com",
+      variables: ["name", "product_url"],
+    }),
+    seedRow({
+      id: "sim-wa-promo-spotlight",
+      name: "promo_product_spotlight",
+      category: "MARKETING",
+      campaign_type: "promo_product",
+      body: "Warm greetings from Triada Designs, {{1}}. Our best-loved piece for you: shop {{2}}. Reply INTERESTED or STOP to opt out. — Triada Designs · info@triada-designs.com",
+      variables: ["name", "product_url"],
     }),
     seedRow({
       id: "sim-wa-cart-abandonment",
@@ -394,8 +422,8 @@ export function triadaAutomationWhatsAppTemplateCatalog() {
       name: "vip_drop_first_access",
       category: "MARKETING",
       campaign_type: "vip_drop",
-      body: "Warm greetings from Triada Designs, {{1}}. VIP first access: a new drop is live for you. Reply VIP or open the private link we share in-session. — Triada Designs · triada-designs.com",
-      variables: ["name"],
+      body: "Warm greetings from Triada Designs, {{1}}. VIP first access: a new drop is live for you. Private link: {{2}}. Reply VIP or STOP to opt out. — Triada Designs · triada-designs.com",
+      variables: ["name", "product_url"],
     }),
     seedRow({
       id: "sim-wa-after-sale-care",
