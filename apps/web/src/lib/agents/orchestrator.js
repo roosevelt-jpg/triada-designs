@@ -277,6 +277,20 @@ Escalation focus:
 Support focus:
 - Answer from Training Docs / catalog only. Hand off unverifiable price, stock, custom, wholesale, or complaint threads.
 - Reply in the customer's language with Triada warmth.
+- Instagram / Messenger / Facebook / LinkedIn DMs belong to Social Media Manager — hand those over.
+`;
+  }
+
+  if (
+    r.includes("social_media") ||
+    r === "smm" ||
+    /draft_dm|social.?dm|unanswered.?dm|sweep.?dm/i.test(p)
+  ) {
+    return `
+Social Media Manager focus:
+- Reply to this DM now — no inbound Instagram / Messenger / Facebook / LinkedIn message may stay unanswered.
+- Keep the reply short and channel-native; match the customer's language; soft CTA only.
+- Escalate complaints, custom quotes, and wholesale/B2B; share intent with Leads when clear.
 `;
   }
 

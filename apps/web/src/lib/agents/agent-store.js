@@ -203,6 +203,21 @@ function seedStarterTasks() {
       updated_at: at,
     },
     {
+      id: "task-seed-social-dms",
+      workspace_id: WORKSPACE_ID,
+      agent_id: "agent-social-media-manager",
+      agent_key: "social_media_manager",
+      title: "Reply every unanswered IG / Messenger / FB / LinkedIn DM",
+      description:
+        "Sweep open social DMs on Instagram, Messenger, Facebook, and LinkedIn. Reply warmly so no inbound message is left unanswered. Escalate wholesale/custom/complaints.",
+      status: "open",
+      priority: "urgent",
+      context_keys: ["workspace.brand", "collab.active_thread", "collab.social_media_manager.last_sweep"],
+      created_by: "system",
+      created_at: at,
+      updated_at: at,
+    },
+    {
       id: "task-seed-follow-up",
       workspace_id: WORKSPACE_ID,
       agent_id: "agent-follow-up",

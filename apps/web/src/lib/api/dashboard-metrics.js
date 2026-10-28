@@ -3,28 +3,37 @@
  * Empty workspaces return zeros — no fabricated growth placeholders.
  */
 
-import {
-  buildConversations,
-  buildIntegrationsList,
-  buildLeads,
-} from "@/lib/api/seed-data";
+import { buildIntegrationsList, buildLeads } from "@/lib/api/seed-data";
 import { listAgents, listTasks } from "@/lib/agents/agent-store";
 import { getContentItems } from "@/lib/content-schedule-store";
 import { countContacts } from "@/lib/crm/contacts-store";
+import {
+  listConversations,
+  listUnansweredSocialDms,
+} from "@/lib/crm/conversations-store";
 import { listProducts } from "@/lib/commerce/products-store";
 
 /**
- * @param {Array<{ status?: string, automation_mode?: string, last_inbound_at?: string|null }>} conversations
+ * @param {Array<{ status?: string, automation_mode?: string, last_inbound_at?: string|null, unanswered?: boolean }>} conversations
+ * @param {number} [unansweredSocialCount]
  */
-function conversationMetrics(conversations) {
+function conversationMetrics(conversations, unansweredSocialCount) {
   const rows = Array.isArray(conversations) ? conversations : [];
   const open = rows.filter((c) => c.status === "open");
+  const unansweredFromRows = open.filter(
+    (c) =>
+      c.unanswered === true ||
+      (c.automation_mode === "ai" && Boolean(c.last_inbound_at) && !c.last_outbound_at),
+  ).length;
   return {
     total_conversations: rows.length,
     open_conversations: open.length,
-    unanswered_conversations: open.filter(
-      (c) => c.automation_mode === "ai" && c.last_inbound_at,
-    ).length,
+    unanswered_conversations:
+      typeof unansweredSocialCount === "number"
+        ? Math.max(unansweredSocialCount, unansweredFromRows)
+        : unansweredFromRows,
+    unanswered_social_dms:
+      typeof unansweredSocialCount === "number" ? unansweredSocialCount : 0,
     ai_handled_conversations: rows.filter((c) => c.automation_mode === "ai").length,
     human_escalations: rows.filter((c) => c.automation_mode === "human").length,
   };
@@ -57,16 +66,21 @@ function leadMetrics(leads) {
  * }} [integrationOpts]
  */
 export async function collectLiveDashboardMetrics(integrationOpts = {}) {
-  const [contacts, tasks, products, agents] = await Promise.all([
-    countContacts().catch(() => ({ count: 0 })),
-    listTasks().catch(() => ({ data: [] })),
-    listProducts().catch(() => ({ data: [] })),
-    listAgents().catch(() => ({ data: [] })),
-  ]);
+  const [contacts, tasks, products, agents, conversations, unansweredSocial] =
+    await Promise.all([
+      countContacts().catch(() => ({ count: 0 })),
+      listTasks().catch(() => ({ data: [] })),
+      listProducts().catch(() => ({ data: [] })),
+      listAgents().catch(() => ({ data: [] })),
+      listConversations().catch(() => []),
+      listUnansweredSocialDms().catch(() => []),
+    ]);
 
-  const conversations = buildConversations();
   const leads = buildLeads();
-  const conv = conversationMetrics(conversations);
+  const conv = conversationMetrics(
+    conversations,
+    Array.isArray(unansweredSocial) ? unansweredSocial.length : 0,
+  );
   const lead = leadMetrics(leads);
   const contentItems = getContentItems();
   const integrations = buildIntegrationsList(integrationOpts);

@@ -27,11 +27,44 @@ export const TEAM_ROSTER = [
       "Answers product, order, sizing, materials, and care questions from approved knowledge. Hands off when unsure.",
     status: "active",
     config: {
-      channels: ["instagram", "whatsapp", "facebook", "webchat", "email"],
+      channels: ["whatsapp", "webchat", "email", "telegram"],
       escalation: true,
-      collaborates_with: ["escalation_officer", "quality_control", "compliance", "leads_qualification", "follow_up"],
+      collaborates_with: [
+        "social_media_manager",
+        "escalation_officer",
+        "quality_control",
+        "compliance",
+        "leads_qualification",
+        "follow_up",
+      ],
       prompt_version: TEAM_PROMPT_VERSION,
       system_prompt: systemPromptForRole("ai_support"),
+    },
+  },
+  {
+    id: "agent-social-media-manager",
+    key: "social_media_manager",
+    name: "Social Media Manager",
+    role: "social_media_manager",
+    description:
+      "Owns Instagram, Messenger, Facebook, and LinkedIn DMs — replies so no inbound message is left unanswered.",
+    status: "active",
+    config: {
+      channels: ["instagram", "messenger", "facebook", "linkedin"],
+      owns_dms: true,
+      no_unanswered_dms: true,
+      escalation: true,
+      collaborates_with: [
+        "ai_support",
+        "leads_qualification",
+        "escalation_officer",
+        "quality_control",
+        "compliance",
+        "follow_up",
+      ],
+      prompt_version: TEAM_PROMPT_VERSION,
+      system_prompt: systemPromptForRole("social_media_manager"),
+      allowed_tools: ["sweep_unanswered_dms", "draft_dm_reply", "handoff_escalation"],
     },
   },
   {
@@ -168,7 +201,10 @@ export const AGENT_KEY_ALIASES = {
   sales: "leads_qualification",
   lead_qualification: "leads_qualification",
   sales_ops: "follow_up",
-  meta_messaging: "ai_support",
+  meta_messaging: "social_media_manager",
+  social: "social_media_manager",
+  dm_manager: "social_media_manager",
+  inbox_dms: "social_media_manager",
 };
 
 /**

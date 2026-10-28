@@ -21,6 +21,10 @@
     {
       "path": "/api/cron/quote-inspiration",
       "schedule": "15 10 * * *"
+    },
+    {
+      "path": "/api/cron/social-dm-sweep",
+      "schedule": "*/15 * * * *"
     }
   ],
   "headers": [

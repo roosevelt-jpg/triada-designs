@@ -1147,29 +1147,77 @@ export function buildContacts() {
   ];
 }
 
+/**
+ * Sync snapshot for Overview metrics when the async conversations store
+ * is not awaited. Prefer listConversations() in request handlers.
+ */
 export function buildConversations() {
+  const at = nowIso();
   return [
     {
-      id: "conv-1",
+      id: "conv-ig-priest",
       workspace_id: WORKSPACE.id,
       channel: "instagram",
       status: "open",
       automation_mode: "ai",
       subject: "Priest Ring size",
       contact_id: "contact-1",
-      last_inbound_at: nowIso(),
-      updated_at: nowIso(),
+      assigned_agent_key: "social_media_manager",
+      last_inbound_at: at,
+      unanswered: true,
+      updated_at: at,
     },
     {
-      id: "conv-2",
+      id: "conv-messenger-gift",
+      workspace_id: WORKSPACE.id,
+      channel: "messenger",
+      status: "open",
+      automation_mode: "ai",
+      subject: "Gift for anniversary",
+      contact_id: "contact-3",
+      assigned_agent_key: "social_media_manager",
+      last_inbound_at: at,
+      unanswered: true,
+      updated_at: at,
+    },
+    {
+      id: "conv-fb-care",
+      workspace_id: WORKSPACE.id,
+      channel: "facebook",
+      status: "open",
+      automation_mode: "ai",
+      subject: "Gold plating care",
+      contact_id: "contact-4",
+      assigned_agent_key: "social_media_manager",
+      last_inbound_at: at,
+      unanswered: true,
+      updated_at: at,
+    },
+    {
+      id: "conv-li-boutique",
+      workspace_id: WORKSPACE.id,
+      channel: "linkedin",
+      status: "open",
+      automation_mode: "ai",
+      subject: "Boutique wholesale intro",
+      contact_id: "contact-5",
+      assigned_agent_key: "social_media_manager",
+      last_inbound_at: at,
+      unanswered: true,
+      updated_at: at,
+    },
+    {
+      id: "conv-wa-engraving",
       workspace_id: WORKSPACE.id,
       channel: "whatsapp",
       status: "open",
       automation_mode: "human",
       subject: "Custom engraving quote",
       contact_id: "contact-2",
+      assigned_agent_key: "escalation_officer",
       last_inbound_at: isoDaysAgo(0),
-      updated_at: nowIso(),
+      unanswered: true,
+      updated_at: at,
     },
   ];
 }
@@ -1198,8 +1246,8 @@ export function buildLeads() {
 }
 
 export function buildAgents() {
-  // Multi-agent team: Support, Creative, Follow up, Marketing, QC,
-  // Compliance, Leads Qualification, Escalation officer.
+  // Multi-agent team: Support, Social Media Manager, Creative, Follow up,
+  // Marketing, QC, Compliance, Leads Qualification, Escalation officer.
   // Persistent agent-store may supersede this seed at runtime.
   const at = nowIso();
   return TEAM_ROSTER.map((row) => ({

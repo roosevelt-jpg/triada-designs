@@ -80,6 +80,18 @@ import {
   listWhatsAppCampaignRecipients,
   upsertContacts,
 } from "@/lib/crm/contacts-store";
+import {
+  SOCIAL_DM_CHANNELS,
+  appendOutboundReply,
+  getConversation,
+  listConversations,
+  listUnansweredSocialDms,
+  patchConversation,
+} from "@/lib/crm/conversations-store";
+import {
+  handleInboundSocialDm,
+  sweepUnansweredSocialDms,
+} from "@/lib/agents/social-media-manager";
 import { collectLiveDashboardMetrics } from "@/lib/api/dashboard-metrics";
 import { syncWhatsAppContactsToCrm } from "@/lib/crm/meta-contact-sync";
 import { mapContactUploadRows } from "@/lib/crm/parse-contacts-file";
@@ -1570,8 +1582,40 @@ export async function dispatchV1(method, segments, request, body) {
     if (path === "integrations/channels/simulate-inbound") {
       const channel =
         body && typeof body === "object" && body.channel
-          ? String(body.channel)
+          ? String(body.channel).toLowerCase()
           : "webchat";
+      const inboundBody =
+        body && typeof body === "object" && body.body
+          ? String(body.body)
+          : "Hello — interested in Triada Designs jewellery.";
+      if (SOCIAL_DM_CHANNELS.includes(channel)) {
+        const handled = await handleInboundSocialDm({
+          channel,
+          body: inboundBody,
+          subject:
+            body && typeof body === "object" && body.subject
+              ? String(body.subject)
+              : undefined,
+          auto_reply: body?.auto_reply !== false,
+          dry_run: body?.dry_run === true,
+        });
+        return jsonOk({
+          ok: true,
+          mode: "next_dual_run",
+          agent_key: "social_media_manager",
+          ai: { intent: "social_dm", agent: "social_media_manager" },
+          conversation: handled.conversation,
+          replied: handled.replied,
+          reply: handled.reply || null,
+          messages: [
+            {
+              conversation: handled.conversation,
+              body: inboundBody,
+            },
+          ],
+          channels: buildSalesChannelsStatus({ meta }).channels,
+        });
+      }
       return jsonOk({
         ok: true,
         mode: "next_dual_run",
@@ -1579,7 +1623,7 @@ export async function dispatchV1(method, segments, request, body) {
         messages: [
           {
             conversation: { id: `sim-${channel}-${Date.now()}` },
-            body: body && typeof body === "object" ? body.body : undefined,
+            body: inboundBody,
           },
         ],
         channels: buildSalesChannelsStatus({ meta }).channels,
@@ -1870,23 +1914,61 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "conversations" && m === "GET") {
-    return jsonOk({ data: buildConversations() });
+    const data = await listConversations();
+    const unanswered = await listUnansweredSocialDms();
+    return jsonOk({
+      data,
+      unanswered_social_dms: unanswered.length,
+      social_dm_channels: SOCIAL_DM_CHANNELS,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "conversations/unanswered-social-dms" && m === "GET") {
+    const data = await listUnansweredSocialDms();
+    return jsonOk({
+      data,
+      channels: SOCIAL_DM_CHANNELS,
+      agent_key: "social_media_manager",
+      source: "next_dual_run",
+    });
   }
 
   if (path.match(/^conversations\/[^/]+$/) && m === "GET") {
-    const c = buildConversations().find((x) => x.id === segments[1]);
+    const c = await getConversation(segments[1]);
     return c
-      ? jsonOk({ conversation: c, messages: [] })
+      ? jsonOk({
+          conversation: c,
+          messages: c.messages || [],
+          source: "next_dual_run",
+        })
       : jsonErr("Conversation not found.", 404);
   }
 
   if (path.match(/^conversations\/[^/]+\/(takeover|resume-ai|messages)$/) && m === "POST") {
     const action = segments[2];
-    return jsonOk({
-      id: segments[1],
-      automation_mode: action === "takeover" ? "human" : "ai",
-      ok: true,
+    const id = segments[1];
+    if (action === "takeover" || action === "resume-ai") {
+      const patched = await patchConversation(id, {
+        automation_mode: action === "takeover" ? "human" : "ai",
+      });
+      return patched
+        ? jsonOk({ ok: true, id, automation_mode: patched.automation_mode, conversation: patched })
+        : jsonErr("Conversation not found.", 404);
+    }
+    // messages — human/outbound note
+    const text =
+      body && typeof body === "object" && body.body
+        ? String(body.body)
+        : "";
+    if (!text) return jsonErr("Message body required.", 422);
+    const saved = await appendOutboundReply(id, {
+      body: text,
+      agent_key: "human",
     });
+    return saved
+      ? jsonOk({ ok: true, conversation: saved, messages: saved.messages || [] })
+      : jsonErr("Conversation not found.", 404);
   }
 
   if (path === "leads" && m === "GET") {
@@ -2518,6 +2600,22 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk(result);
   }
 
+  if (
+    (path === "agents/social-media-manager/sweep-dms" ||
+      path === "agents/social_media_manager/sweep-dms") &&
+    m === "POST"
+  ) {
+    const channels = Array.isArray(body?.channels)
+      ? body.channels.map((c) => String(c).toLowerCase())
+      : undefined;
+    const result = await sweepUnansweredSocialDms({
+      dry_run: body?.dry_run === true,
+      channels,
+      limit: body?.limit != null ? Number(body.limit) : undefined,
+    });
+    return jsonOk(result);
+  }
+
   if (path.match(/^agents\/[^/]+$/) && (m === "PATCH" || m === "PUT")) {
     const reserved = new Set([
       "training-docs",
@@ -2528,6 +2626,8 @@ export async function dispatchV1(method, segments, request, body) {
       "tasks",
       "shared-memory",
       "collaborate",
+      "social-media-manager",
+      "social_media_manager",
     ]);
     if (reserved.has(segments[1])) {
       return jsonErr("Not found.", 404);

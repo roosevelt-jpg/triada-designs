@@ -74,9 +74,11 @@ export function seedSharedMemory() {
     "collab.active_thread": {
       key: "collab.active_thread",
       value: {
-        summary: "Team ready — Support, Creative, Follow up, Marketing, QC, Compliance, Leads, Escalation share this kv.",
+        summary:
+          "Team ready — Support, Social Media Manager, Creative, Follow up, Marketing, QC, Compliance, Leads, Escalation share this kv.",
         agents: [
           "ai_support",
+          "social_media_manager",
           "content_creator",
           "follow_up",
           "marketing",

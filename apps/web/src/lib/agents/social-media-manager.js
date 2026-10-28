@@ -1,0 +1,211 @@
+/**
+ * Social Media Manager — replies Instagram / Messenger / Facebook / LinkedIn DMs
+ * so no inbound message is left unanswered.
+ */
+
+import { runTeamCollaboration } from "./team-orchestrator";
+import { setSharedKv } from "./shared-memory";
+import {
+  SOCIAL_DM_CHANNELS,
+  appendOutboundReply,
+  ingestInboundDm,
+  listUnansweredSocialDms,
+} from "@/lib/crm/conversations-store";
+
+export { SOCIAL_DM_CHANNELS };
+
+/**
+ * Draft + send (or dry-run) a reply for one unanswered DM.
+ * @param {{
+ *   conversation: Record<string, unknown>,
+ *   dry_run?: boolean,
+ * }} input
+ */
+export async function replyUnansweredDm(input) {
+  const conversation = input.conversation || {};
+  const dryRun = input.dry_run === true;
+  const channel = String(conversation.channel || "instagram").toLowerCase();
+  const inbound = String(
+    conversation.last_inbound_body ||
+      conversation.subject ||
+      "Hello — following up on your message.",
+  ).trim();
+
+  if (conversation.automation_mode === "human") {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "human_takeover",
+      conversation_id: conversation.id,
+      channel,
+    };
+  }
+
+  const collab = await runTeamCollaboration({
+    agent_key: "social_media_manager",
+    purpose: "draft_dm_reply",
+    message: inbound,
+    dry_run: dryRun,
+    context: {
+      channel,
+      conversation_id: conversation.id,
+      subject: conversation.subject,
+      contact_id: conversation.contact_id,
+      customer_message: inbound,
+      social_dm: true,
+    },
+    collaborators: ["quality_control", "leads_qualification"],
+  });
+
+  const replyText = String(collab.draft || collab.text || "").trim();
+  if (!replyText) {
+    return {
+      ok: false,
+      error: "empty_reply",
+      conversation_id: conversation.id,
+      channel,
+      collab,
+    };
+  }
+
+  let saved = null;
+  if (!dryRun) {
+    saved = await appendOutboundReply(String(conversation.id), {
+      body: replyText,
+      agent_key: "social_media_manager",
+    });
+  }
+
+  await setSharedKv("collab.active_thread", {
+    channel,
+    conversation_id: conversation.id,
+    agent_key: "social_media_manager",
+    last_reply_preview: replyText.slice(0, 240),
+    updated_at: new Date().toISOString(),
+  }).catch(() => null);
+
+  return {
+    ok: true,
+    skipped: false,
+    conversation_id: conversation.id,
+    channel,
+    reply: replyText,
+    mode: collab.mode || "live",
+    dry_run: dryRun,
+    conversation: saved,
+    reviews: collab.reviews || [],
+  };
+}
+
+/**
+ * Sweep all unanswered social DMs and reply.
+ * @param {{
+ *   dry_run?: boolean,
+ *   channels?: string[],
+ *   limit?: number,
+ * }} [opts]
+ */
+export async function sweepUnansweredSocialDms(opts = {}) {
+  const dryRun = opts.dry_run === true;
+  const limit = Math.max(1, Math.min(50, Number(opts.limit || 20)));
+  const unanswered = await listUnansweredSocialDms({
+    channels: opts.channels || SOCIAL_DM_CHANNELS,
+  });
+  const targets = unanswered.slice(0, limit);
+
+  /** @type {Array<Record<string, unknown>>} */
+  const results = [];
+  for (const conversation of targets) {
+    try {
+      const result = await replyUnansweredDm({ conversation, dry_run: dryRun });
+      results.push(result);
+    } catch (error) {
+      results.push({
+        ok: false,
+        conversation_id: conversation.id,
+        channel: conversation.channel,
+        error: String(error?.message || error),
+      });
+    }
+  }
+
+  const replied = results.filter((r) => r.ok && !r.skipped).length;
+  const skipped = results.filter((r) => r.skipped).length;
+  const failed = results.filter((r) => !r.ok).length;
+
+  await setSharedKv("collab.social_media_manager.last_sweep", {
+    at: new Date().toISOString(),
+    scanned: unanswered.length,
+    targeted: targets.length,
+    replied,
+    skipped,
+    failed,
+    dry_run: dryRun,
+  }).catch(() => null);
+
+  return {
+    ok: failed === 0,
+    agent_key: "social_media_manager",
+    channels: opts.channels || SOCIAL_DM_CHANNELS,
+    scanned: unanswered.length,
+    targeted: targets.length,
+    replied,
+    skipped,
+    failed,
+    dry_run: dryRun,
+    results,
+    message:
+      unanswered.length === 0
+        ? "No unanswered social DMs."
+        : `Social Media Manager processed ${replied} DM${replied === 1 ? "" : "s"} (${skipped} skipped, ${failed} failed).`,
+  };
+}
+
+/**
+ * Ingest an inbound social DM and optionally reply immediately.
+ * @param {{
+ *   channel: string,
+ *   body: string,
+ *   subject?: string,
+ *   contact_id?: string,
+ *   conversation_id?: string,
+ *   auto_reply?: boolean,
+ *   dry_run?: boolean,
+ * }} input
+ */
+export async function handleInboundSocialDm(input) {
+  const channel = String(input.channel || "instagram").toLowerCase();
+  const conversation = await ingestInboundDm({
+    channel,
+    body: input.body,
+    subject: input.subject,
+    contact_id: input.contact_id,
+    conversation_id: input.conversation_id,
+  });
+
+  const isSocial = SOCIAL_DM_CHANNELS.includes(channel);
+  if (!isSocial) {
+    return {
+      ok: true,
+      conversation,
+      replied: false,
+      note: "Not a Social Media Manager channel — stored for Support / inbox.",
+    };
+  }
+
+  if (input.auto_reply === false) {
+    return { ok: true, conversation, replied: false, queued: true };
+  }
+
+  const reply = await replyUnansweredDm({
+    conversation,
+    dry_run: input.dry_run === true,
+  });
+
+  return {
+    ok: Boolean(reply.ok),
+    conversation: reply.conversation || conversation,
+    replied: Boolean(reply.ok && !reply.skipped),
+    reply,
+  };
+}
