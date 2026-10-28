@@ -44,6 +44,7 @@ export const DASHBOARD_NAV = [
     items: [
       { href: "/content", label: "Content studio" },
       { href: "/content/review", label: "Content review" },
+      { href: "/content/inspiration", label: "Quote & Inspiration" },
       { href: "/templates", label: "Channel templates" },
       { href: "/calendar", label: "Calendar" },
       { href: "/campaigns", label: "Campaigns" },

@@ -59,6 +59,7 @@ export default function CalendarPage() {
   const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()));
   const [scheduleDrafts, setScheduleDrafts] = useState({});
   const [focusId, setFocusId] = useState(null);
+  const [quoteInspiration, setQuoteInspiration] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,6 +81,7 @@ export default function CalendarPage() {
       const cal = await apiFetch("/v1/calendar");
       setScheduled(cal.data || []);
       setPending(cal.pending_approval || []);
+      setQuoteInspiration(cal.quote_inspiration || null);
       setLoading(false);
 
       const [pubs, allContent] = await Promise.all([
@@ -243,6 +245,27 @@ export default function CalendarPage() {
             Approve drafts, set or change the go-live datetime, or cancel anytime. AI may suggest a
             slot — only your confirmed date publishes. Cron never invents dates.
           </p>
+        </section>
+      ) : null}
+
+      {!loading && quoteInspiration ? (
+        <section className="mb-6 surface-card flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <p className="font-medium text-ink">Quote & Inspiration weekdays</p>
+            <p className="mt-1 text-sm text-muted">
+              {(quoteInspiration.weekday_labels || []).join(", ") || "No days selected"}
+              {quoteInspiration.next_send_at
+                ? ` · next ${formatDateTime(quoteInspiration.next_send_at)}`
+                : ""}
+              {quoteInspiration.enabled ? "" : " · paused"}
+            </p>
+          </div>
+          <a
+            href="/content/inspiration"
+            className="text-sm font-medium text-brown-dark underline-offset-2 hover:underline"
+          >
+            Manage inspiration
+          </a>
         </section>
       ) : null}
 

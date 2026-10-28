@@ -400,6 +400,9 @@ export default function ContentPage() {
         <Button variant="secondary" size="sm" onClick={() => router.push("/content/review")}>
           Open review queue
         </Button>
+        <Button variant="secondary" size="sm" onClick={() => router.push("/content/inspiration")}>
+          Quote & Inspiration
+        </Button>
       </div>
 
       {loading ? <Skeleton className="h-64" /> : null}

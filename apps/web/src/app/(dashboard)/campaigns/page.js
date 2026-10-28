@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/formatters";
 
 const DEFAULT_FORM = {
   template_name: "promo_product_spotlight",
@@ -23,8 +25,10 @@ const DEFAULT_FORM = {
 };
 
 export default function CampaignsPage() {
+  const router = useRouter();
   const [groups, setGroups] = useState([]);
   const [bestsellers, setBestsellers] = useState([]);
+  const [quoteInspiration, setQuoteInspiration] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -43,6 +47,7 @@ export default function CampaignsPage() {
       ]);
       setGroups(campaigns.data || []);
       setBestsellers(best.data || []);
+      setQuoteInspiration(campaigns.quote_inspiration || null);
     } catch (err) {
       setError(err.message || "Failed to load campaigns");
     } finally {
@@ -134,6 +139,33 @@ export default function CampaignsPage() {
     >
       {loading ? <Skeleton className="h-28" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
+
+      {!loading && quoteInspiration ? (
+        <section className="mb-6 surface-card space-y-3 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-2xl">Inspiration list broadcast</h2>
+              <p className="mt-1 text-sm text-muted">
+                Campaign key{" "}
+                <span className="text-ink">{quoteInspiration.campaign_key}</span>
+                {" · "}
+                {quoteInspiration.recipients_available || 0} WhatsApp-ready contacts
+                {" · "}
+                {(quoteInspiration.weekday_labels || []).join(", ") || "weekdays unset"}
+                {quoteInspiration.next_send_at
+                  ? ` · next ${formatDateTime(quoteInspiration.next_send_at)}`
+                  : ""}
+              </p>
+            </div>
+            <Badge tone={quoteInspiration.enabled ? "success" : "warning"}>
+              {quoteInspiration.enabled ? "Active" : "Paused"}
+            </Badge>
+          </div>
+          <Button size="sm" onClick={() => router.push("/content/inspiration")}>
+            Open Quote & Inspiration
+          </Button>
+        </section>
+      ) : null}
 
       {!loading && !error ? (
         <section className="surface-card mb-6 p-5">

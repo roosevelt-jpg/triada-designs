@@ -17,6 +17,10 @@
     {
       "path": "/api/cron/content-publish",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/quote-inspiration",
+      "schedule": "15 10 * * *"
     }
   ],
   "headers": [

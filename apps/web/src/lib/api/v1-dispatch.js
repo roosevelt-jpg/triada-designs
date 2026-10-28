@@ -33,6 +33,18 @@ import {
   syncPendingReviewNotifications,
 } from "@/lib/content/admin-review-notify";
 import {
+  broadcastQuoteInspiration,
+  generateQuoteInspiration,
+  processQuoteInspirationCron,
+} from "@/lib/content/quote-inspiration-engine";
+import {
+  WEEKDAY_LABELS,
+  getQuoteInspirationSettings,
+  listQuoteInspirationHistory,
+  nextWeekdaySendAt,
+  saveQuoteInspirationSettings,
+} from "@/lib/content/quote-inspiration-store";
+import {
   getMediaForContent,
   setMediaVariants,
   upsertMediaAsset,
@@ -588,6 +600,87 @@ export async function dispatchV1(method, segments, request, body) {
 
   if (path === "content" && m === "GET") {
     return jsonOk(paginate(getContentItems()));
+  }
+
+  // ---- Quote / Inspiration engine ----
+  if (path === "content/inspiration" && m === "GET") {
+    const [settings, history, recipients] = await Promise.all([
+      getQuoteInspirationSettings(),
+      listQuoteInspirationHistory(),
+      listWhatsAppCampaignRecipients().catch(() => ({ data: [], mode: "local_sim" })),
+    ]);
+    const quotes = getContentItems().filter(
+      (c) => c.content_type === "inspiration_quote",
+    );
+    return jsonOk({
+      settings,
+      history,
+      quotes,
+      weekday_labels: WEEKDAY_LABELS,
+      next_send_at: nextWeekdaySendAt(settings),
+      recipients_available: recipients.data?.length || 0,
+      recipients_mode: recipients.mode || "local_sim",
+      flow: "generate card → preview/approve → weekday schedule → WhatsApp broadcast",
+      calendar_path: "/calendar",
+      review_url: "/content/review",
+      cron: { path: "/api/cron/quote-inspiration" },
+    });
+  }
+
+  if (path === "content/inspiration/settings" && (m === "PUT" || m === "PATCH" || m === "POST")) {
+    const patch =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const settings = await saveQuoteInspirationSettings(patch);
+    return jsonOk({
+      ok: true,
+      settings,
+      next_send_at: nextWeekdaySendAt(settings),
+      weekday_labels: WEEKDAY_LABELS,
+    });
+  }
+
+  if (path === "content/inspiration/generate" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await generateQuoteInspiration(input);
+    if (result.content?.status === "in_review") {
+      await notifyAdminPendingReview({
+        contentId: result.content.id,
+        kind: "inspiration quote card",
+      });
+    }
+    return jsonOk(result, 201);
+  }
+
+  if (path === "content/inspiration/broadcast" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await broadcastQuoteInspiration(input);
+    if (!result.ok && result.error === "approval_required") {
+      return jsonOk(result, 422);
+    }
+    if (!result.ok && result.error === "no_quote_content") {
+      return jsonOk(result, 422);
+    }
+    return jsonOk(result);
+  }
+
+  if (path === "content/inspiration/run" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await processQuoteInspirationCron({
+      force: Boolean(input.force),
+      generate_if_missing: input.generate_if_missing !== false,
+    });
+    return jsonOk(result);
   }
 
   if (path === "content/review" && m === "GET") {
@@ -2626,6 +2719,7 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "calendar" && m === "GET") {
+    const quoteSettings = await getQuoteInspirationSettings();
     return jsonOk({
       data: listScheduled(),
       pending_approval: listPendingApproval(),
@@ -2637,6 +2731,18 @@ export async function dispatchV1(method, segments, request, body) {
         cancel: true,
         override_ai_proposal: true,
         note: "Only admins set go-live. AI may propose a slot; cron never invents dates.",
+      },
+      quote_inspiration: {
+        enabled: quoteSettings.enabled,
+        weekdays: quoteSettings.weekdays,
+        weekday_labels: quoteSettings.weekdays.map(
+          (d) => WEEKDAY_LABELS[d] || String(d),
+        ),
+        next_send_at: nextWeekdaySendAt(quoteSettings),
+        send_hour_utc: quoteSettings.send_hour_utc,
+        campaign_key: quoteSettings.campaign_key,
+        path: "/content/inspiration",
+        cron: "/api/cron/quote-inspiration",
       },
       cron: {
         path: "/api/cron/content-publish",
@@ -2653,12 +2759,30 @@ export async function dispatchV1(method, segments, request, body) {
       if (!byObjective[key]) byObjective[key] = [];
       byObjective[key].push(item);
     }
+    const quoteSettings = await getQuoteInspirationSettings();
+    const recipients = await listWhatsAppCampaignRecipients().catch(() => ({
+      data: [],
+      mode: "local_sim",
+    }));
     return jsonOk({
       data: Object.entries(byObjective).map(([objective, group]) => ({
         objective,
         items: group,
         count: group.length,
       })),
+      quote_inspiration: {
+        enabled: quoteSettings.enabled,
+        weekdays: quoteSettings.weekdays,
+        weekday_labels: quoteSettings.weekdays.map(
+          (d) => WEEKDAY_LABELS[d] || String(d),
+        ),
+        next_send_at: nextWeekdaySendAt(quoteSettings),
+        campaign_key: quoteSettings.campaign_key,
+        recipient_limit: quoteSettings.recipient_limit,
+        contact_ids: quoteSettings.contact_ids,
+        recipients_available: recipients.data?.length || 0,
+        path: "/content/inspiration",
+      },
     });
   }
 

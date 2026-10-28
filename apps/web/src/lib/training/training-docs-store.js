@@ -107,6 +107,49 @@ export function seedTrainingDocs() {
       created_at: at,
       updated_at: at,
     },
+    {
+      id: "tdoc-jewellery-niche",
+      workspace_id: WORKSPACE_ID,
+      title: "Jewellery niche and brand world",
+      category: "niche",
+      body: [
+        "Triada Designs is a jewellery house: Salt & Spirit collections, quiet Gulf luxury, meaningful adornment.",
+        "Customers value presence, soft ritual, tactile metal and stone, and pieces that feel personal — not loud fashion hype.",
+        "Inspiration content should feel editorial and warm: light on the skin, strength in the day, adornment as ritual.",
+        "Channels: Facebook, Instagram, WhatsApp, Website, Shopify, TikTok, LinkedIn — inspiration cards often share on WhatsApp lists.",
+        "Materials truth: silver with gold plating; 14K/18K gold on request; typical make time ~7 days.",
+        "Never invent prices, celebrity endorsements, or medical/wellness claims in quote cards.",
+      ].join("\n"),
+      tags: ["niche", "jewellery", "salt-spirit", "gulf", "customers"],
+      status: "published",
+      source: "seed",
+      filename: null,
+      storage_path: null,
+      metadata: { purpose: "niche_customers" },
+      created_at: at,
+      updated_at: at,
+    },
+    {
+      id: "tdoc-inspiration-quotes",
+      workspace_id: WORKSPACE_ID,
+      title: "Inspiration quote card voice",
+      category: "inspiration",
+      body: [
+        "Quote cards: 8–22 words, poetic but clear, one idea — jewellery-native, never generic hustle quotes.",
+        "Voice: warm, calm, spiritually elegant within approved Salt & Spirit language only.",
+        "Share on selected weekdays to campaign / WhatsApp customer lists after human approval.",
+        "Captions: soft CTA (Discover Triada / Wear your light) — no fake scarcity or invented discounts.",
+        "Design: square card, warm ivory–champagne neutrals, clear center for serif quote text, Triada brand restraint.",
+      ].join("\n"),
+      tags: ["inspiration", "quote", "weekday", "broadcast", "whatsapp"],
+      status: "published",
+      source: "seed",
+      filename: null,
+      storage_path: null,
+      metadata: { purpose: "quote_inspiration" },
+      created_at: at,
+      updated_at: at,
+    },
   ];
 }
 
@@ -149,7 +192,26 @@ async function readLocal() {
   try {
     const raw = await readFile(LOCAL_FILE, "utf8");
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length) return parsed.map(shapeTrainingDoc);
+    if (Array.isArray(parsed) && parsed.length) {
+      const existing = parsed.map(shapeTrainingDoc);
+      const byId = new Map(existing.map((d) => [d.id, d]));
+      let changed = false;
+      for (const seed of seedTrainingDocs()) {
+        if (!byId.has(seed.id)) {
+          existing.push(seed);
+          byId.set(seed.id, seed);
+          changed = true;
+        }
+      }
+      if (changed) {
+        try {
+          await writeLocal(existing);
+        } catch {
+          /* best-effort merge */
+        }
+      }
+      return existing;
+    }
   } catch {
     // missing file → seed
   }
@@ -290,6 +352,7 @@ export async function retrieveTrainingDocs(query, opts = {}) {
       if (doc.category === "tone") score += 2;
       if (doc.category === "conversation") score += 1;
       if (doc.category === "timing") score += 1;
+      if (doc.category === "inspiration" || doc.category === "niche") score += 1;
     }
     // Always surface tone/conversation when asking about reply/message.
     if (/(reply|message|tone|greeting|close|open)/i.test(needle)) {
@@ -297,6 +360,12 @@ export async function retrieveTrainingDocs(query, opts = {}) {
     }
     if (/(when|timing|follow.?up|abandon)/i.test(needle) && doc.category === "timing") {
       score += 2;
+    }
+    if (
+      /(inspir|quote|jewellery|jewelry|niche|customer|salt.?spirit|adorn)/i.test(needle)
+    ) {
+      if (doc.category === "inspiration" || doc.category === "niche") score += 3;
+      if (doc.category === "tone") score += 1;
     }
     return {
       id: doc.id,
