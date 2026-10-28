@@ -207,7 +207,7 @@ export default function IntegrationsPage() {
             />
           </section>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {[
               {
                 key: "resend",
@@ -220,6 +220,15 @@ export default function IntegrationsPage() {
                 title: "Supabase",
                 row: health?.supabase,
                 fallback: "Auth and data for the ops dashboard.",
+              },
+              {
+                key: "google_places",
+                title: "Google Places",
+                row: health?.google_places,
+                fallback:
+                  "Popup location Autocomplete (country, city, town) and map pin. Set GOOGLE_PLACES_API_KEY or GOOGLE_MAPS_API_KEY on Vercel.",
+                href: "/popups",
+                hrefLabel: "Open pop-ups",
               },
             ].map((card) => (
               <section key={card.key} className="surface-card px-5 py-4">
@@ -237,6 +246,15 @@ export default function IntegrationsPage() {
                   />
                 </div>
                 <p className="mt-2 text-sm text-muted">{card.row?.summary || card.fallback}</p>
+                {card.href ? (
+                  <div className="mt-3">
+                    <Link href={card.href}>
+                      <Button size="sm" variant="secondary">
+                        {card.hrefLabel || "Open"}
+                      </Button>
+                    </Link>
+                  </div>
+                ) : null}
               </section>
             ))}
           </div>

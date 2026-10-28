@@ -55,7 +55,16 @@ import {
   hasWhatsAppPhoneId,
   hasWhatsAppToken,
 } from "@/lib/integrations/env-presence";
+import { googlePlacesStatus } from "@/lib/integrations/google-places";
 import { creativeModeLabel } from "@/lib/integrations/brand-labels";
+import {
+  approvePopupApplication,
+  draftPopupApplication,
+  listPopupApplications,
+  listPopupMarkets,
+  scanPopupAlerts,
+  upsertPopupMarket,
+} from "@/lib/popups/popup-markets-store";
 import {
   getUserFromAccessToken,
   readBearerToken,
@@ -365,6 +374,14 @@ export async function dispatchV1(method, segments, request, body) {
   if (path === "integrations/health" && m === "GET") {
     const [anthropic, meta] = await Promise.all([getAnthropicStatus(), getMetaStatus()]);
     return jsonOk(buildIntegrationsHealth({ anthropic, meta }));
+  }
+
+  if (path === "integrations/google-places" && m === "GET") {
+    // Browser key only on this dedicated route (HTTP-referrer restrict on Google Cloud).
+    return jsonOk({
+      ...googlePlacesStatus({ includeBrowserKey: true }),
+      source: "next_dual_run",
+    });
   }
 
   if (path === "integrations/wordpress/drafts" && m === "POST") {
@@ -2001,56 +2018,54 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "jewellery-ops/popups" && m === "GET") {
-    return jsonOk({
-      data: [
-        {
-          id: "popup-1",
-          name: "Dubai Design Week",
-          application_deadline: new Date(Date.now() + 14 * 86400000).toISOString(),
-          status: "open",
-        },
-      ],
-    });
+    const data = await listPopupMarkets();
+    return jsonOk({ data, source: "next_dual_run" });
   }
 
   if (path === "jewellery-ops/popups" && m === "POST") {
-    return jsonOk(
-      {
-        market: {
-          id: `popup-${Date.now()}`,
-          ...(body && typeof body === "object" ? body : {}),
-        },
-      },
-      201,
-    );
+    const input = body && typeof body === "object" ? body : {};
+    if (!input.name || !String(input.name).trim()) {
+      return jsonErr("Market name is required.", 422);
+    }
+    const market = await upsertPopupMarket(input);
+    return jsonOk({ ok: true, market, source: "next_dual_run" }, 201);
   }
 
   if (path === "jewellery-ops/popups/scan-alerts" && m === "POST") {
-    return jsonOk({ ok: true, alerts: [] });
+    const result = await scanPopupAlerts();
+    return jsonOk({ ...result, source: "next_dual_run" });
   }
 
   if (path.match(/^jewellery-ops\/popups\/[^/]+\/draft-application$/) && m === "POST") {
-    return jsonOk(
-      {
-        application: {
-          id: `pa-${Date.now()}`,
-          market_id: segments[2],
-          status: "draft",
-        },
-      },
-      201,
-    );
+    try {
+      const application = await draftPopupApplication(segments[2]);
+      return jsonOk({ ok: true, application, source: "next_dual_run" }, 201);
+    } catch (err) {
+      return jsonErr(err.message || "Draft failed", 404);
+    }
   }
 
   if (path === "jewellery-ops/popup-applications" && m === "GET") {
-    return jsonOk({ data: [] });
+    const data = await listPopupApplications();
+    return jsonOk({ data, source: "next_dual_run" });
   }
 
   if (
     path.match(/^jewellery-ops\/popup-applications\/[^/]+\/approve$/) &&
     m === "POST"
   ) {
-    return jsonOk({ ok: true, application_id: segments[2], status: "approved" });
+    try {
+      const application = await approvePopupApplication(segments[2]);
+      return jsonOk({
+        ok: true,
+        application,
+        application_id: segments[2],
+        status: application.status,
+        source: "next_dual_run",
+      });
+    } catch (err) {
+      return jsonErr(err.message || "Approve failed", 404);
+    }
   }
 
   // Fallback: never rewrite to dead Laravel — return empty-but-valid JSON

@@ -7,6 +7,7 @@ import {
   credentialsPresenceMatrix,
   envPresent,
   hasGeminiEnv,
+  hasGooglePlacesEnv,
   hasMetaPageMessagingEnv,
   hasResendEnv,
   hasShopifyEnv,
@@ -23,6 +24,7 @@ import {
   providerNickname,
 } from "@/lib/integrations/brand-labels";
 import { metaChannelHealth } from "@/lib/integrations/meta-credentials";
+import { googlePlacesStatus } from "@/lib/integrations/google-places";
 import { TEAM_ROSTER } from "@/lib/agents/team-roster";
 
 export { envPresent } from "@/lib/integrations/env-presence";
@@ -263,6 +265,7 @@ export function buildIntegrationsList(opts = {}) {
       : envWaReady;
   const gemini = hasGeminiEnv();
   const resend = hasResendEnv();
+  const googlePlaces = hasGooglePlacesEnv();
   const anthropicReady =
     Boolean(opts.anthropicHasCredentials) || envPresent("ANTHROPIC_API_KEY");
   const shopifyReady = hasShopifyEnv();
@@ -435,6 +438,19 @@ export function buildIntegrationsList(opts = {}) {
       capabilities: ["llm.generate"],
     },
     {
+      id: "int-google-places",
+      provider: "google_places",
+      display_name: "Google Places",
+      status: googlePlaces ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(
+        googlePlaces ? "connected" : "awaiting_credentials",
+      ),
+      external_account_id: "google-places-primary",
+      last_health_check_at: nowIso(),
+      last_error_code: null,
+      capabilities: ["places.autocomplete", "maps.pin", "geocode"],
+    },
+    {
       id: "int-anthropic",
       provider: "anthropic",
       display_name: "Anthropic Claude",
@@ -502,8 +518,10 @@ export function buildIntegrationsHealth(opts = {}) {
   const gemini = hasGeminiEnv();
   const resend = hasResendEnv();
   const supabase = hasSupabaseEnv();
+  const googlePlaces = hasGooglePlacesEnv();
   const zohoReady = hasZohoEnv();
   const zohoBooks = hasZohoBooksOrg();
+  const places = googlePlacesStatus();
   const anthropicFromStore =
     opts.anthropic && typeof opts.anthropic === "object" ? opts.anthropic : null;
   const anthropicReady = Boolean(
@@ -546,8 +564,16 @@ export function buildIntegrationsHealth(opts = {}) {
       : "local-heuristic";
   const llmLive = anthropicReady || gemini;
   const liveCredentials =
-    anthropicReady || gemini || resend || metaConnected || supabase;
-  const presence = credentialsPresenceMatrix({ anthropic: anthropicReady });
+    anthropicReady ||
+    gemini ||
+    resend ||
+    metaConnected ||
+    supabase ||
+    googlePlaces;
+  const presence = credentialsPresenceMatrix({
+    anthropic: anthropicReady,
+    googlePlaces,
+  });
   // Overlay stored Meta presence onto the env-only matrix (booleans only).
   if (metaFromStore) {
     presence.meta = {
@@ -630,6 +656,7 @@ export function buildIntegrationsHealth(opts = {}) {
         ? "Gemini is connected for creative generation."
         : "Gemini is not configured on this host yet.",
     },
+    google_places: places,
     resend: {
       provider: "resend",
       has_credentials: resend,

@@ -106,6 +106,16 @@ export function hasSupabaseEnv() {
   return hasSupabaseAnonCredentials() || hasSupabaseAdminCredentials();
 }
 
+/** Google Places / Maps (popup location Autocomplete + map pin). */
+export function hasGooglePlacesEnv() {
+  return envPresentAny(
+    "GOOGLE_PLACES_API_KEY",
+    "GOOGLE_MAPS_API_KEY",
+    "NEXT_PUBLIC_GOOGLE_PLACES_API_KEY",
+    "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY",
+  );
+}
+
 /**
  * Runtime mode for dual-run health.
  * Honors INTEGRATION_MODE=live; otherwise treats credentialed hosts as live.
@@ -118,7 +128,7 @@ export function integrationRuntimeMode(hasLiveCredentials) {
 }
 
 /**
- * Presence-only matrix for Anthropic / Gemini / Meta / Resend / Supabase.
+ * Presence-only matrix for Anthropic / Gemini / Meta / Resend / Supabase / Places.
  * Values are booleans only — never secret material.
  */
 export function credentialsPresenceMatrix(extra = {}) {
@@ -127,6 +137,7 @@ export function credentialsPresenceMatrix(extra = {}) {
   const meta = hasMetaAnyEnv();
   const resend = hasResendEnv();
   const supabase = hasSupabaseEnv();
+  const googlePlaces = Boolean(extra.googlePlaces) || hasGooglePlacesEnv();
   return {
     anthropic: { present: anthropic },
     gemini: { present: gemini },
@@ -143,5 +154,6 @@ export function credentialsPresenceMatrix(extra = {}) {
       anon: hasSupabaseAnonCredentials(),
       admin: hasSupabaseAdminCredentials(),
     },
+    google_places: { present: googlePlaces },
   };
 }
