@@ -34,14 +34,48 @@ export function resolveGeminiApiKey() {
 }
 
 /**
+ * Only allow Google Generative Language hosts.
+ * Production previously had GEMINI_BASE_URL=https://api.anthropic.com which 404s all media.
  * @returns {string}
  */
 export function geminiBaseUrl() {
-  return (
-    (process.env.IMAGE_BASE_URL || "").trim() ||
-    (process.env.GEMINI_BASE_URL || "").trim() ||
-    DEFAULT_BASE
-  ).replace(/\/$/, "");
+  const candidates = [
+    (process.env.IMAGE_BASE_URL || "").trim(),
+    (process.env.GEMINI_BASE_URL || "").trim(),
+    DEFAULT_BASE,
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    const base = raw.replace(/\/$/, "");
+    try {
+      const host = new URL(base).hostname;
+      if (host === "generativelanguage.googleapis.com") return base;
+    } catch {
+      /* ignore bad URL */
+    }
+  }
+  return DEFAULT_BASE;
+}
+
+/**
+ * Ordered Google AI hosts to try (never Anthropic / third-party).
+ * @param {string} [preferred]
+ */
+function googleAiBases(preferred) {
+  return Array.from(
+    new Set(
+      [preferred, DEFAULT_BASE, "https://generativelanguage.googleapis.com/v1beta", geminiBaseUrl()]
+        .filter(Boolean)
+        .map((b) => String(b).replace(/\/$/, ""))
+        .filter((b) => {
+          try {
+            return new URL(b).hostname === "generativelanguage.googleapis.com";
+          } catch {
+            return false;
+          }
+        }),
+    ),
+  );
 }
 
 /**
@@ -241,9 +275,7 @@ function extractInteractionMedia(interaction, kind) {
  * }} opts
  */
 async function callInteractions(opts) {
-  const bases = Array.from(
-    new Set([DEFAULT_BASE, geminiBaseUrl(), opts.base].filter(Boolean)),
-  );
+  const bases = googleAiBases(opts.base);
   const timeoutMs = resolveTimeoutMs(opts.timeoutMs, 120000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -321,9 +353,8 @@ async function callInteractions(opts) {
  * }} opts
  */
 async function callGenerateContentImage(opts) {
-  const bases = Array.from(
-    new Set([DEFAULT_BASE, geminiBaseUrl(), opts.base, "https://generativelanguage.googleapis.com/v1"].filter(Boolean)),
-  );
+  // Prefer v1beta for native image models; v1 often 404s preview image ids.
+  const bases = googleAiBases(opts.base || DEFAULT_BASE);
   const timeoutMs = resolveTimeoutMs(opts.timeoutMs, 120000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -465,9 +496,38 @@ export async function generateGeminiImage(input) {
   );
   const workingBase = listed.base || DEFAULT_BASE;
   const timeoutMs = resolveTimeoutMs(process.env.IMAGE_TIMEOUT, 120000);
+  // Keep the cascade short — avoid burning quota / Vercel duration across many ids.
+  const shortCascade = cascade.slice(0, 3);
 
-  for (const model of cascade) {
-    // Primary: Interactions (Gemini apps path)
+  for (const model of shortCascade) {
+    // generateContent first (reliable for Nano Banana on AI Studio keys).
+    const gc = await callGenerateContentImage({
+      apiKey,
+      model,
+      prompt: input.prompt,
+      aspectRatio,
+      base: workingBase,
+      timeoutMs,
+    });
+    if (gc.ok) {
+      return {
+        ...gc,
+        mode: "gemini",
+        kind: "image",
+        dataUrl: `data:${gc.mimeType};base64,${gc.bytesBase64}`,
+      };
+    }
+    errors.push(`gc:${model}: ${gc.error}`);
+    if (/429|quota|billing/i.test(String(gc.error || ""))) {
+      return {
+        ok: false,
+        error: `Gemini image quota exceeded for ${model}. Enable billing / raise limits on the Google AI Studio key used as GEMINI_API_KEY. (${gc.error})`,
+        mode: "error",
+        attempts: errors.length,
+      };
+    }
+
+    // Interactions (Gemini apps path) when generateContent is unavailable for the id.
     const result = await callInteractions({
       apiKey,
       model,
@@ -486,25 +546,6 @@ export async function generateGeminiImage(input) {
       };
     }
     errors.push(`${model}: ${result.error}`);
-
-    // Secondary: generateContent for models that still expose it
-    const gc = await callGenerateContentImage({
-      apiKey,
-      model,
-      prompt: input.prompt,
-      aspectRatio,
-      base: workingBase,
-      timeoutMs,
-    });
-    if (gc.ok) {
-      return {
-        ...gc,
-        mode: "gemini",
-        kind: "image",
-        dataUrl: `data:${gc.mimeType};base64,${gc.bytesBase64}`,
-      };
-    }
-    errors.push(`gc:${model}: ${gc.error}`);
   }
 
   const availableHint = listed.ok

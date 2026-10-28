@@ -7,6 +7,8 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Gemini image/video generation can exceed the default serverless window.
+export const maxDuration = 300;
 
 /**
  * Catch-all dual-run for /api/v1/* (auth/{login,me,logout} keep dedicated routes).
