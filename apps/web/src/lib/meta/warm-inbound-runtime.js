@@ -7,6 +7,7 @@
 
 import { getAnthropicStatus } from "@/lib/integrations/anthropic-credentials";
 import { resolveWhatsAppCloudCredentials } from "@/lib/integrations/meta-credentials";
+import { hasTelegramEnv } from "@/lib/integrations/env-presence";
 import { listAgents } from "@/lib/agents/agent-store";
 import { isSimpleSupportGreeting } from "@/lib/agents/support-fast-path";
 import { normalizeMetaInboundMessages } from "@/lib/meta/normalize-inbound";
@@ -25,6 +26,7 @@ import {
  *   channels_warmed: string[],
  *   anthropic: string,
  *   whatsapp_send_ready: boolean,
+ *   telegram_send_ready: boolean,
  *   agents: number,
  *   latency_ms: number,
  * }>}
@@ -57,6 +59,8 @@ export async function warmInboundRuntime() {
     listAgents().catch(() => ({ data: [] })),
   ]);
   warmed.push("anthropic-credentials", "whatsapp-credentials", "agents");
+  const telegramReady = hasTelegramEnv();
+  warmed.push("telegram-credentials");
 
   return {
     ok: true,
@@ -65,6 +69,7 @@ export async function warmInboundRuntime() {
     channels_warmed: channelsWarmed,
     anthropic: anthropic?.source || (anthropic?.has_credentials ? "keyed" : "missing"),
     whatsapp_send_ready: Boolean(wa?.sendReady),
+    telegram_send_ready: telegramReady,
     agents: Array.isArray(agents?.data) ? agents.data.length : 0,
     latency_ms: Date.now() - started,
   };

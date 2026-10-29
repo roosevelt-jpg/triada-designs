@@ -16,12 +16,14 @@ const CHANNEL_FILTERS = [
   { value: "facebook", label: "Facebook" },
   { value: "instagram", label: "Instagram" },
   { value: "whatsapp", label: "WhatsApp" },
+  { value: "telegram", label: "Telegram" },
 ];
 
 function channelTone(channel) {
   if (channel === "facebook") return "info";
   if (channel === "instagram") return "brand";
   if (channel === "whatsapp") return "success";
+  if (channel === "telegram") return "info";
   return "neutral";
 }
 
@@ -52,7 +54,7 @@ export default function InboxPage() {
   return (
     <DashboardShell
       title="Unified inbox"
-      description="Conversations across webchat and Meta. Human takeover suppresses automatic replies."
+      description="Conversations across webchat, Meta, and Telegram. Human takeover suppresses automatic replies."
     >
       <div className="mb-4 ops-actions" role="toolbar" aria-label="Channel filters">
         {CHANNEL_FILTERS.map((filter) => (
@@ -79,7 +81,7 @@ export default function InboxPage() {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No conversations yet"
-          description="Simulate a Meta inbound from Integrations → Meta, or wait for a connected channel."
+          description="Simulate an inbound from Integrations, or wait for a connected channel message."
         />
       ) : null}
       {!loading && !error && items.length > 0 ? (
