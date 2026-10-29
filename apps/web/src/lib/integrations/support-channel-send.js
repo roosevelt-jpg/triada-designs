@@ -12,6 +12,7 @@ import { sendTelegramTextMessage } from "@/lib/integrations/telegram-bot-text";
 import { sendResendEmail } from "@/lib/email/resend";
 import { wrapEmailMessage } from "@/lib/brand/wrap-email";
 import { BRAND } from "@/lib/brand/identity";
+import { formatChatMessageBody } from "@/lib/crm/format-chat-message";
 import { SUPPORT_TEXT_CHANNELS } from "@/lib/crm/conversations-store";
 
 /**
@@ -44,7 +45,7 @@ function hasTikTokEnv() {
  * @param {{ body: string, visitor_id?: string }} input
  */
 export async function sendWebchatTextMessage(input) {
-  const body = String(input.body || "").trim();
+  const body = formatChatMessageBody(input.body);
   if (!body) {
     return {
       ok: false,
@@ -79,7 +80,7 @@ export async function sendWebchatTextMessage(input) {
  */
 export async function sendEmailSupportReply(input) {
   const to = String(input.to || "").trim().toLowerCase();
-  const body = String(input.body || "").trim();
+  const body = formatChatMessageBody(input.body);
   const subject =
     String(input.subject || "").trim() ||
     `Re: your message to ${BRAND.name}`;
@@ -351,7 +352,7 @@ export async function sendTikTokTextMessage(input) {
  */
 export async function sendSupportChannelText(input) {
   const channel = String(input.channel || "").toLowerCase();
-  const body = String(input.body || "").trim();
+  const body = formatChatMessageBody(input.body);
   const externalUserId = String(input.external_user_id || "").trim();
 
   if (!SUPPORT_TEXT_CHANNELS.includes(channel)) {

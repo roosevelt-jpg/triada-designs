@@ -21,6 +21,34 @@ import {
   resolveReplyLanguage,
 } from "./language-preference";
 import { getContact } from "@/lib/crm/contacts-store";
+import { formatChatMessageBody } from "@/lib/crm/format-chat-message";
+
+/**
+ * Apply inbox prose formatting to draft / text fields on a reply result.
+ * @param {Record<string, unknown> | null | undefined} result
+ */
+function formatDraftResult(result) {
+  if (!result || typeof result !== "object") return result;
+  /** @type {Record<string, unknown>} */
+  const next = { ...result };
+  if (typeof next.draft === "string") {
+    next.draft = formatChatMessageBody(next.draft);
+  }
+  if (typeof next.text === "string") {
+    next.text = formatChatMessageBody(next.text);
+  }
+  if (next.output && typeof next.output === "object") {
+    const output = /** @type {Record<string, unknown>} */ ({ ...next.output });
+    if (typeof output.text === "string") {
+      output.text = formatChatMessageBody(output.text);
+    }
+    if (typeof output.draft === "string") {
+      output.draft = formatChatMessageBody(output.draft);
+    }
+    next.output = output;
+  }
+  return next;
+}
 
 /**
  * @param {{
@@ -34,6 +62,22 @@ import { getContact } from "@/lib/crm/contacts-store";
  * }} input
  */
 export async function draftInboundSupportReply(input) {
+  const result = await draftInboundSupportReplyUnformatted(input);
+  return formatDraftResult(result);
+}
+
+/**
+ * @param {{
+ *   message: string,
+ *   customerName?: string | null,
+ *   channel: string,
+ *   conversation?: Record<string, unknown>,
+ *   dry_run?: boolean,
+ *   agent_key?: string,
+ *   context?: Record<string, unknown>,
+ * }} input
+ */
+async function draftInboundSupportReplyUnformatted(input) {
   const message = String(input.message || "").trim();
   const customerName = input.customerName || undefined;
   const channel = String(input.channel || "webchat").toLowerCase();

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
@@ -9,24 +10,50 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import { addNode, TRIGGER_TYPES } from "@/lib/workflow-definition";
 
 function statusTone(status) {
   if (status === "active") return "success";
-  if (status === "disabled") return "danger";
+  if (status === "disabled" || status === "inactive") return "danger";
   return "warning";
 }
 
 function statusLabel(status) {
   if (status === "active") return "Live";
-  if (status === "disabled") return "Offline";
+  if (status === "disabled" || status === "inactive") return "Offline";
   return "Draft";
 }
 
+function blankStarterDefinition(triggerType) {
+  const trigger = String(triggerType || "incoming_message");
+  const { definition, key } = addNode(
+    { entry: "", nodes: {}, layout: {} },
+    { type: "trigger", label: "Start", x: 48, y: 48 },
+  );
+  if (definition.nodes[key]) {
+    definition.nodes[key] = {
+      ...definition.nodes[key],
+      config: { trigger_type: trigger },
+    };
+  }
+  return definition;
+}
+
 export default function AutomationsPage() {
+  const router = useRouter();
   const [items, setItems] = useState([]);
+  const [triggerTypes, setTriggerTypes] = useState(TRIGGER_TYPES);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    trigger_type: "incoming_message",
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -34,6 +61,9 @@ export default function AutomationsPage() {
     try {
       const response = await apiFetch("/v1/automations");
       setItems(response.data || []);
+      if (Array.isArray(response.meta?.trigger_types) && response.meta.trigger_types.length) {
+        setTriggerTypes(response.meta.trigger_types);
+      }
     } catch (err) {
       setError(err.message || "Failed to load automations");
     } finally {
@@ -44,6 +74,46 @@ export default function AutomationsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  function openCreate() {
+    setShowCreate(true);
+    setNotice("");
+    setError("");
+    setForm({
+      name: "",
+      description: "",
+      trigger_type: triggerTypes[0] || "incoming_message",
+    });
+  }
+
+  async function createWorkflow(event) {
+    event?.preventDefault?.();
+    setCreating(true);
+    setError("");
+    setNotice("");
+    try {
+      const trigger = form.trigger_type || "incoming_message";
+      const result = await apiFetch("/v1/automations", {
+        method: "POST",
+        body: {
+          name: form.name.trim() || "Untitled workflow",
+          description: form.description.trim(),
+          trigger_type: trigger,
+          status: "draft",
+          definition: blankStarterDefinition(trigger),
+          version: 1,
+          run_count: 0,
+        },
+      });
+      const id = result.workflow?.id;
+      if (!id) throw new Error("Workflow created without an id");
+      setNotice("Workflow created — opening builder.");
+      router.push(`/automations/${id}`);
+    } catch (err) {
+      setError(err.message || "Failed to create workflow");
+      setCreating(false);
+    }
+  }
 
   async function toggleStatus(workflow) {
     setBusyId(workflow.id);
@@ -62,17 +132,103 @@ export default function AutomationsPage() {
     }
   }
 
+  async function removeWorkflow(workflow) {
+    if (!window.confirm(`Delete “${workflow.name}”? This cannot be undone.`)) {
+      return;
+    }
+    setBusyId(workflow.id);
+    setError("");
+    try {
+      await apiFetch(`/v1/automations/${workflow.id}`, { method: "DELETE" });
+      await load();
+    } catch (err) {
+      setError(err.message || "Failed to delete workflow");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <DashboardShell
       title="Workflows"
       description="Drag-and-drop jewellery sales workflows. Open the builder to edit, dry-run, and publish to live. Emergency pauses are enforced at runtime."
+      actions={
+        <Button size="sm" onClick={openCreate} disabled={creating}>
+          New workflow
+        </Button>
+      }
     >
+      {notice ? (
+        <p className="mb-4 text-sm text-muted" role="status">
+          {notice}
+        </p>
+      ) : null}
+      {showCreate ? (
+        <form
+          onSubmit={createWorkflow}
+          className="surface-card mb-5 grid gap-3 p-4 md:grid-cols-2 md:p-5"
+        >
+          <label className="block text-sm md:col-span-1">
+            <span className="mb-1 block text-muted">Name</span>
+            <input
+              className="ops-field w-full px-3 py-2"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. WhatsApp first reply"
+              autoFocus
+            />
+          </label>
+          <label className="block text-sm md:col-span-1">
+            <span className="mb-1 block text-muted">Trigger</span>
+            <select
+              className="ops-field w-full px-3 py-2"
+              value={form.trigger_type}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, trigger_type: e.target.value }))
+              }
+            >
+              {(triggerTypes.length ? triggerTypes : TRIGGER_TYPES).map((t) => (
+                <option key={t} value={t}>
+                  {String(t).replaceAll("_", " ")}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm md:col-span-2">
+            <span className="mb-1 block text-muted">Description</span>
+            <input
+              className="ops-field w-full px-3 py-2"
+              value={form.description}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, description: e.target.value }))
+              }
+              placeholder="Optional short note"
+            />
+          </label>
+          <div className="flex flex-wrap gap-2 md:col-span-2">
+            <Button type="submit" disabled={creating}>
+              {creating ? "Creating…" : "Create & open builder"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={creating}
+              onClick={() => setShowCreate(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : null}
+
       {loading ? <Skeleton className="h-64" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
-      {!loading && !error && items.length === 0 ? (
+      {!loading && !error && items.length === 0 && !showCreate ? (
         <EmptyState
           title="No workflows yet"
-          description="Create a workflow to get started."
+          description="Create a workflow, then edit it in the visual builder and publish to live."
+          actionLabel="Create workflow"
+          onAction={openCreate}
         />
       ) : null}
       {!loading && !error && items.length > 0 ? (
@@ -93,9 +249,9 @@ export default function AutomationsPage() {
                   {workflow.description || "No description"}
                 </p>
                 <p className="text-xs text-muted">
-                  Trigger · {workflow.trigger_type?.replaceAll("_", " ")} · v
-                  {workflow.version} · {workflow.run_count ?? 0} live runs ·{" "}
-                  {workflow.node_summary?.length ?? 0} nodes
+                  Trigger · {workflow.trigger_type?.replaceAll("_", " ") || "manual"} · v
+                  {workflow.version ?? 1} · {workflow.run_count ?? 0} live runs ·{" "}
+                  {workflow.node_summary?.length ?? workflow.node_count ?? 0} nodes
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -117,6 +273,14 @@ export default function AutomationsPage() {
                 >
                   Open builder
                 </Link>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={busyId === workflow.id}
+                  onClick={() => removeWorkflow(workflow)}
+                >
+                  Delete
+                </Button>
               </div>
             </article>
           ))}

@@ -2738,15 +2738,35 @@ export async function dispatchV1(method, segments, request, body) {
   // ---- automations ----
   if (path === "automations" && m === "GET") {
     const listed = await listWorkflows();
+    const { TRIGGER_TYPES: WF_TRIGGERS } = await import(
+      "@/lib/workflow-definition"
+    );
     return jsonOk({
       data: listed.data.map((w) => {
         const { definition, ...rest } = w;
-        return rest;
+        const nodes =
+          definition &&
+          typeof definition === "object" &&
+          definition.nodes &&
+          typeof definition.nodes === "object"
+            ? Object.keys(definition.nodes)
+            : Array.isArray(rest.node_summary)
+              ? rest.node_summary
+              : [];
+        return {
+          ...rest,
+          version: rest.version || 1,
+          run_count: rest.run_count ?? 0,
+          node_summary: nodes,
+          node_count: nodes.length,
+        };
       }),
       mode: listed.mode,
       meta: {
-        node_types: ["trigger", "action", "condition"],
-        trigger_types: ["message_inbound", "schedule", "lead_stage_changed", "shopify_order"],
+        node_types: ["trigger", "action", "condition", "delay", "ai_task", "human_handoff", "end"],
+        trigger_types: Array.isArray(WF_TRIGGERS) && WF_TRIGGERS.length
+          ? WF_TRIGGERS
+          : ["incoming_message", "schedule", "lead_stage_changed", "shopify_order"],
         action_types: [
           "send_message",
           "create_task",

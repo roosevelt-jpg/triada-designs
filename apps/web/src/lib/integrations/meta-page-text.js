@@ -6,6 +6,7 @@
 
 import { integrationRuntimeMode } from "@/lib/integrations/env-presence";
 import { resolvePageMessagingCredentials } from "@/lib/integrations/meta-credentials";
+import { formatChatMessageBody } from "@/lib/crm/format-chat-message";
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || "v21.0";
 const GRAPH_BASE = (
@@ -40,7 +41,7 @@ async function resolveSendGate(channel) {
  */
 export async function sendMessengerTextMessage(input) {
   const recipientId = String(input.recipient_id || "").trim();
-  const body = String(input.body || "").trim();
+  const body = formatChatMessageBody(input.body);
 
   if (!recipientId) {
     return {
@@ -124,7 +125,7 @@ export async function sendMessengerTextMessage(input) {
  */
 export async function sendInstagramTextMessage(input) {
   const recipientId = String(input.recipient_id || "").trim();
-  const body = String(input.body || "").trim();
+  const body = formatChatMessageBody(input.body);
   const { live, creds } = await resolveSendGate("instagram");
   const igUserId = String(
     input.ig_user_id || creds.igUserId || "",
@@ -227,17 +228,18 @@ export async function sendInstagramTextMessage(input) {
  */
 export async function sendPageMessagingText(input) {
   const channel = String(input.channel || "messenger").toLowerCase();
+  const body = formatChatMessageBody(input.body);
   if (channel === "instagram") {
     return sendInstagramTextMessage({
       recipient_id: input.recipient_id,
-      body: input.body,
+      body,
       ig_user_id: input.page_or_account_id,
     });
   }
   // facebook + messenger share Page Send API
   return sendMessengerTextMessage({
     recipient_id: input.recipient_id,
-    body: input.body,
+    body,
     page_id: input.page_or_account_id,
   });
 }

@@ -7,6 +7,7 @@ import {
   hasTelegramEnv,
   integrationRuntimeMode,
 } from "@/lib/integrations/env-presence";
+import { formatChatMessageBody } from "@/lib/crm/format-chat-message";
 
 const TELEGRAM_API = (
   process.env.TELEGRAM_API_BASE || "https://api.telegram.org"
@@ -33,7 +34,7 @@ function resolveSendGate() {
  */
 export async function sendTelegramTextMessage(input) {
   const chatId = String(input.chat_id || "").trim();
-  const body = String(input.body || "").trim();
+  const body = formatChatMessageBody(input.body);
 
   if (!chatId) {
     return {

@@ -3,6 +3,8 @@
  * (Laravel ConversationController-compatible fields).
  */
 
+import { formatChatMessageBody } from "@/lib/crm/format-chat-message";
+
 /**
  * @param {Record<string, unknown> | null | undefined} message
  */
@@ -20,7 +22,7 @@ export function shapeMessageForInbox(message) {
   }
   return {
     id: String(message.id || ""),
-    body: String(message.body || ""),
+    body: formatChatMessageBody(message.body),
     direction,
     sender_type: senderType,
     created_at: String(message.created_at || message.at || ""),
@@ -75,8 +77,12 @@ export function shapeConversationForInbox(conversation, contact = null) {
     last_inbound_at: inboundAt,
     last_outbound_at: outboundAt,
     last_message_at: lastMessageAt,
-    last_inbound_body: c.last_inbound_body || null,
-    last_outbound_body: c.last_outbound_body || null,
+    last_inbound_body: c.last_inbound_body
+      ? formatChatMessageBody(c.last_inbound_body)
+      : null,
+    last_outbound_body: c.last_outbound_body
+      ? formatChatMessageBody(c.last_outbound_body)
+      : null,
     unanswered: Boolean(c.unanswered),
     priority:
       typeof meta.priority === "string" ? meta.priority : "normal",

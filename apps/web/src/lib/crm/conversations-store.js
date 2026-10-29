@@ -10,6 +10,7 @@
 
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { hasSupabaseAdminCredentials } from "@/lib/supabase/config";
+import { formatChatMessageBody } from "@/lib/crm/format-chat-message";
 import { getLocalDataDir } from "@/lib/local-data-dir";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -555,7 +556,7 @@ export async function appendOutboundReply(id, input) {
   const existing = await getConversation(id);
   if (!existing) return null;
   const at = nowIso();
-  const body = String(input.body || "").trim();
+  const body = formatChatMessageBody(input.body);
   const messages = Array.isArray(existing.messages) ? [...existing.messages] : [];
   messages.push({
     id: `msg-out-${Date.now().toString(36)}`,
@@ -611,7 +612,7 @@ export async function appendOutboundReply(id, input) {
  */
 export async function ingestInboundDm(input) {
   const channel = String(input.channel || "instagram").toLowerCase();
-  const body = String(input.body || "").trim() || "(empty message)";
+  const body = formatChatMessageBody(input.body) || "(empty message)";
   const at = nowIso();
   const externalConversationId = String(
     input.external_conversation_id || "",

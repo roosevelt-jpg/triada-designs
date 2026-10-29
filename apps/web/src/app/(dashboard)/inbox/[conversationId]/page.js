@@ -157,7 +157,7 @@ export default function ConversationDetailPage() {
                   <p className="mb-1 text-xs uppercase tracking-wide text-muted">
                     {message.sender_type} · {formatDateTime(message.created_at)}
                   </p>
-                  <p>{message.body}</p>
+                  <p className="whitespace-pre-wrap break-words">{message.body}</p>
                 </div>
               ))}
             </div>

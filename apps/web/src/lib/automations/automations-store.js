@@ -43,8 +43,22 @@ function newId() {
  */
 export function shapeWorkflow(input = {}) {
   const statusRaw = String(input.status || "draft").toLowerCase();
-  const status =
-    statusRaw === "active" || statusRaw === "inactive" ? statusRaw : "draft";
+  // UI + activate/deactivate use active | disabled | draft.
+  // Map legacy "inactive" → disabled so Offline badge stays correct.
+  let status = "draft";
+  if (statusRaw === "active") status = "active";
+  else if (statusRaw === "disabled" || statusRaw === "inactive") status = "disabled";
+  else if (statusRaw === "draft") status = "draft";
+
+  const definition =
+    input.definition && typeof input.definition === "object"
+      ? /** @type {Record<string, unknown>} */ (input.definition)
+      : {};
+  const nodes =
+    definition.nodes && typeof definition.nodes === "object"
+      ? Object.keys(/** @type {Record<string, unknown>} */ (definition.nodes))
+      : [];
+
   return {
     id: String(input.id || newId()),
     workspace_id: String(input.workspace_id || WORKSPACE_ID),
@@ -55,14 +69,16 @@ export function shapeWorkflow(input = {}) {
         ? String(input.trigger_type).trim()
         : null,
     description: String(input.description || "").trim(),
-    definition:
-      input.definition && typeof input.definition === "object"
-        ? /** @type {Record<string, unknown>} */ (input.definition)
-        : {},
+    definition,
     metadata:
       input.metadata && typeof input.metadata === "object"
         ? /** @type {Record<string, unknown>} */ (input.metadata)
         : {},
+    version: Math.max(1, Number(input.version) || 1),
+    run_count: Math.max(0, Number(input.run_count) || 0),
+    node_summary: nodes,
+    node_count: nodes.length,
+    activated_at: input.activated_at ? String(input.activated_at) : null,
     created_at: String(input.created_at || nowIso()),
     updated_at: String(input.updated_at || nowIso()),
   };

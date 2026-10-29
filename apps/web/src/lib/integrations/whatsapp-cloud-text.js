@@ -5,6 +5,7 @@
 
 import { integrationRuntimeMode } from "@/lib/integrations/env-presence";
 import { resolveWhatsAppCloudCredentials } from "@/lib/integrations/meta-credentials";
+import { formatChatMessageBody } from "@/lib/crm/format-chat-message";
 import { toWhatsAppRecipient } from "@/lib/crm/phone-e164";
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || "v21.0";
@@ -41,7 +42,7 @@ async function resolveSendGate() {
 export async function sendWhatsAppTextMessage(input) {
   const rawTo = String(input.to || "").trim();
   const to = toWhatsAppRecipient(rawTo) || rawTo.replace(/\D+/g, "");
-  const body = String(input.body || "").trim();
+  const body = formatChatMessageBody(input.body);
 
   if (!to) {
     return {
