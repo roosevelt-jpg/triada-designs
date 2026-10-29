@@ -8,26 +8,18 @@ import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { TimezoneSelect } from "@/components/ui/TimezoneSelect";
 import { apiFetch } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/formatters";
+import {
+  DEFAULT_TIMEZONE,
+  normalizePreferredTimezone,
+} from "@/lib/locale/preferred-timezone";
 import { getSystemTimeState, nowDate, syncSystemTime } from "@/lib/system-time";
-
-const COMMON_TIMEZONES = [
-  "America/Los_Angeles",
-  "America/Denver",
-  "America/Chicago",
-  "America/New_York",
-  "UTC",
-  "Europe/London",
-  "Europe/Paris",
-  "Asia/Dubai",
-  "Asia/Singapore",
-  "Australia/Sydney",
-];
 
 export default function SettingsPage() {
   const [workspace, setWorkspace] = useState(null);
-  const [timezone, setTimezone] = useState("UTC");
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [handoffEnabled, setHandoffEnabled] = useState(true);
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [callNumber, setCallNumber] = useState("");
@@ -46,7 +38,9 @@ export default function SettingsPage() {
         syncSystemTime().catch(() => getSystemTimeState()),
       ]);
       setWorkspace(data.workspace);
-      setTimezone(data.workspace?.timezone || "UTC");
+      setTimezone(
+        normalizePreferredTimezone(data.workspace?.timezone, DEFAULT_TIMEZONE),
+      );
       const hh = data.human_handoff || {};
       setHandoffEnabled(hh.enabled !== false);
       setWhatsappNumber(hh.whatsapp_number || "");
@@ -90,7 +84,9 @@ export default function SettingsPage() {
 
   async function saveTimezone(e) {
     e.preventDefault();
-    await patch({ timezone: timezone.trim() || "UTC" });
+    await patch({
+      timezone: normalizePreferredTimezone(timezone, DEFAULT_TIMEZONE),
+    });
   }
 
   async function saveHumanHandoff(e) {
@@ -210,19 +206,13 @@ export default function SettingsPage() {
             </p>
             <form className="flex max-w-xl flex-col gap-3 sm:flex-row sm:items-end" onSubmit={saveTimezone}>
               <div className="min-w-0 flex-1">
-                <Input
+                <TimezoneSelect
                   label="Workspace timezone"
                   name="timezone"
-                  list="triada-timezones"
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
-                  hint="Example: America/Los_Angeles. Affects header clock and date formatting."
+                  hint="Affects header clock, calendar “now”, and date formatting."
                 />
-                <datalist id="triada-timezones">
-                  {COMMON_TIMEZONES.map((tz) => (
-                    <option key={tz} value={tz} />
-                  ))}
-                </datalist>
               </div>
               <Button type="submit" disabled={busy} size="sm">
                 Save timezone

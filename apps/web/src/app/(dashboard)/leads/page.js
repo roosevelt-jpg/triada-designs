@@ -6,10 +6,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { CurrencySelect } from "@/components/ui/CurrencySelect";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { formatCurrency, formatStage } from "@/lib/formatters";
+import { DEFAULT_CURRENCY } from "@/lib/locale/preferred-currency";
 
 const EMPTY_FORM = {
   title: "",
@@ -20,7 +22,7 @@ const EMPTY_FORM = {
   source_channel: "instagram",
   score: "",
   estimated_value: "",
-  currency: "AED",
+  currency: DEFAULT_CURRENCY,
 };
 
 const STAGES = [
@@ -84,7 +86,7 @@ export default function LeadsPage() {
       score: lead.score != null ? String(lead.score) : "",
       estimated_value:
         lead.estimated_value != null ? String(lead.estimated_value) : "",
-      currency: lead.currency || "AED",
+      currency: lead.currency || DEFAULT_CURRENCY,
     });
     setShowForm(true);
     setNotice("");
@@ -109,7 +111,7 @@ export default function LeadsPage() {
       score: form.score === "" ? null : Number(form.score),
       estimated_value:
         form.estimated_value === "" ? null : Number(form.estimated_value),
-      currency: form.currency || "AED",
+      currency: form.currency || DEFAULT_CURRENCY,
     };
     try {
       const path = editingId ? `/v1/leads/${editingId}` : "/v1/leads";
@@ -242,6 +244,11 @@ export default function LeadsPage() {
               step="0.01"
               value={form.estimated_value}
               onChange={(e) => updateField("estimated_value", e.target.value)}
+            />
+            <CurrencySelect
+              name="currency"
+              value={form.currency}
+              onChange={(e) => updateField("currency", e.target.value)}
             />
           </div>
           <div className="ops-actions">

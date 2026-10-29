@@ -5,9 +5,11 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { CurrencySelect } from "@/components/ui/CurrencySelect";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import { DEFAULT_CURRENCY } from "@/lib/locale/preferred-currency";
 
 const STATUS_OPTIONS = [
   "queued",
@@ -51,7 +53,7 @@ export default function ManufacturerPage() {
     making_charge_per_gram: "",
     stock_grams: "",
     low_stock_threshold_grams: "",
-    currency: "AED",
+    currency: DEFAULT_CURRENCY,
   });
   const [materialStatus, setMaterialStatus] = useState("");
   const [editingMaterialId, setEditingMaterialId] = useState(null);
@@ -152,7 +154,7 @@ export default function ManufacturerPage() {
           materialForm.low_stock_threshold_grams === ""
             ? null
             : Number(materialForm.low_stock_threshold_grams),
-        currency: materialForm.currency || "AED",
+        currency: materialForm.currency || DEFAULT_CURRENCY,
       };
       const path = editingMaterialId
         ? `/v1/jewellery-ops/manufacturer/materials/${editingMaterialId}`
@@ -170,7 +172,7 @@ export default function ManufacturerPage() {
         making_charge_per_gram: "",
         stock_grams: "",
         low_stock_threshold_grams: "",
-        currency: "AED",
+        currency: DEFAULT_CURRENCY,
       });
       await load();
     } catch (err) {
@@ -192,7 +194,7 @@ export default function ManufacturerPage() {
         m.low_stock_threshold_grams != null
           ? String(m.low_stock_threshold_grams)
           : "",
-      currency: m.currency || "AED",
+      currency: m.currency || DEFAULT_CURRENCY,
     });
   }
 
@@ -435,6 +437,13 @@ export default function ManufacturerPage() {
                     }))
                   }
                 />
+                <CurrencySelect
+                  name="currency"
+                  value={materialForm.currency}
+                  onChange={(e) =>
+                    setMaterialForm((f) => ({ ...f, currency: e.target.value }))
+                  }
+                />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="submit" size="sm">
@@ -454,7 +463,7 @@ export default function ManufacturerPage() {
                         making_charge_per_gram: "",
                         stock_grams: "",
                         low_stock_threshold_grams: "",
-                        currency: "AED",
+                        currency: DEFAULT_CURRENCY,
                       });
                     }}
                   >

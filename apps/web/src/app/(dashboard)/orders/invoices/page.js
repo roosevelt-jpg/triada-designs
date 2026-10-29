@@ -7,9 +7,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { CurrencySelect } from "@/components/ui/CurrencySelect";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import { DEFAULT_CURRENCY } from "@/lib/locale/preferred-currency";
 
 const emptyForm = {
   id: "",
@@ -18,7 +20,7 @@ const emptyForm = {
   order_id: "",
   customer_name: "",
   customer_email: "",
-  currency: "AED",
+  currency: DEFAULT_CURRENCY,
   total: "",
   status: "issued",
   issued_at: "",
@@ -36,7 +38,7 @@ function invoiceToForm(inv) {
     order_id: inv.order_id || "",
     customer_name: inv.customer_name || "",
     customer_email: inv.customer_email || "",
-    currency: inv.currency || "AED",
+    currency: inv.currency || DEFAULT_CURRENCY,
     total: inv.total != null ? String(inv.total) : "",
     status: inv.status || "issued",
     issued_at: inv.issued_at ? String(inv.issued_at).slice(0, 16) : "",
@@ -60,7 +62,7 @@ function formPayload(form) {
     order_id: form.order_id || null,
     customer_name: form.customer_name,
     customer_email: form.customer_email,
-    currency: form.currency || "AED",
+    currency: form.currency || DEFAULT_CURRENCY,
     total: form.total === "" ? undefined : Number(form.total),
     status: form.status,
     issued_at: form.issued_at ? new Date(form.issued_at).toISOString() : undefined,
@@ -347,8 +349,8 @@ export default function InvoiceEditorPage() {
                 </label>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Input
-                    label="Currency"
+                  <CurrencySelect
+                    name="currency"
                     value={form.currency}
                     onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
                   />

@@ -10,6 +10,10 @@ import {
   nowIso,
   upsertManufacturerRow,
 } from "@/lib/manufacturer/persistence";
+import {
+  DEFAULT_CURRENCY,
+  normalizePreferredCurrency,
+} from "@/lib/locale/preferred-currency";
 
 const TABLE = "manufacturer_materials";
 
@@ -65,7 +69,9 @@ export function shapeManufacturerMaterial(input = {}) {
       input.low_stock_threshold_grams != null
         ? Number(input.low_stock_threshold_grams)
         : null,
-    currency: String(input.currency || "AED"),
+    currency: normalizePreferredCurrency(input.currency, DEFAULT_CURRENCY, {
+      allowUnknown: true,
+    }),
     price_as_of: input.price_as_of ? String(input.price_as_of) : nowIso(),
     metadata:
       input.metadata && typeof input.metadata === "object" ? input.metadata : {},

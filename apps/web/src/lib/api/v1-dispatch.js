@@ -15,6 +15,10 @@ import {
   paginate,
 } from "@/lib/api/seed-data";
 import {
+  DEFAULT_TIMEZONE,
+  normalizePreferredTimezone,
+} from "@/lib/locale/preferred-timezone";
+import {
   deleteContent,
   findContent,
   getContentItems,
@@ -551,7 +555,10 @@ export async function dispatchV1(method, segments, request, body) {
       typeof body.workspace.timezone === "string"
         ? body.workspace.timezone.trim()
         : "";
-    const tz = fromRoot || fromWorkspace || runtimeState.timezone;
+    const tz = normalizePreferredTimezone(
+      fromRoot || fromWorkspace || runtimeState.timezone,
+      DEFAULT_TIMEZONE,
+    );
     if (tz) runtimeState.timezone = tz;
 
     let humanHandoff = await getHumanHandoffSettings();

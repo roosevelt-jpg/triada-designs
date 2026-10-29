@@ -6,16 +6,18 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { CurrencySelect } from "@/components/ui/CurrencySelect";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/formatters";
+import { DEFAULT_CURRENCY } from "@/lib/locale/preferred-currency";
 
 const EMPTY_FORM = {
   name: "",
   description: "",
   price: "",
-  currency: "AED",
+  currency: DEFAULT_CURRENCY,
   inquiry_url: "https://triada-designs.com/",
   status: "active",
   approved_claims: "",
@@ -68,7 +70,7 @@ export default function ServicesPage() {
       name: item.name || "",
       description: item.description || "",
       price: item.price != null ? String(item.price) : "",
-      currency: item.currency || "AED",
+      currency: item.currency || DEFAULT_CURRENCY,
       inquiry_url: item.inquiry_url || "https://triada-designs.com/",
       status: item.status || "active",
       approved_claims: Array.isArray(item.approved_claims)
@@ -92,7 +94,7 @@ export default function ServicesPage() {
       name: form.name.trim(),
       description: form.description.trim(),
       price: form.price === "" ? null : Number(form.price),
-      currency: form.currency || "AED",
+      currency: form.currency || DEFAULT_CURRENCY,
       inquiry_url: form.inquiry_url.trim() || null,
       status: form.status || "active",
       approved_claims: form.approved_claims,
@@ -195,8 +197,7 @@ export default function ServicesPage() {
               onChange={(e) => updateField("price", e.target.value)}
               hint="Leave blank or 0 for quote-on-request."
             />
-            <Input
-              label="Currency"
+            <CurrencySelect
               name="currency"
               value={form.currency}
               onChange={(e) => updateField("currency", e.target.value)}

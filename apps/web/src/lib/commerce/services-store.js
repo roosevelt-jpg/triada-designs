@@ -7,6 +7,10 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { hasSupabaseAdminCredentials } from "@/lib/supabase/config";
 import { getLocalDataDir } from "@/lib/local-data-dir";
+import {
+  DEFAULT_CURRENCY,
+  normalizePreferredCurrency,
+} from "@/lib/locale/preferred-currency";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -78,7 +82,9 @@ export function shapeService(input = {}) {
     name: String(input.name || "").trim() || "Untitled service",
     description: String(input.description || "").trim(),
     price: Number.isFinite(price) ? price : null,
-    currency: String(input.currency || "AED").trim().toUpperCase() || "AED",
+    currency: normalizePreferredCurrency(input.currency, DEFAULT_CURRENCY, {
+      allowUnknown: true,
+    }),
     inquiry_url:
       input.inquiry_url != null && String(input.inquiry_url).trim()
         ? String(input.inquiry_url).trim()

@@ -6,6 +6,10 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { hasSupabaseAdminCredentials } from "@/lib/supabase/config";
 import { getLocalDataDir } from "@/lib/local-data-dir";
+import {
+  DEFAULT_CURRENCY,
+  normalizePreferredCurrency,
+} from "@/lib/locale/preferred-currency";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -103,7 +107,9 @@ export function shapeLead(input = {}) {
       null,
     score: Number.isFinite(score) ? score : null,
     estimated_value: Number.isFinite(estimated_value) ? estimated_value : null,
-    currency: String(input.currency || "AED").trim().toUpperCase() || "AED",
+    currency: normalizePreferredCurrency(input.currency, DEFAULT_CURRENCY, {
+      allowUnknown: true,
+    }),
     external_crm_id:
       input.external_crm_id != null && String(input.external_crm_id).trim()
         ? String(input.external_crm_id).trim()
