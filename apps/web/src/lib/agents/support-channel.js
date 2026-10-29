@@ -115,7 +115,9 @@ export async function replySupportChannel(input) {
   }).catch(() => null);
 
   return {
-    ok: Boolean(send ? send.ok : true),
+    // Pipeline succeeded when a reply was drafted (+ appended). Provider
+    // delivery is reported separately via send_ok / send_error.
+    ok: true,
     skipped: false,
     conversation_id: conversation.id,
     channel,
@@ -228,7 +230,7 @@ export async function handleInboundSupportChannel(input) {
   return {
     ok: Boolean(reply.ok),
     conversation: reply.conversation || conversation,
-    replied: Boolean(reply.ok && !reply.skipped),
+    replied: Boolean(reply.reply && !reply.skipped),
     reply,
     deduplicated: false,
   };
