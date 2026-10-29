@@ -6,7 +6,6 @@
 
 import {
   PRODUCTS,
-  SERVICES,
   WORKSPACE,
   buildAgents,
   buildAnalyticsPayload,
@@ -63,6 +62,12 @@ import {
   syncShopifyCatalogInbound,
 } from "@/lib/commerce/product-channel-publish";
 import { listProducts, getProduct } from "@/lib/commerce/products-store";
+import {
+  deleteService,
+  getService,
+  listServices,
+  upsertService,
+} from "@/lib/commerce/services-store";
 import { shopifyStatusPayload } from "@/lib/commerce/shopify-admin";
 import {
   buildPromoComponentsForContact,
@@ -581,7 +586,70 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "services" && m === "GET") {
-    return jsonOk(paginate(SERVICES));
+    const url = new URL(request.url);
+    const q = url.searchParams.get("q") || "";
+    const status = url.searchParams.get("status") || "";
+    const listed = await listServices({ q, status });
+    return jsonOk({
+      ...paginate(listed.data),
+      mode: listed.mode,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "services" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const name = String(input.name || "").trim();
+    if (!name) return jsonErr("name is required.", 422);
+    const result = await upsertService({ ...input, name, id: undefined });
+    return jsonOk(
+      {
+        ...result.service,
+        created: result.created,
+        mode: result.mode,
+        source: "next_dual_run",
+      },
+      201,
+    );
+  }
+
+  if (path.match(/^services\/[^/]+$/) && m === "GET") {
+    const id = segments[1];
+    const service = await getService(id);
+    if (!service) return jsonErr("Service not found", 404);
+    return jsonOk({ ...service, source: "next_dual_run" });
+  }
+
+  if (path.match(/^services\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
+    const id = segments[1];
+    const existing = await getService(id);
+    if (!existing) return jsonErr("Service not found", 404);
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const name =
+      input.name !== undefined ? String(input.name || "").trim() : existing.name;
+    if (!name) return jsonErr("name is required.", 422);
+    const result = await upsertService({ ...existing, ...input, name, id });
+    return jsonOk({
+      ...result.service,
+      created: false,
+      mode: result.mode,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path.match(/^services\/[^/]+$/) && m === "DELETE") {
+    const id = segments[1];
+    const existing = await getService(id);
+    if (!existing) return jsonErr("Service not found", 404);
+    const result = await deleteService(id);
+    if (!result.ok) return jsonErr(result.message || "Delete failed", 400);
+    return jsonOk({ ok: true, id, mode: result.mode, source: "next_dual_run" });
   }
 
   if (path === "products" && m === "GET") {

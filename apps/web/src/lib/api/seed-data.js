@@ -221,44 +221,6 @@ export const PRODUCTS = [
   },
 ];
 
-export const SERVICES = [
-  {
-    id: "svc-consult",
-    workspace_id: WORKSPACE.id,
-    name: "Private jewellery consultation",
-    description:
-      "Video or in-person consultation in Dubai for custom, engraving, or 14K/18K gold pieces. Quotes are human-approved.",
-    price: 0,
-    currency: "AED",
-    inquiry_url: "https://triada-designs.com/services/consultation",
-    status: "active",
-    approved_claims: ["consultation", "custom quotes require human approval"],
-  },
-  {
-    id: "svc-custom",
-    workspace_id: WORKSPACE.id,
-    name: "Bespoke / custom piece",
-    description:
-      "Custom design intake with manufacturer handoff. Pricing and metal choice require human approval before send.",
-    price: 0,
-    currency: "AED",
-    inquiry_url: "https://triada-designs.com/",
-    status: "active",
-    approved_claims: ["custom", "human-approved quotes"],
-  },
-  {
-    id: "svc-engraving",
-    workspace_id: WORKSPACE.id,
-    name: "Engraving & aftercare",
-    description: "Engraving options and care guidance for Salt & Spirit pieces.",
-    price: 120,
-    currency: "AED",
-    inquiry_url: "https://triada-designs.com/",
-    status: "active",
-    approved_claims: ["engraving", "aftercare"],
-  },
-];
-
 /**
  * @param {{
  *   anthropicHasCredentials?: boolean,
