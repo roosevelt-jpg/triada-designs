@@ -316,6 +316,50 @@ export async function resolveWhatsAppCloudCredentials() {
 }
 
 /**
+ * Resolve Page / Messenger / Instagram Messaging credentials for Graph Send API.
+ * Server-only — never serialize into client payloads.
+ * @returns {Promise<{
+ *   pageAccessToken: string,
+ *   igUserId: string,
+ *   tokenSource: 'stored' | 'env' | 'none',
+ *   messengerSendReady: boolean,
+ *   instagramSendReady: boolean,
+ * }>}
+ */
+export async function resolvePageMessagingCredentials() {
+  const fields = await loadStoredFields();
+  const envToken = String(
+    process.env.META_PAGE_ACCESS_TOKEN ||
+      process.env.META_APP_ACCESS_TOKEN ||
+      process.env.META_CLIENT_TOKEN ||
+      "",
+  ).trim();
+  const envIg = String(
+    process.env.META_IG_USER_ID ||
+      process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID ||
+      process.env.META_INSTAGRAM_ACCOUNT_ID ||
+      "",
+  ).trim();
+
+  const storedToken = String(fields.page_access_token || "").trim();
+  const pageAccessToken = storedToken || envToken;
+  const igUserId = envIg;
+
+  let tokenSource = "none";
+  if (storedToken) tokenSource = "stored";
+  else if (envToken) tokenSource = "env";
+
+  return {
+    pageAccessToken,
+    igUserId,
+    tokenSource,
+    messengerSendReady: Boolean(pageAccessToken),
+    // IG Graph send needs a token; account id can come from the inbound webhook entry.
+    instagramSendReady: Boolean(pageAccessToken),
+  };
+}
+
+/**
  * Presence-only Meta status (env + Integrations store). Never returns secrets.
  * @returns {Promise<MetaStatusPayload>}
  */

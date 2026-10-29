@@ -1,6 +1,7 @@
 /**
  * Mutable dual-run conversation / DM store for Unified inbox.
- * Social Media Manager sweeps unanswered DMs on IG / Messenger / FB / LinkedIn.
+ * AI Support owns Meta Page Messaging (Instagram / Messenger / Facebook) with Graph send.
+ * Social Media Manager still sweeps leftover LinkedIn (+ backlog) DMs.
  */
 
 import { getLocalDataDir } from "@/lib/local-data-dir";
@@ -11,7 +12,14 @@ const WORKSPACE_ID = "triada-ops";
 const LOCAL_DIR = getLocalDataDir();
 const LOCAL_FILE = path.join(LOCAL_DIR, "conversations.json");
 
-/** Channels owned by Social Media Manager DMs. */
+/** Meta Page Messaging channels answered live by AI Support (+ Graph Send API). */
+export const SUPPORT_PAGE_MESSAGING_CHANNELS = [
+  "instagram",
+  "messenger",
+  "facebook",
+];
+
+/** Channels Social Media Manager may still sweep (LinkedIn + Meta backlog). */
 export const SOCIAL_DM_CHANNELS = [
   "instagram",
   "messenger",
@@ -350,6 +358,7 @@ export async function appendOutboundReply(id, input) {
  *   provider_message_id?: string,
  *   contact_name?: string | null,
  *   page_or_account_id?: string,
+ *   agent_key?: string,
  *   metadata?: Record<string, unknown>,
  * }} input
  */
@@ -390,8 +399,17 @@ export async function ingestInboundDm(input) {
       ? `conv-${channel}-${externalConversationId.replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 48)}`
       : `conv-${channel}-${Date.now().toString(36)}`);
 
-  const isSocial = SOCIAL_DM_CHANNELS.includes(channel);
-  const agentKey = isSocial ? "social_media_manager" : "ai_support";
+  const overrideAgent =
+    typeof input.agent_key === "string" && input.agent_key.trim()
+      ? String(input.agent_key).trim()
+      : null;
+  const agentKey = overrideAgent
+    ? overrideAgent
+    : SUPPORT_PAGE_MESSAGING_CHANNELS.includes(channel)
+      ? "ai_support"
+      : SOCIAL_DM_CHANNELS.includes(channel)
+        ? "social_media_manager"
+        : "ai_support";
   const providerMessageId = input.provider_message_id
     ? String(input.provider_message_id)
     : null;

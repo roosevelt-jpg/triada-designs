@@ -196,7 +196,7 @@ function normalizeMessaging(payload, defaultChannel) {
       let channel = defaultChannel;
       if (objectType === "instagram") channel = "instagram";
       else if (event.message?.is_unsupported) channel = defaultChannel;
-      // Messenger often arrives as object=page — treat as messenger for SMM ownership.
+      // Messenger often arrives as object=page — treat as messenger for Support ownership.
       if (channel === "facebook") channel = "messenger";
 
       out.push({

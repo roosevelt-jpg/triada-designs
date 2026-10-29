@@ -4,8 +4,12 @@ import { hasSupabaseAdminCredentials } from "@/lib/supabase/config";
 import { appendMetaWebhookMockEvent } from "@/lib/supabase/mock-store";
 import { normalizeMetaInboundMessages } from "@/lib/meta/normalize-inbound";
 import { handleInboundWhatsApp } from "@/lib/agents/support-whatsapp";
+import { handleInboundPageMessaging } from "@/lib/agents/support-page-messaging";
 import { handleInboundSocialDm } from "@/lib/agents/social-media-manager";
-import { SOCIAL_DM_CHANNELS } from "@/lib/crm/conversations-store";
+import {
+  SOCIAL_DM_CHANNELS,
+  SUPPORT_PAGE_MESSAGING_CHANNELS,
+} from "@/lib/crm/conversations-store";
 
 const TABLE = "meta_webhook_events";
 
@@ -42,7 +46,8 @@ function extractProviderEventId(payload) {
 /**
  * Store the raw webhook, then route inbound messages to inbox + AI auto-reply.
  * WhatsApp → AI Support (draft + Cloud API text send).
- * Instagram / Messenger / Facebook → Social Media Manager (inbox reply).
+ * Instagram / Messenger / Facebook → AI Support (draft + Page Graph send).
+ * Other social (e.g. LinkedIn sim) → Social Media Manager inbox reply.
  *
  * @param {{ payload: unknown, rawBody: string, headers?: Record<string, string | null | undefined> }} input
  */
@@ -214,6 +219,41 @@ async function processInboundMessages(payload) {
         continue;
       }
 
+      if (SUPPORT_PAGE_MESSAGING_CHANNELS.includes(item.channel)) {
+        const handled = await handleInboundPageMessaging({
+          channel: item.channel,
+          body: item.body || "Hi",
+          external_user_id: item.external_user_id,
+          external_conversation_id: item.external_conversation_id,
+          provider_message_id: item.provider_message_id,
+          page_or_account_id: item.page_or_account_id,
+          message_type: item.message_type,
+          metadata: item.metadata,
+          auto_reply: true,
+          dry_run: false,
+        });
+        messages.push({
+          channel: item.channel,
+          provider_message_id: item.provider_message_id,
+          conversation_id: handled.conversation?.id || null,
+          deduplicated: Boolean(handled.deduplicated),
+          body: item.body,
+        });
+        automations.push({
+          agent_key: "ai_support",
+          channel: item.channel,
+          replied: Boolean(handled.replied),
+          skipped: Boolean(handled.skipped),
+          reason: handled.reason || handled.reply?.reason || null,
+          send_mode: handled.reply?.send?.mode || null,
+          send_ok: handled.reply?.send?.ok ?? null,
+          conversation_id: handled.conversation?.id || null,
+        });
+        if (handled.replied) replied += 1;
+        if (handled.ok === false) failed += 1;
+        continue;
+      }
+
       if (SOCIAL_DM_CHANNELS.includes(item.channel)) {
         const handled = await handleInboundSocialDm({
           channel: item.channel,
@@ -223,7 +263,6 @@ async function processInboundMessages(payload) {
           auto_reply: true,
           dry_run: false,
         });
-        // Stash external ids on the conversation when possible.
         messages.push({
           channel: item.channel,
           provider_message_id: item.provider_message_id,

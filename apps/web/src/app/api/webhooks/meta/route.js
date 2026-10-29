@@ -93,8 +93,8 @@ export async function GET(request) {
 }
 
 /**
- * POST — inbound Meta events → store → inbox → Support / SMM auto-reply.
- * WhatsApp Cloud API messages are answered by AI Support via Graph text send.
+ * POST — inbound Meta events → store → inbox → Support auto-reply (+ Graph send).
+ * WhatsApp Cloud + Instagram Messaging + Facebook Messenger → AI Support.
  */
 export async function POST(request) {
   const rawBody = await request.text();

@@ -82,6 +82,7 @@ import {
 } from "@/lib/crm/contacts-store";
 import {
   SOCIAL_DM_CHANNELS,
+  SUPPORT_PAGE_MESSAGING_CHANNELS,
   appendOutboundReply,
   getConversation,
   listConversations,
@@ -93,6 +94,7 @@ import {
   sweepUnansweredSocialDms,
 } from "@/lib/agents/social-media-manager";
 import { handleInboundWhatsApp } from "@/lib/agents/support-whatsapp";
+import { handleInboundPageMessaging } from "@/lib/agents/support-page-messaging";
 import { collectLiveDashboardMetrics } from "@/lib/api/dashboard-metrics";
 import { syncWhatsAppContactsToCrm } from "@/lib/crm/meta-contact-sync";
 import { mapContactUploadRows } from "@/lib/crm/parse-contacts-file";
@@ -1344,6 +1346,41 @@ export async function dispatchV1(method, segments, request, body) {
           verify_token_hint: "triada-meta-verify-2026",
         });
       }
+      if (SUPPORT_PAGE_MESSAGING_CHANNELS.includes(channel)) {
+        const from =
+          body && typeof body === "object" && body.from
+            ? String(body.from)
+            : `sim-${channel}-user`;
+        const handled = await handleInboundPageMessaging({
+          channel,
+          body: inboundBody,
+          external_user_id: from,
+          external_conversation_id: `sim-meta-${channel}:${from}`,
+          provider_message_id: `sim-meta-${channel}-${Date.now().toString(36)}`,
+          page_or_account_id:
+            body && typeof body === "object" && body.page_or_account_id
+              ? String(body.page_or_account_id)
+              : `sim-${channel}-page`,
+          auto_reply: body?.auto_reply !== false,
+          dry_run: body?.dry_run === true,
+        });
+        return jsonOk({
+          ok: true,
+          mode: "next_dual_run",
+          channel,
+          agent_key: "ai_support",
+          conversation: handled.conversation,
+          replied: handled.replied,
+          reply: handled.reply || null,
+          messages: [
+            {
+              conversation: handled.conversation,
+              body: inboundBody,
+            },
+          ],
+          verify_token_hint: "triada-meta-verify-2026",
+        });
+      }
       if (SOCIAL_DM_CHANNELS.includes(channel)) {
         const handled = await handleInboundSocialDm({
           channel,
@@ -1657,6 +1694,42 @@ export async function dispatchV1(method, segments, request, body) {
         body && typeof body === "object" && body.body
           ? String(body.body)
           : "Hello — interested in Triada Designs jewellery.";
+      if (SUPPORT_PAGE_MESSAGING_CHANNELS.includes(channel)) {
+        const from =
+          body && typeof body === "object" && body.from
+            ? String(body.from)
+            : `sim-${channel}-user`;
+        const handled = await handleInboundPageMessaging({
+          channel,
+          body: inboundBody,
+          external_user_id: from,
+          external_conversation_id: `sim-${channel}:${from}`,
+          provider_message_id: `sim-${channel}-${Date.now().toString(36)}`,
+          page_or_account_id:
+            body && typeof body === "object" && body.page_or_account_id
+              ? String(body.page_or_account_id)
+              : `sim-${channel}-page`,
+          auto_reply: body?.auto_reply !== false,
+          dry_run: body?.dry_run === true,
+        });
+        return jsonOk({
+          ok: true,
+          mode: "next_dual_run",
+          agent_key: "ai_support",
+          channel,
+          ai: { intent: "jewellery_inquiry", agent: "ai_support" },
+          conversation: handled.conversation,
+          replied: handled.replied,
+          reply: handled.reply || null,
+          messages: [
+            {
+              conversation: handled.conversation,
+              body: inboundBody,
+            },
+          ],
+          channels: buildSalesChannelsStatus({ meta }).channels,
+        });
+      }
       if (SOCIAL_DM_CHANNELS.includes(channel)) {
         const handled = await handleInboundSocialDm({
           channel,
