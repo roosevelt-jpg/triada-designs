@@ -41,6 +41,14 @@ async function handle(request, context) {
     );
   }
 
+  // Public website widget — dedicated handler at /api/v1/webchat/messages.
+  if (segments[0] === "webchat" && segments[1] === "messages") {
+    return NextResponse.json(
+      { message: "Use dedicated webchat route handler." },
+      { status: 404 },
+    );
+  }
+
   const membership = await requireMembership(request);
   if (!membership.ok) {
     return NextResponse.json(
