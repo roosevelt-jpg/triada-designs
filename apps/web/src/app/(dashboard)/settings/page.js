@@ -28,6 +28,9 @@ const COMMON_TIMEZONES = [
 export default function SettingsPage() {
   const [workspace, setWorkspace] = useState(null);
   const [timezone, setTimezone] = useState("UTC");
+  const [handoffEnabled, setHandoffEnabled] = useState(true);
+  const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [callNumber, setCallNumber] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -44,6 +47,10 @@ export default function SettingsPage() {
       ]);
       setWorkspace(data.workspace);
       setTimezone(data.workspace?.timezone || "UTC");
+      const hh = data.human_handoff || {};
+      setHandoffEnabled(hh.enabled !== false);
+      setWhatsappNumber(hh.whatsapp_number || "");
+      setCallNumber(hh.call_number || "");
       setSystemNow(formatDateTime(nowDate()));
     } catch (err) {
       setError(err.message || "Failed to load settings");
@@ -66,6 +73,11 @@ export default function SettingsPage() {
       });
       setWorkspace(data.workspace);
       if (data.workspace?.timezone) setTimezone(data.workspace.timezone);
+      if (data.human_handoff) {
+        setHandoffEnabled(data.human_handoff.enabled !== false);
+        setWhatsappNumber(data.human_handoff.whatsapp_number || "");
+        setCallNumber(data.human_handoff.call_number || "");
+      }
       await syncSystemTime().catch(() => {});
       setSystemNow(formatDateTime(nowDate()));
       setNotice("Settings updated.");
@@ -81,10 +93,37 @@ export default function SettingsPage() {
     await patch({ timezone: timezone.trim() || "UTC" });
   }
 
+  async function saveHumanHandoff(e) {
+    e.preventDefault();
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      const data = await apiFetch("/v1/settings/human-handoff", {
+        method: "PUT",
+        body: {
+          enabled: handoffEnabled,
+          whatsapp_number: whatsappNumber.trim(),
+          call_number: callNumber.trim(),
+        },
+      });
+      if (data.human_handoff) {
+        setHandoffEnabled(data.human_handoff.enabled !== false);
+        setWhatsappNumber(data.human_handoff.whatsapp_number || "");
+        setCallNumber(data.human_handoff.call_number || "");
+      }
+      setNotice("Live support contacts saved.");
+    } catch (err) {
+      setError(err.message || "Failed to save live support contacts");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <DashboardShell
       title="Settings"
-      description="Workspace defaults, timezone for scheduling displays, and emergency controls for outbound messaging and automations."
+      description="Workspace defaults, live support contacts for human handoff, timezone for scheduling displays, and emergency controls."
     >
       {loading ? <Skeleton className="h-40" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -109,6 +148,51 @@ export default function SettingsPage() {
                 Automations {workspace.automations_paused ? "paused" : "active"}
               </Badge>
             </div>
+          </section>
+
+          <section className="surface-card p-5">
+            <div className="ops-card-header">
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl">Live support handoff</h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted">
+                  When a customer asks to speak with a person (for example on WhatsApp), Support
+                  hands off and shares these WhatsApp and/or call numbers for live chat or a call.
+                  Leave a field blank to omit that option.
+                </p>
+              </div>
+            </div>
+            <form className="mt-4 max-w-xl space-y-4" onSubmit={saveHumanHandoff}>
+              <label className="flex items-center gap-3 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={handoffEnabled}
+                  onChange={(e) => setHandoffEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded border-line accent-brown"
+                />
+                Share live contacts when customers ask for a person
+              </label>
+              <Input
+                label="WhatsApp number (live chat)"
+                name="whatsapp_number"
+                value={whatsappNumber}
+                onChange={(e) => setWhatsappNumber(e.target.value)}
+                placeholder="+40 768 407 242"
+                hint="E.164 preferred. Included with a wa.me link in the handoff reply."
+              />
+              <Input
+                label="Call number"
+                name="call_number"
+                value={callNumber}
+                onChange={(e) => setCallNumber(e.target.value)}
+                placeholder="+49 157 7119 1097"
+                hint="Phone number customers can dial for live support."
+              />
+              <div className="ops-actions">
+                <Button type="submit" disabled={busy} size="sm">
+                  Save live support contacts
+                </Button>
+              </div>
+            </form>
           </section>
 
           <section className="surface-card p-5">

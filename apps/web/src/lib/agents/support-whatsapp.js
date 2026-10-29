@@ -13,6 +13,10 @@ import {
   isSimpleSupportGreeting,
 } from "./support-fast-path";
 import {
+  finalizeHumanHandoff,
+  maybeHumanHandoffReply,
+} from "./human-handoff";
+import {
   appendOutboundReply,
   findConversationByExternal,
   ingestInboundDm,
@@ -43,6 +47,58 @@ export async function replyWhatsAppSupport(input) {
       reason: "human_takeover",
       conversation_id: conversation.id,
       channel: "whatsapp",
+    };
+  }
+
+  const handoff = await maybeHumanHandoffReply(inbound);
+  if (handoff) {
+    const replyText = String(handoff.text || "").trim();
+    /** @type {Record<string, unknown> | null} */
+    let send = null;
+    /** @type {Record<string, unknown> | null} */
+    let saved = null;
+    if (!dryRun) {
+      const to = String(
+        conversation.external_user_id ||
+          conversation.metadata?.wa_id ||
+          "",
+      ).trim();
+      send = await sendWhatsAppTextMessage({ to, body: replyText });
+      saved = await appendOutboundReply(String(conversation.id), {
+        body: replyText,
+        agent_key: "ai_support",
+        provider_message_id: send?.provider_message_id
+          ? String(send.provider_message_id)
+          : null,
+        send_mode: send?.mode || null,
+        send_ok: Boolean(send?.ok),
+        send_error: send?.error || null,
+      });
+      await finalizeHumanHandoff({
+        conversation_id: String(conversation.id),
+        channel: "whatsapp",
+        inbound,
+        reply: replyText,
+        agent_key: "ai_support",
+        whatsapp_number: handoff.whatsapp_number,
+        call_number: handoff.call_number,
+      });
+    }
+    return {
+      ok: Boolean(send ? send.ok : true),
+      skipped: false,
+      human_handoff: true,
+      conversation_id: conversation.id,
+      channel: "whatsapp",
+      reply: replyText,
+      mode: send?.mode || "live",
+      fast_path: false,
+      latency_ms: null,
+      dry_run: dryRun,
+      send,
+      conversation: saved,
+      reviews: [],
+      error: send && !send.ok ? send.error : null,
     };
   }
 

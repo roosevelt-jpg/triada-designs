@@ -7,7 +7,7 @@
 import { creativeAgentSystemPrompt } from "../creative/jewellery-prompts";
 
 /** Bump when any seeded roster prompt changes so agent-store syncs live rows. */
-export const TEAM_PROMPT_VERSION = 9;
+export const TEAM_PROMPT_VERSION = 10;
 
 /**
  * Language-matching hook — expanded by detect-language + orchestrator per turn.
@@ -31,6 +31,7 @@ const SHARED_HANDOFF = [
   "- Never invent prices, stock, discounts, delivery dates, reviews, endorsements, or spiritual/medical claims.",
   "- Never mention internal tooling, providers, or implementation details to customers or in product UI copy.",
   "- Disclose you are an AI when speaking to customers; a person is available on request.",
+  "- When a customer asks to speak with a person / human / live agent, hand off immediately: share the admin-configured WhatsApp and/or call numbers for live support (do not invent numbers). After handoff, stop auto-replying on that thread.",
   "",
   LANGUAGE_MATCHING_HOOK,
 ].join("\n");
@@ -88,11 +89,13 @@ export function supportSystemPrompt() {
     "- Warm Triada tone: calm, refined, human — short sentences, no hype or slang.",
     "- Open with a warm greeting when starting a customer-facing reply; close with contact/address when ending a thread.",
     "- If price, stock, custom quote, wholesale, complaint, or unverified policy appears — hand off to Escalation officer (and note Shared memory).",
+    "- When the customer asks for a person (e.g. “I want to speak with a person”), hand off with the admin-configured WhatsApp live-chat number and/or call number — never invent contact numbers.",
     "- Write Shared memory notes for Follow up and Leads when the customer shows purchase intent or needs a reminder.",
     "- Collaborate with Quality Control and Compliance before any broadcast or policy-sensitive reply.",
     "- Instagram, Facebook, Messenger, and LinkedIn DMs are owned by Social Media Manager — hand those threads over when they land with you.",
     "",
     "Handoffs:",
+    "- Customer asks for a person → share configured WhatsApp / call numbers and stop AI replies on the thread.",
     "- Social Media Manager → Instagram / Messenger / Facebook / LinkedIn DMs (keep no DM unanswered).",
     "- Escalation officer → complaints, custom quotes, boutique/wholesale/B2B, unverifiable claims.",
     "- Leads Qualification → clear purchase/service intent signals.",

@@ -6,6 +6,10 @@
 import { runTeamCollaboration } from "./team-orchestrator";
 import { setSharedKv } from "./shared-memory";
 import {
+  finalizeHumanHandoff,
+  maybeHumanHandoffReply,
+} from "./human-handoff";
+import {
   SOCIAL_DM_CHANNELS,
   SUPPORT_PAGE_MESSAGING_CHANNELS,
   SUPPORT_TEXT_CHANNELS,
@@ -42,6 +46,72 @@ export async function replyUnansweredDm(input) {
       reason: "human_takeover",
       conversation_id: conversation.id,
       channel,
+    };
+  }
+
+  const handoff = await maybeHumanHandoffReply(inbound);
+  if (handoff) {
+    const replyText = String(handoff.text || "").trim();
+    /** @type {Record<string, unknown> | null} */
+    let send = null;
+    /** @type {Record<string, unknown> | null} */
+    let saved = null;
+    if (!dryRun) {
+      if (SUPPORT_TEXT_CHANNELS.includes(channel)) {
+        const meta =
+          conversation.metadata && typeof conversation.metadata === "object"
+            ? /** @type {Record<string, unknown>} */ (conversation.metadata)
+            : {};
+        send = await sendSupportChannelText({
+          channel,
+          body: replyText,
+          external_user_id: String(conversation.external_user_id || "").trim(),
+          subject: conversation.subject
+            ? `Re: ${String(conversation.subject)}`
+            : undefined,
+          metadata: meta,
+        });
+      } else if (SUPPORT_PAGE_MESSAGING_CHANNELS.includes(channel)) {
+        send = await sendPageMessagingText({
+          channel,
+          recipient_id: String(conversation.external_user_id || "").trim(),
+          body: replyText,
+          page_or_account_id: String(conversation.page_or_account_id || "").trim(),
+        });
+      }
+      saved = await appendOutboundReply(String(conversation.id), {
+        body: replyText,
+        agent_key: "social_media_manager",
+        provider_message_id: send?.provider_message_id
+          ? String(send.provider_message_id)
+          : null,
+        send_mode: send?.mode || null,
+        send_ok: send ? Boolean(send.ok) : true,
+        send_error: send?.error || null,
+      });
+      await finalizeHumanHandoff({
+        conversation_id: String(conversation.id),
+        channel,
+        inbound,
+        reply: replyText,
+        agent_key: "social_media_manager",
+        whatsapp_number: handoff.whatsapp_number,
+        call_number: handoff.call_number,
+      });
+    }
+    return {
+      ok: Boolean(send ? send.ok : true),
+      skipped: false,
+      human_handoff: true,
+      conversation_id: conversation.id,
+      channel,
+      reply: replyText,
+      mode: send?.mode || "live",
+      dry_run: dryRun,
+      send,
+      conversation: saved,
+      reviews: [],
+      error: send && !send.ok ? send.error : null,
     };
   }
 
@@ -112,12 +182,17 @@ export async function replyUnansweredDm(input) {
     });
   }
 
-  await setSharedKv("collab.active_thread", {
-    channel,
-    conversation_id: conversation.id,
-    agent_key: "social_media_manager",
-    last_reply_preview: replyText.slice(0, 240),
-    updated_at: new Date().toISOString(),
+  await setSharedKv({
+    key: "collab.active_thread",
+    value: {
+      channel,
+      conversation_id: conversation.id,
+      agent_key: "social_media_manager",
+      last_reply_preview: replyText.slice(0, 240),
+      updated_at: new Date().toISOString(),
+    },
+    written_by: "social_media_manager",
+    tags: [channel, "social", "auto_reply"],
   }).catch(() => null);
 
   return {

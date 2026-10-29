@@ -97,6 +97,10 @@ import {
 import { handleInboundWhatsApp } from "@/lib/agents/support-whatsapp";
 import { handleInboundPageMessaging } from "@/lib/agents/support-page-messaging";
 import { handleInboundSupportChannel } from "@/lib/agents/support-channel";
+import {
+  getHumanHandoffSettings,
+  saveHumanHandoffSettings,
+} from "@/lib/agents/human-handoff-settings";
 import { normalizeWebchatInbound } from "@/lib/channels/normalize-inbound";
 import { collectLiveDashboardMetrics } from "@/lib/api/dashboard-metrics";
 import { syncWhatsAppContactsToCrm } from "@/lib/crm/meta-contact-sync";
@@ -401,10 +405,31 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "settings" && m === "GET") {
+    const humanHandoff = await getHumanHandoffSettings();
     return jsonOk({
       workspace: { ...WORKSPACE, timezone: runtimeState.timezone },
+      human_handoff: humanHandoff,
       source: "next_dual_run",
     });
+  }
+
+  if (path === "settings/human-handoff" && m === "GET") {
+    const humanHandoff = await getHumanHandoffSettings();
+    return jsonOk({ human_handoff: humanHandoff, ok: true });
+  }
+
+  if (
+    path === "settings/human-handoff" &&
+    (m === "PATCH" || m === "PUT" || m === "POST")
+  ) {
+    const patch =
+      body && typeof body === "object"
+        ? body.human_handoff && typeof body.human_handoff === "object"
+          ? body.human_handoff
+          : body
+        : {};
+    const humanHandoff = await saveHumanHandoffSettings(patch);
+    return jsonOk({ human_handoff: humanHandoff, ok: true });
   }
 
   if (path === "settings" && (m === "PATCH" || m === "PUT" || m === "POST")) {
@@ -422,8 +447,35 @@ export async function dispatchV1(method, segments, request, body) {
         : "";
     const tz = fromRoot || fromWorkspace || runtimeState.timezone;
     if (tz) runtimeState.timezone = tz;
+
+    let humanHandoff = await getHumanHandoffSettings();
+    if (
+      body &&
+      typeof body === "object" &&
+      body.human_handoff &&
+      typeof body.human_handoff === "object"
+    ) {
+      humanHandoff = await saveHumanHandoffSettings(body.human_handoff);
+    } else if (
+      body &&
+      typeof body === "object" &&
+      (Object.prototype.hasOwnProperty.call(body, "whatsapp_number") ||
+        Object.prototype.hasOwnProperty.call(body, "call_number") ||
+        Object.prototype.hasOwnProperty.call(body, "handoff_enabled"))
+    ) {
+      humanHandoff = await saveHumanHandoffSettings({
+        whatsapp_number: body.whatsapp_number,
+        call_number: body.call_number,
+        enabled:
+          body.handoff_enabled !== undefined
+            ? body.handoff_enabled !== false
+            : body.enabled,
+      });
+    }
+
     return jsonOk({
       workspace: { ...WORKSPACE, timezone: runtimeState.timezone },
+      human_handoff: humanHandoff,
       ok: true,
     });
   }

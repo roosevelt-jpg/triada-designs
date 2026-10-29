@@ -421,12 +421,12 @@ const LOCAL_CORES = {
 };
 
 const LOCAL_HUMAN = {
-  en: "If you’d like a person, just say the word — we’re glad to connect you.",
-  ar: "إذا رغبت بالتحدث مع شخص، فقط أخبرنا — يسعدنا توصيلك.",
-  ro: "Dacă doriți o persoană, spuneți-ne — cu plăcere vă conectăm.",
-  de: "Wenn Sie eine Person möchten, sagen Sie einfach Bescheid — wir verbinden Sie gerne.",
-  fr: "Si vous souhaitez une personne, dites-le — nous vous mettons volontiers en relation.",
-  ru: "Если нужна живая помощь — просто скажите, мы с радостью соединим вас.",
-  es: "Si desea hablar con una persona, dígalo — con gusto le conectamos.",
-  pt: "Se quiser falar com uma pessoa, diga — teremos gosto em ligá-lo.",
+  en: "If you’d like a person, just say the word — we’ll share WhatsApp and call options for live support.",
+  ar: "إذا رغبت بالتحدث مع شخص، فقط أخبرنا — سنشاركك واتساب ورقم الاتصال للدعم المباشر.",
+  ro: "Dacă doriți o persoană, spuneți-ne — vă oferim WhatsApp și numărul de apel pentru suport live.",
+  de: "Wenn Sie eine Person möchten, sagen Sie Bescheid — wir teilen WhatsApp- und Anrufnummern für Live-Support.",
+  fr: "Si vous souhaitez une personne, dites-le — nous partagerons WhatsApp et un numéro d’appel pour le support live.",
+  ru: "Если нужна живая помощь — скажите, мы пришлём WhatsApp и номер для звонка.",
+  es: "Si desea hablar con una persona, dígalo — compartiremos WhatsApp y un número de llamada para soporte en vivo.",
+  pt: "Se quiser falar com uma pessoa, diga — partilhamos WhatsApp e um número de chamada para suporte ao vivo.",
 };
