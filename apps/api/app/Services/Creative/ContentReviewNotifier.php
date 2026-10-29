@@ -32,7 +32,7 @@ class ContentReviewNotifier
             ?: env('MAIL_FROM_ADDRESS')
             ?: 'info@triada-designs.com');
 
-        $appUrl = rtrim((string) (env('OPS_APP_URL') ?: env('APP_URL') ?: 'https://dashboard.triada-designs.com'), '/');
+        $appUrl = $this->publicOpsAppUrl();
         $reviewUrl = $appUrl.'/content/review?highlight='.urlencode((string) $item->id);
         $title = (string) ($item->title ?: 'Untitled creative');
         $channel = (string) ($item->channel ?: 'channel');
@@ -96,6 +96,81 @@ class ContentReviewNotifier
             'content_id' => $item->id,
             'review_url' => $reviewUrl,
         ]);
+    }
+
+    /**
+     * Public ops dashboard origin for Resend CTAs.
+     * Rejects *.trycloudflare.com, *.vercel.app, localhost, and the API host.
+     */
+    protected function publicOpsAppUrl(): string
+    {
+        $canonical = 'https://dashboard.triada-designs.com';
+        foreach ([
+            env('OPS_APP_URL'),
+            env('FRONTEND_URL'),
+            env('NEXT_PUBLIC_APP_URL'),
+            env('APP_URL'),
+        ] as $candidate) {
+            $origin = $this->normalizePublicOrigin((string) $candidate);
+            if ($origin !== null) {
+                return $origin;
+            }
+        }
+
+        return $canonical;
+    }
+
+    protected function normalizePublicOrigin(string $value): ?string
+    {
+        $raw = trim($value);
+        if ($raw === '') {
+            return null;
+        }
+        if (! preg_match('#^https?://#i', $raw)) {
+            $raw = 'https://'.$raw;
+        }
+        $parts = parse_url($raw);
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if ($host === '' || $this->isEphemeralOrDisallowedHost($host)) {
+            return null;
+        }
+        $scheme = strtolower((string) ($parts['scheme'] ?? 'https'));
+        if (! in_array($scheme, ['http', 'https'], true)) {
+            $scheme = 'https';
+        }
+
+        return rtrim($scheme.'://'.$host, '/');
+    }
+
+    protected function isEphemeralOrDisallowedHost(string $host): bool
+    {
+        $host = strtolower(trim($host));
+        if ($host === '' || $host === 'localhost' || $host === '127.0.0.1' || $host === '0.0.0.0' || $host === '::1') {
+            return true;
+        }
+        if ($host === 'trycloudflare.com' || str_ends_with($host, '.trycloudflare.com')) {
+            return true;
+        }
+        if (str_ends_with($host, '.loca.lt') || str_ends_with($host, '.ngrok.io') || str_ends_with($host, '.ngrok-free.app')) {
+            return true;
+        }
+        if (str_ends_with($host, '.vercel.app') || str_ends_with($host, '.now.sh')) {
+            return true;
+        }
+        if ($host === 'api.triada-designs.com') {
+            return true;
+        }
+
+        return ! $this->isAllowedProductionAppHost($host);
+    }
+
+    protected function isAllowedProductionAppHost(string $host): bool
+    {
+        if ($host === 'dashboard.triada-designs.com' || $host === 'ops.triada-designs.com') {
+            return true;
+        }
+
+        return str_ends_with($host, '.triada-designs.com') && ! str_starts_with($host, 'api.');
     }
 
     protected function brandedHtml(string $title, string $kind, string $channel, string $url): string

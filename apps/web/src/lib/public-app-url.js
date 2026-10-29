@@ -49,10 +49,12 @@ export function isAllowedProductionAppHost(hostname) {
     .toLowerCase()
     .replace(/\.$/, "");
   if (!host || isEphemeralOrTunnelHost(host)) return false;
+  // Never email the API origin as a dashboard CTA.
+  if (host === "api.triada-designs.com") return false;
   return (
     host === PRODUCTION_APP_HOST ||
     host === "ops.triada-designs.com" ||
-    host.endsWith(".triada-designs.com")
+    (host.endsWith(".triada-designs.com") && !host.startsWith("api."))
   );
 }
 
@@ -89,12 +91,16 @@ export function sanitizePublicAppUrl(raw) {
  * @returns {string}
  */
 export function resolvePublicAppUrl(opts = {}) {
+  // Prefer explicit ops/dashboard env. Never use VERCEL_URL (preview host).
   const fromEnv =
     sanitizePublicAppUrl(process.env.NEXT_PUBLIC_APP_URL) ||
+    sanitizePublicAppUrl(process.env.OPS_APP_URL) ||
+    sanitizePublicAppUrl(process.env.FRONTEND_URL) ||
     sanitizePublicAppUrl(process.env.APP_URL);
   if (fromEnv) return fromEnv;
 
-  // Ignore VERCEL_URL — it is often a *.vercel.app preview/deployment host.
+  // Request Host is only accepted when it is already a production Triada host.
+  // Tunnel / localhost / *.vercel.app fall through to PRODUCTION_APP_URL.
   const request = opts.request || null;
   if (request) {
     try {
