@@ -34,6 +34,7 @@ import {
   listWorkflows,
   upsertWorkflow,
 } from "@/lib/automations/automations-store";
+import { buildWorkflowFromPrompt } from "@/lib/automations/workflow-assistant";
 import { appendAuditEvent, listAuditEvents } from "@/lib/audit/audit-store";
 import {
   deleteKnowledge,
@@ -2798,6 +2799,42 @@ export async function dispatchV1(method, segments, request, body) {
       valid: true,
       validation: { valid: true, errors: [], warnings: [] },
     });
+  }
+
+  // Workflow Builder Assistant — plain-language brief → full wired visual draft.
+  if (path === "automations/assistant" && m === "POST") {
+    const prompt =
+      body && typeof body === "object"
+        ? String(body.prompt || body.description || body.message || "").trim()
+        : "";
+    const built = await buildWorkflowFromPrompt({ prompt });
+    if (!built.ok) {
+      return jsonErr(built.error || "Assistant failed", built.status || 422);
+    }
+    const saved = await upsertWorkflow({
+      name: built.name,
+      description: built.description,
+      trigger_type: built.trigger_type,
+      definition: built.definition,
+      status: "draft",
+      version: 1,
+      run_count: 0,
+      metadata: {
+        built_by: "workflow_assistant",
+        assistant_mode: built.mode,
+      },
+    });
+    return jsonOk(
+      {
+        ok: true,
+        workflow: saved.workflow,
+        mode: saved.mode,
+        assistant_mode: built.mode,
+        summary: built.summary,
+        source: "next_dual_run",
+      },
+      201,
+    );
   }
 
   if (path.match(/^automations\/[^/]+$/) && m === "GET") {

@@ -48,7 +48,9 @@ export default function AutomationsPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [assistantPrompt, setAssistantPrompt] = useState("");
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -115,6 +117,36 @@ export default function AutomationsPage() {
     }
   }
 
+  async function runAssistant(event) {
+    event?.preventDefault?.();
+    const prompt = assistantPrompt.trim();
+    if (!prompt) {
+      setError("Describe the workflow you want the assistant to build.");
+      return;
+    }
+    setBusy("assistant");
+    setError("");
+    setNotice("");
+    try {
+      const result = await apiFetch("/v1/automations/assistant", {
+        method: "POST",
+        body: { prompt },
+      });
+      const id = result.workflow?.id;
+      if (!id) throw new Error("Assistant did not return a workflow.");
+      setNotice(
+        result.summary
+          ? `Built · ${result.summary}. Review on the canvas, then Publish to live.`
+          : "Workflow built. Review on the canvas, then Publish to live.",
+      );
+      setAssistantPrompt("");
+      router.push(`/automations/${id}`);
+    } catch (err) {
+      setError(err.message || "Assistant failed to build the workflow");
+      setBusy("");
+    }
+  }
+
   async function toggleStatus(workflow) {
     setBusyId(workflow.id);
     setError("");
@@ -151,13 +183,39 @@ export default function AutomationsPage() {
   return (
     <DashboardShell
       title="Workflows"
-      description="Drag-and-drop jewellery sales workflows. Open the builder to edit, dry-run, and publish to live. Emergency pauses are enforced at runtime."
+      description="Describe a flow for the assistant to build end-to-end, or start a blank canvas. Review, then publish to live — JSON is never the editing surface."
       actions={
-        <Button size="sm" onClick={openCreate} disabled={creating}>
+        <Button size="sm" onClick={openCreate} disabled={creating || Boolean(busy)}>
           New workflow
         </Button>
       }
     >
+      <section className="mb-8 space-y-3 border-b border-line pb-8">
+        <h2 className="font-display text-2xl text-ink">Workflow Builder Assistant</h2>
+        <p className="text-sm text-muted">
+          Type what you want in plain language. The assistant builds a full visual workflow with
+          wired actions. You only review on the canvas and Publish to live.
+        </p>
+        <form onSubmit={runAssistant} className="space-y-3">
+          <label className="block space-y-1.5">
+            <span className="block text-[13px] font-medium text-ink">Describe the workflow</span>
+            <textarea
+              name="assistant_prompt"
+              rows={4}
+              value={assistantPrompt}
+              onChange={(e) => setAssistantPrompt(e.target.value)}
+              className="ops-field px-3 py-2 text-ink focus:border-brown focus:outline-none"
+              placeholder="e.g. When a WhatsApp customer asks about sizing, answer with care tips, then offer a human if they ask for a person."
+            />
+          </label>
+          <div className="ops-actions">
+            <Button type="submit" disabled={busy === "assistant" || !assistantPrompt.trim()}>
+              {busy === "assistant" ? "Building…" : "Build workflow"}
+            </Button>
+          </div>
+        </form>
+      </section>
+
       {notice ? (
         <p className="mb-4 text-sm text-muted" role="status">
           {notice}
