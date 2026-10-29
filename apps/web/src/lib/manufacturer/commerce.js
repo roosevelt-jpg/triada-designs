@@ -150,6 +150,23 @@ export async function upsertCommerceOrder(input = {}) {
   const saved = await upsertManufacturerRow(TABLE, shaped);
   const order = shapeCommerceOrder(saved.row);
 
+  let afterSale = null;
+  if (order.lifecycle_status === "delivered") {
+    try {
+      const { scheduleAfterSaleJobs } = await import("@/lib/jewellery-ops/after-sale");
+      afterSale = await scheduleAfterSaleJobs({
+        contact_id: input.contact_id || null,
+        order_id: order.id,
+        phone: order.customer_phone,
+        email: order.customer_email,
+        whatsapp_opt_in: order.whatsapp_opt_in === true,
+        language: input.language || "en",
+      });
+    } catch {
+      afterSale = null;
+    }
+  }
+
   let invoice = null;
   const shouldInvoice =
     order.paid ||
@@ -217,6 +234,7 @@ export async function upsertCommerceOrder(input = {}) {
             }
           : null,
         manufacturer_order: manufacturer,
+        after_sale: afterSale,
         storage: updated.storage,
       };
     }
@@ -238,6 +256,7 @@ export async function upsertCommerceOrder(input = {}) {
         }
       : null,
     manufacturer_order: manufacturer,
+    after_sale: afterSale,
     storage: saved.storage,
   };
 }

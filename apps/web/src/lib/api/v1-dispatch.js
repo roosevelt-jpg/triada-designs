@@ -152,6 +152,36 @@ import {
   upsertPopupMarket,
 } from "@/lib/popups/popup-markets-store";
 import {
+  JEWELLERY_ACTION_TYPES,
+  approveCustomQuote,
+  approveOutreachMessage,
+  announceVipDrop,
+  buildJewelleryOpsOverview,
+  collectCustomPiece,
+  draftOutreachMessage,
+  executeJewelleryWorkflowAction,
+  joinWaitlist,
+  jewelleryPolicies,
+  listAbandonmentEvents,
+  listAfterSaleJobs,
+  listCustomPieces,
+  listOutreachMessages,
+  listOutreachProspects,
+  listTelegramAlerts,
+  listUgcItems,
+  listUgcRepostQueue,
+  listWaitlist,
+  notifyWaitlistRestock,
+  processDueAbandonment,
+  processDueAfterSale,
+  recordUgcTag,
+  requestUgcPermission,
+  sendTelegramAlert,
+  suggestGifts,
+  trackAbandonment,
+  upsertOutreachProspect,
+} from "@/lib/jewellery-ops";
+import {
   getUserFromAccessToken,
   readBearerToken,
 } from "@/lib/auth/supabase-auth";
@@ -220,6 +250,7 @@ import {
   listCommerceOrders,
   listManufacturerContacts,
   MANUFACTURER_STATUSES,
+  pushManufacturerOrder,
   resendManufacturerOrder,
   updateManufacturerOrderStatus,
   upsertCommerceOrder,
@@ -2466,7 +2497,16 @@ export async function dispatchV1(method, segments, request, body) {
       meta: {
         node_types: ["trigger", "action", "condition"],
         trigger_types: ["message_inbound", "schedule", "lead_stage_changed", "shopify_order"],
-        action_types: ["send_message", "create_task", "sync_zoho", "notify_telegram"],
+        action_types: [
+          "send_message",
+          "create_task",
+          "sync_zoho",
+          "notify_telegram",
+          "send_whatsapp_template",
+          "send_whatsapp_media",
+          "whatsapp_window_follow_up",
+          ...JEWELLERY_ACTION_TYPES,
+        ],
       },
     });
   }
@@ -2486,7 +2526,16 @@ export async function dispatchV1(method, segments, request, body) {
       meta: {
         node_types: ["trigger", "action", "condition"],
         trigger_types: ["message_inbound", "schedule", "lead_stage_changed", "shopify_order"],
-        action_types: ["send_message", "create_task", "sync_zoho", "notify_telegram"],
+        action_types: [
+          "send_message",
+          "create_task",
+          "sync_zoho",
+          "notify_telegram",
+          "send_whatsapp_template",
+          "send_whatsapp_media",
+          "whatsapp_window_follow_up",
+          ...JEWELLERY_ACTION_TYPES,
+        ],
       },
     });
   }
@@ -2558,11 +2607,27 @@ export async function dispatchV1(method, segments, request, body) {
       const config =
         node.config && typeof node.config === "object" ? node.config : {};
       const actionType = String(config.action_type || "");
-      if (
-        actionType !== "send_whatsapp_template" &&
-        actionType !== "send_whatsapp_media" &&
-        actionType !== "whatsapp_window_follow_up"
-      ) {
+      const isWaSend =
+        actionType === "send_whatsapp_template" ||
+        actionType === "send_whatsapp_media" ||
+        actionType === "whatsapp_window_follow_up";
+      const isJewellery = JEWELLERY_ACTION_TYPES.includes(actionType);
+      if (!isWaSend && !isJewellery) {
+        continue;
+      }
+
+      if (isJewellery) {
+        const result = await executeJewelleryWorkflowAction(
+          actionType,
+          config,
+          context,
+          { dryRun },
+        );
+        steps.push({
+          node: nodeKey,
+          action_type: actionType,
+          ...result,
+        });
         continue;
       }
 
@@ -3543,42 +3608,13 @@ export async function dispatchV1(method, segments, request, body) {
     });
   }
 
-  // ---- jewellery ops ----
+  // ---- jewellery ops (Next-native runners; no Laravel) ----
   if (path === "jewellery-ops/overview" && m === "GET") {
-    return jsonOk({
-      ok: true,
-      automations: {
-        one_inbox: "channels: instagram, facebook, tiktok, whatsapp, telegram → /inbox",
-        answer_bot: true,
-        gift_finder: true,
-        custom_pieces: true,
-        order_lifecycle_whatsapp: true,
-        automatic_invoice: true,
-        telegram_alerts: true,
-        abandonment_followup: true,
-        waitlist_vip_drops: true,
-        after_sale: true,
-        ugc: true,
-        outreach_crm: true,
-        popup_markets: true,
-        manufacturer: true,
-        content_schedule: true,
-      },
-      counts: {
-        orders: 2,
-        invoices: 1,
-        gift_sessions: 1,
-        custom_requests: 1,
-        waitlist: 0,
-        abandonment: 1,
-        telegram_alerts: 0,
-        after_sale_jobs: 0,
-        ugc: 1,
-        outreach_prospects: 1,
-        popup_markets: 1,
-      },
-      source: "next_dual_run",
-    });
+    return jsonOk(await buildJewelleryOpsOverview());
+  }
+
+  if (path === "jewellery-ops/policies" && m === "GET") {
+    return jsonOk({ data: jewelleryPolicies(), ok: true });
   }
 
   if (path === "jewellery-ops/answer-bot" && m === "POST") {
@@ -3601,20 +3637,18 @@ export async function dispatchV1(method, segments, request, body) {
       detected_language_name: result.detected_language_name,
       language_rtl: result.language_rtl,
       handoff: false,
+      policies: jewelleryPolicies(),
     });
   }
 
   if (path === "jewellery-ops/gift-finder" && m === "POST") {
-    return jsonOk({
-      ok: true,
-      recommendations: PRODUCTS.slice(0, 3).map((p) => ({
-        product_id: p.id,
-        title: p.title,
-        price: p.price,
-        currency: p.currency,
-      })),
-      mode: "local_seed",
-    });
+    const input = body && typeof body === "object" ? body : {};
+    const result = await suggestGifts(input);
+    return jsonOk(result);
+  }
+
+  if (path === "jewellery-ops/gift-sessions" && m === "GET") {
+    return jsonOk({ data: [], ok: true, message: "Use gift-finder to create sessions." });
   }
 
   if (path === "jewellery-ops/orders" && m === "GET") {
@@ -3634,6 +3668,86 @@ export async function dispatchV1(method, segments, request, body) {
   if (path === "jewellery-ops/orders/where-is-my-order" && m === "POST") {
     const input = body && typeof body === "object" ? body : {};
     return jsonOk(await whereIsMyOrder(input));
+  }
+
+  if (path === "jewellery-ops/custom-pieces" && m === "GET") {
+    return jsonOk(await listCustomPieces());
+  }
+
+  if (path === "jewellery-ops/custom-pieces" && m === "POST") {
+    const input = body && typeof body === "object" ? body : {};
+    return jsonOk(await collectCustomPiece(input), 201);
+  }
+
+  if (path.match(/^jewellery-ops\/custom-pieces\/[^/]+\/approve-quote$/) && m === "POST") {
+    const input = body && typeof body === "object" ? body : {};
+    const result = await approveCustomQuote(segments[2], input);
+    if (!result.ok) return jsonErr(result.error || "Approve failed", 400);
+    return jsonOk(result);
+  }
+
+  if (path === "jewellery-ops/abandonment" && m === "GET") {
+    return jsonOk(await listAbandonmentEvents());
+  }
+
+  if (path === "jewellery-ops/abandonment" && m === "POST") {
+    const input = body && typeof body === "object" ? body : {};
+    return jsonOk(await trackAbandonment(input), 201);
+  }
+
+  if (path === "jewellery-ops/abandonment/process" && m === "POST") {
+    return jsonOk(await processDueAbandonment());
+  }
+
+  if (path === "jewellery-ops/after-sale" && m === "GET") {
+    return jsonOk(await listAfterSaleJobs());
+  }
+
+  if (path === "jewellery-ops/after-sale/process" && m === "POST") {
+    return jsonOk(await processDueAfterSale());
+  }
+
+  if (path === "jewellery-ops/waitlist" && m === "GET") {
+    return jsonOk(await listWaitlist());
+  }
+
+  if (path === "jewellery-ops/waitlist" && m === "POST") {
+    const input = body && typeof body === "object" ? body : {};
+    return jsonOk(await joinWaitlist(input), 201);
+  }
+
+  if (path === "jewellery-ops/waitlist/notify" && m === "POST") {
+    const input = body && typeof body === "object" ? body : {};
+    return jsonOk(await notifyWaitlistRestock(input));
+  }
+
+  if (path === "jewellery-ops/vip-drop" && m === "POST") {
+    const input = body && typeof body === "object" ? body : {};
+    return jsonOk(await announceVipDrop(input));
+  }
+
+  if (path === "jewellery-ops/telegram-alerts" && m === "GET") {
+    return jsonOk(await listTelegramAlerts());
+  }
+
+  if (path === "jewellery-ops/telegram-alerts" && m === "POST") {
+    const input = body && typeof body === "object" ? body : {};
+    return jsonOk(await sendTelegramAlert(input), 201);
+  }
+
+  if (path === "jewellery-ops/content/cross-post" && m === "POST") {
+    return jsonOk({
+      ok: true,
+      mode: "queued_for_approval",
+      note: "Cross-post requires human approve in Content Studio.",
+    });
+  }
+
+  if (path === "jewellery-ops/content/weekly-summary" && m === "POST") {
+    return jsonOk({
+      ok: true,
+      summary: { window: "7d", mode: "next_native" },
+    });
   }
 
   if (path === "jewellery-ops/invoices" && m === "GET") {
@@ -3804,79 +3918,58 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk(result);
   }
 
+  if (path === "jewellery-ops/manufacturer/jobs" && m === "POST") {
+    const input = body && typeof body === "object" ? body : {};
+    return jsonOk(await pushManufacturerOrder(input), 201);
+  }
+
   if (path === "jewellery-ops/ugc" && m === "GET") {
-    return jsonOk({
-      data: [
-        {
-          id: "ugc-1",
-          handle: "@guest",
-          channel: "instagram",
-          status: "pending_permission",
-          caption: "Loving my Priest Ring",
-        },
-      ],
-    });
+    return jsonOk(await listUgcItems());
   }
 
   if (path === "jewellery-ops/ugc/repost-queue" && m === "GET") {
-    return jsonOk({ data: [] });
+    return jsonOk(await listUgcRepostQueue());
   }
 
   if (path === "jewellery-ops/ugc/tags" && m === "POST") {
-    return jsonOk({ ok: true, item: { id: `ugc-${Date.now()}`, ...(body || {}) } }, 201);
+    const input = body && typeof body === "object" ? body : {};
+    return jsonOk(await recordUgcTag(input), 201);
   }
 
   if (path.match(/^jewellery-ops\/ugc\/[^/]+\/request-permission$/) && m === "POST") {
-    return jsonOk({ ok: true, item_id: segments[2], status: "permission_requested" });
+    const input = body && typeof body === "object" ? body : {};
+    const result = await requestUgcPermission(segments[2], input);
+    if (!result.ok) return jsonErr(result.error || "UGC not found", 404);
+    return jsonOk(result);
   }
 
   if (path === "jewellery-ops/outreach/prospects" && m === "GET") {
-    return jsonOk({
-      data: [
-        {
-          id: "prospect-1",
-          name: "Boutique partner",
-          channel: "email",
-          status: "new",
-        },
-      ],
-    });
+    return jsonOk(await listOutreachProspects());
   }
 
   if (path === "jewellery-ops/outreach/prospects" && m === "POST") {
-    return jsonOk(
-      {
-        prospect: {
-          id: `prospect-${Date.now()}`,
-          status: "new",
-          ...(body && typeof body === "object" ? body : {}),
-        },
-      },
-      201,
-    );
+    const input = body && typeof body === "object" ? body : {};
+    const result = await upsertOutreachProspect(input);
+    if (!result.ok) return jsonErr(result.message || result.error || "Outreach failed", 400);
+    return jsonOk(result, 201);
   }
 
   if (path.match(/^jewellery-ops\/outreach\/prospects\/[^/]+\/draft$/) && m === "POST") {
-    return jsonOk(
-      {
-        ok: true,
-        message: {
-          id: `om-${Date.now()}`,
-          prospect_id: segments[3],
-          status: "draft",
-          body: "Hello — Triada Designs Salt & Spirit collection for your buyers.",
-        },
-      },
-      201,
-    );
+    const input = body && typeof body === "object" ? body : {};
+    const result = await draftOutreachMessage(segments[3], input);
+    if (!result.ok) return jsonErr(result.error || "Draft failed", 400);
+    return jsonOk(result, 201);
   }
 
   if (path === "jewellery-ops/outreach/messages" && m === "GET") {
-    return jsonOk({ data: [] });
+    return jsonOk(await listOutreachMessages());
   }
 
   if (path.match(/^jewellery-ops\/outreach\/messages\/[^/]+\/approve$/) && m === "POST") {
-    return jsonOk({ ok: true, message_id: segments[3], status: "approved" });
+    const input = body && typeof body === "object" ? { approved: true, ...(body || {}) } : { approved: true };
+    const result = await approveOutreachMessage(segments[3], input);
+    if (!result.ok) return jsonErr(result.error || "Approve failed", 400);
+    return jsonOk(result);
   }
 
   if (path === "jewellery-ops/popups" && m === "GET") {

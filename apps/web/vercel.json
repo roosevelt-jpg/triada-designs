@@ -25,6 +25,10 @@
     {
       "path": "/api/cron/social-dm-sweep",
       "schedule": "30 11 * * *"
+    },
+    {
+      "path": "/api/cron/jewellery-ops-scan",
+      "schedule": "0 7 * * *"
     }
   ],
   "headers": [

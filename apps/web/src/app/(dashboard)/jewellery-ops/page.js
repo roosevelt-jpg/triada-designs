@@ -154,16 +154,39 @@ export default function JewelleryOpsPage() {
               {giftResult ? (
                 <ul className="mt-3 space-y-2">
                   {(giftResult.suggestions || []).map((s) => (
-                    <li key={s.sku} className="border border-line px-3 py-2 text-sm">
-                      <p className="font-medium text-ink">
-                        {s.title} · {s.price} {s.currency}
-                      </p>
-                      <p className="text-muted">{s.reason}</p>
-                      <a className="text-brown-dark underline" href={s.product_url} target="_blank" rel="noreferrer">
-                        View piece
-                      </a>
+                    <li key={s.sku || s.title} className="flex gap-3 border border-line px-3 py-2 text-sm">
+                      {s.photo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={s.photo_url}
+                          alt=""
+                          className="h-14 w-14 shrink-0 object-cover"
+                        />
+                      ) : null}
+                      <div>
+                        <p className="font-medium text-ink">
+                          {s.title} · {s.price} {s.currency}
+                        </p>
+                        <p className="text-muted">{s.reason}</p>
+                        {s.product_url ? (
+                          <a
+                            className="text-brown-dark underline"
+                            href={s.product_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View piece
+                          </a>
+                        ) : null}
+                      </div>
                     </li>
                   ))}
+                  {giftResult.ok === false ? (
+                    <li className="text-sm text-muted">{giftResult.error || "Gift finder failed."}</li>
+                  ) : null}
+                  {giftResult.ok !== false && !(giftResult.suggestions || []).length ? (
+                    <li className="text-sm text-muted">{giftResult.prompt || "No matching pieces yet."}</li>
+                  ) : null}
                 </ul>
               ) : null}
             </Card>

@@ -122,16 +122,20 @@ ZOHO_WEBHOOK_SECRET=long-random-secret
 
 Health endpoint (authenticated): `GET /api/v1/integrations/health`
 
-### Vercel Cron Jobs (abandonment + after-sale)
+### Vercel Cron Jobs (jewellery-ops + content)
 
-Abandonment and after-sale workers are **process-on-demand** (not always-on). Production uses **Vercel Cron Jobs** in `apps/web/vercel.json`:
+Jewellery-ops abandonment / after-sale / popup-scan workers are **Next-native** (no Laravel). Production uses **Vercel Cron Jobs** in `apps/web/vercel.json`:
 
-| Cron path | Schedule | Laravel worker |
+| Cron path | Schedule | Worker |
 |---|---|---|
-| `/api/cron/abandonment` | `0 * * * *` (hourly) | `POST /api/v1/cron/abandonment/process` |
-| `/api/cron/after-sale` | `30 * * * *` | `POST /api/v1/cron/after-sale/process` |
+| `/api/cron/jewellery-ops-scan` | `0 7 * * *` | Popup deadlines + manufacturer low-stock alerts |
+| `/api/cron/abandonment` | `0 8 * * *` | Cart / sizing 1-day reminders (WA opt-in or email) |
+| `/api/cron/after-sale` | `0 9 * * *` | Care / review / complete-the-set / UGC invite |
+| `/api/cron/content-publish` | `0 10 * * *` | Content calendar drain |
+| `/api/cron/quote-inspiration` | `15 10 * * *` | Weekday quote/inspiration broadcast |
+| `/api/cron/social-dm-sweep` | `30 11 * * *` | Social Media Manager unanswered DM sweep |
 
-Set the same `CRON_SECRET` on Vercel (web) and the API host. Set `API_ORIGIN` on Vercel to the Laravel base URL. Vercel sends `Authorization: Bearer <CRON_SECRET>` to cron paths.
+Set `CRON_SECRET` on Vercel. Vercel sends `Authorization: Bearer <CRON_SECRET>` to cron paths.
 
 ### Shopify store
 
