@@ -66,7 +66,7 @@ export default function ConversationDetailPage() {
 
   async function sendReply(event) {
     event.preventDefault();
-    if (!body.trim()) return;
+    if (!body.trim() || busy) return;
     setBusy(true);
     try {
       await apiFetch(`/v1/conversations/${conversationId}/messages`, {
@@ -80,6 +80,14 @@ export default function ConversationDetailPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function onReplyKeyDown(event) {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+      return;
+    }
+    event.preventDefault();
+    sendReply(event);
   }
 
   return (
@@ -161,8 +169,9 @@ export default function ConversationDetailPage() {
                 id="reply"
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
+                onKeyDown={onReplyKeyDown}
                 rows={3}
-                placeholder="Write a reply…"
+                placeholder="Write a reply… (Enter to send, Shift+Enter for newline)"
                 className="ops-field px-3 py-2"
               />
               <div className="mt-3 flex justify-end">
