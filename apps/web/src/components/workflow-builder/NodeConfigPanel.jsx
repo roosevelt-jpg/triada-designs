@@ -8,6 +8,7 @@ import {
 } from "@/lib/workflow-definition";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { MediaUploadField } from "@/components/ui/MediaUploadField";
 
 const fieldClass =
   "ops-field h-10 px-3";
@@ -276,16 +277,39 @@ export function NodeConfigPanel({
                     })
                   }
                 />
-                <Input
-                  label="Or media URL (upload on send)"
-                  name="media_url"
+                <MediaUploadField
+                  label="Header media file"
                   value={config.media_url || config.header_media_url || ""}
-                  onChange={(e) =>
+                  mediaType={config.header_media_type || config.media_type || ""}
+                  purpose="whatsapp"
+                  folder="automations"
+                  onMediaTypeChange={(next) =>
                     onChange({
                       config: {
                         ...config,
-                        media_url: e.target.value,
-                        header_media_url: e.target.value,
+                        header_media_type: next,
+                        media_type: next,
+                      },
+                    })
+                  }
+                  onUploaded={(payload) =>
+                    onChange({
+                      config: {
+                        ...config,
+                        media_url: payload.media_url || payload.url,
+                        header_media_url: payload.media_url || payload.url,
+                        media_type: payload.media_type || config.media_type,
+                        header_media_type:
+                          payload.media_type || config.header_media_type || config.media_type,
+                      },
+                    })
+                  }
+                  onClear={() =>
+                    onChange({
+                      config: {
+                        ...config,
+                        media_url: "",
+                        header_media_url: "",
                       },
                     })
                   }
@@ -321,13 +345,29 @@ export function NodeConfigPanel({
                     })
                   }
                 />
-                <Input
-                  label="Or media URL (upload on send)"
-                  name="media_url"
+                <MediaUploadField
+                  label="Media file"
                   value={config.media_url || ""}
-                  onChange={(e) =>
+                  mediaType={config.media_type || "image"}
+                  purpose="whatsapp"
+                  folder="automations"
+                  onMediaTypeChange={(next) =>
                     onChange({
-                      config: { ...config, media_url: e.target.value },
+                      config: { ...config, media_type: next },
+                    })
+                  }
+                  onUploaded={(payload) =>
+                    onChange({
+                      config: {
+                        ...config,
+                        media_url: payload.media_url || payload.url,
+                        media_type: payload.media_type || config.media_type || "image",
+                      },
+                    })
+                  }
+                  onClear={() =>
+                    onChange({
+                      config: { ...config, media_url: "" },
                     })
                   }
                 />

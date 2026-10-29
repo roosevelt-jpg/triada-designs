@@ -169,6 +169,7 @@ import {
   sendWhatsAppMediaMessage,
   uploadWhatsAppMedia,
 } from "@/lib/integrations/whatsapp-cloud-media";
+import { uploadMediaAsset } from "@/lib/media/media-assets-store";
 import {
   hasGeminiEnv,
   hasMetaPageToken,
@@ -1879,6 +1880,37 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk(result, result.ok ? 201 : 422);
   }
 
+  if (path === "media/upload" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    if (!input.media_base64) {
+      return jsonErr("Upload a file (media_base64). Image URL paste is not supported.", 422);
+    }
+    const result = await uploadMediaAsset({
+      filename: input.filename ? String(input.filename) : undefined,
+      mime_type: input.mime_type ? String(input.mime_type) : undefined,
+      media_type: input.media_type ? String(input.media_type) : undefined,
+      media_base64: String(input.media_base64),
+      purpose: input.purpose ? String(input.purpose) : "whatsapp",
+      folder: input.folder ? String(input.folder) : undefined,
+    });
+    if (!result.ok) {
+      return {
+        status: 422,
+        body: {
+          ok: false,
+          message: result.message || "Upload rejected.",
+          error: result.error,
+          hint: result.hint,
+          graph: result.graph || undefined,
+        },
+      };
+    }
+    return jsonOk(result, 201);
+  }
+
   if (path === "integrations/whatsapp/upload-media" && m === "POST") {
     const input =
       body && typeof body === "object"
@@ -1886,7 +1918,7 @@ export async function dispatchV1(method, segments, request, body) {
         : {};
     const media = extractWhatsAppMediaInput(input);
     if (!media.media_url && !media.media_base64) {
-      return jsonErr("media_url or media_base64 is required.", 422);
+      return jsonErr("Upload media bytes (media_base64) or a stored media_url from file upload.", 422);
     }
     const result = await uploadWhatsAppMedia({
       media_url: media.media_url,

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
+import { MediaUploadField } from "@/components/ui/MediaUploadField";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/formatters";
@@ -262,12 +263,21 @@ export default function CampaignsPage() {
                 <option value="video">Video</option>
               </select>
             </label>
-            <Input
-              label="Media URL (image or video)"
-              name="media_url"
-              value={form.media_url}
-              onChange={(e) => updateField("media_url", e.target.value)}
-            />
+            <div className="md:col-span-2">
+              <MediaUploadField
+                label="Media file (image or video)"
+                value={form.media_url}
+                mediaType={form.media_type}
+                purpose="whatsapp"
+                folder="campaigns"
+                onMediaTypeChange={(next) => updateField("media_type", next)}
+                onUploaded={(payload) => {
+                  updateField("media_url", payload.media_url || payload.url);
+                  if (payload.media_type) updateField("media_type", payload.media_type);
+                }}
+                onClear={() => updateField("media_url", "")}
+              />
+            </div>
             <label className="flex items-center gap-2 text-sm md:col-span-2">
               <input
                 type="checkbox"

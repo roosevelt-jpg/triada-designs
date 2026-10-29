@@ -7,6 +7,7 @@
 
 import { integrationRuntimeMode } from "@/lib/integrations/env-presence";
 import { resolveWhatsAppCloudCredentials } from "@/lib/integrations/meta-credentials";
+import { validateMetaGraphMedia } from "@/lib/media/meta-graph-media-rules";
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || "v21.0";
 const GRAPH_BASE = (
@@ -160,11 +161,11 @@ export function extractWhatsAppMediaInput(input = {}) {
  */
 export async function uploadWhatsAppMedia(input = {}) {
   const { live, creds } = await resolveSendGate();
-  const kind =
+  let kind =
     normalizeWhatsAppMediaKind(input.media_type) ||
     normalizeWhatsAppMediaKind(input.mime_type) ||
     "image";
-  const mime = defaultMimeForWhatsAppMedia(input.mime_type, kind);
+  let mime = defaultMimeForWhatsAppMedia(input.mime_type, kind);
   const filename =
     String(input.filename || "").trim() ||
     (kind === "video" ? "triada-media.mp4" : "triada-media.jpg");
@@ -194,7 +195,7 @@ export async function uploadWhatsAppMedia(input = {}) {
       bytes = Buffer.from(ab);
       const remoteMime = fetched.headers.get("content-type");
       if (remoteMime && !input.mime_type) {
-        // prefer remote when caller omitted mime
+        mime = defaultMimeForWhatsAppMedia(remoteMime, kind);
       }
     } catch (err) {
       return {
@@ -209,6 +210,29 @@ export async function uploadWhatsAppMedia(input = {}) {
     }
   }
 
+  const sizeBytes = bytes ? Number(bytes.byteLength || bytes.length || 0) : 0;
+  const graph = validateMetaGraphMedia({
+    mime_type: mime,
+    filename,
+    size_bytes: sizeBytes || null,
+    kind,
+    allowed_kinds: ["image", "video"],
+  });
+  if (!graph.ok) {
+    return {
+      ok: false,
+      mode: live ? "live" : "local_sim",
+      media_id: null,
+      media_type: kind,
+      mime_type: mime,
+      error: graph.error || "meta_graph_media_rejected",
+      message: graph.message,
+      raw: { graph },
+    };
+  }
+  kind = graph.kind || kind;
+  mime = graph.mime_type || mime;
+
   if (!live) {
     const id = `local-media-${kind}-${Date.now().toString(36)}`;
     return {
@@ -218,13 +242,13 @@ export async function uploadWhatsAppMedia(input = {}) {
       media_type: kind,
       mime_type: mime,
       filename,
-      bytes: bytes ? Number(bytes.byteLength || bytes.length || 0) : 0,
+      bytes: sizeBytes,
       error: null,
-      raw: { simulated: true, messaging_product: "whatsapp" },
+      raw: { simulated: true, messaging_product: "whatsapp", graph },
     };
   }
 
-  if (!bytes || !(bytes.byteLength || bytes.length)) {
+  if (!bytes || !sizeBytes) {
     return {
       ok: false,
       mode: "live",

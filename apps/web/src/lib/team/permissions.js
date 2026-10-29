@@ -323,6 +323,7 @@ export const API_PERMISSION_RULES = [
   { match: /^leads(\/|$)/, area: "crm", level: "manage", methods: ["POST", "PATCH", "PUT", "DELETE"] },
   { match: /^settings(\/|$)/, area: "settings", level: "view", methods: ["GET"] },
   { match: /^settings(\/|$)/, area: "settings", level: "manage", methods: ["POST", "PATCH", "PUT", "DELETE"] },
+  { match: /^media(\/|$)/, area: "content", level: "manage", methods: ["POST", "PUT", "DELETE"] },
   { match: /^content(\/|$)/, area: "content", level: "view", methods: ["GET"] },
   { match: /^content(\/|$)/, area: "content", level: "manage", methods: ["POST", "PATCH", "PUT", "DELETE"] },
   { match: /^notifications(\/|$)/, area: "content", level: "view", methods: ["GET"] },

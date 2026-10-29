@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
+import { MediaUploadField } from "@/components/ui/MediaUploadField";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { connectionLabel } from "@/lib/integrations/brand-labels";
@@ -643,14 +644,26 @@ export default function MetaIntegrationsPage() {
                   <option value="video">Video</option>
                 </select>
               </label>
-              <Input
-                label="Media URL"
-                name="wa-media-url"
-                value={waMediaForm.media_url}
-                onChange={(e) =>
-                  setWaMediaForm((prev) => ({ ...prev, media_url: e.target.value }))
-                }
-              />
+              <div className="md:col-span-2">
+                <MediaUploadField
+                  label="Media file"
+                  value={waMediaForm.media_url}
+                  mediaType={waMediaForm.media_type}
+                  purpose="whatsapp"
+                  folder="meta"
+                  onMediaTypeChange={(next) =>
+                    setWaMediaForm((prev) => ({ ...prev, media_type: next }))
+                  }
+                  onUploaded={(payload) =>
+                    setWaMediaForm((prev) => ({
+                      ...prev,
+                      media_url: payload.media_url || payload.url,
+                      media_type: payload.media_type || prev.media_type,
+                    }))
+                  }
+                  onClear={() => setWaMediaForm((prev) => ({ ...prev, media_url: "" }))}
+                />
+              </div>
               <Input
                 label="Caption (session media)"
                 name="wa-media-caption"

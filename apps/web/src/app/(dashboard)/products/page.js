@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { CurrencySelect } from "@/components/ui/CurrencySelect";
 import { Input } from "@/components/ui/Input";
+import { MediaUploadField } from "@/components/ui/MediaUploadField";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/formatters";
@@ -20,6 +21,7 @@ const EMPTY_FORM = {
   price: "",
   currency: DEFAULT_CURRENCY,
   product_url: "https://triada-designs.com/",
+  photo_url: "",
   availability_status: "in_stock_snapshot",
   approved_claims: "",
   publish: true,
@@ -91,6 +93,10 @@ export default function ProductsPage() {
       price: item.price != null ? String(item.price) : "",
       currency: item.currency || DEFAULT_CURRENCY,
       product_url: item.product_url || "https://triada-designs.com/",
+      photo_url:
+        (item.metadata && typeof item.metadata === "object" && item.metadata.photo_url
+          ? String(item.metadata.photo_url)
+          : "") || "",
       availability_status: item.availability_status || "in_stock_snapshot",
       approved_claims: Array.isArray(item.approved_claims)
         ? item.approved_claims.join(", ")
@@ -122,6 +128,12 @@ export default function ProductsPage() {
       published_status: form.publish ? "published" : "draft",
       publish: Boolean(form.publish),
       channels: ["all"],
+      metadata: {
+        ...(editingId
+          ? items.find((row) => row.id === editingId)?.metadata || {}
+          : {}),
+        photo_url: form.photo_url.trim() || null,
+      },
     };
 
     try {
@@ -263,6 +275,19 @@ export default function ProductsPage() {
               onChange={(e) => updateField("approved_claims", e.target.value)}
               hint="Only verified materials and timing — never invent claims."
             />
+            <div className="md:col-span-2">
+              <MediaUploadField
+                label="Product photo"
+                value={form.photo_url}
+                mediaType="image"
+                purpose="whatsapp"
+                folder="products"
+                onUploaded={(payload) =>
+                  updateField("photo_url", payload.media_url || payload.url)
+                }
+                onClear={() => updateField("photo_url", "")}
+              />
+            </div>
           </div>
           <label className="block space-y-1.5">
             <span className="block text-[13px] font-medium text-ink">Description</span>
