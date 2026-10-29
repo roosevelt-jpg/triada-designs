@@ -2,9 +2,9 @@ export const APP_NAME = "Triada Designs";
 /** Public marketing site (apex). This ops app is intended for a subdomain. */
 export const PUBLIC_SITE_URL =
   process.env.NEXT_PUBLIC_PUBLIC_SITE_URL || "https://triada-designs.com";
-/** Suggested production host for this admin/ops app. */
+/** Production host for this admin/ops dashboard (never trycloudflare / preview). */
 export const OPS_HOST =
-  process.env.NEXT_PUBLIC_OPS_HOST || "ops.triada-designs.com";
+  process.env.NEXT_PUBLIC_OPS_HOST || "dashboard.triada-designs.com";
 /** Local seed admin (documented in README; not shown as "demo" in the UI). */
 export const SEED_ADMIN = {
   email: "info@triada-designs.com",

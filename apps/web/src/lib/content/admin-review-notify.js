@@ -12,6 +12,7 @@ import {
   patchContent,
 } from "@/lib/content-schedule-store";
 import { pushNotification } from "@/lib/notifications/notifications-store";
+import { absoluteAppUrl } from "@/lib/public-app-url";
 
 function adminEmail() {
   return (
@@ -22,15 +23,11 @@ function adminEmail() {
 }
 
 function reviewUrl(contentId) {
-  const base = String(
-    process.env.NEXT_PUBLIC_APP_URL ||
-      process.env.APP_URL ||
-      "https://dashboard.triada-designs.com"
-  ).replace(/\/$/, "");
   const path = contentId
     ? `/content/review?highlight=${encodeURIComponent(contentId)}`
     : "/content/review";
-  return `${base}${path}`;
+  // Always Production dashboard — never trycloudflare / Vercel preview / localhost.
+  return absoluteAppUrl(path);
 }
 
 /**

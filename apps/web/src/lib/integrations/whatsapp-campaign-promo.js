@@ -10,6 +10,7 @@ import { BRAND, warmGreeting } from "@/lib/brand/identity";
 import { listProducts, getProduct } from "@/lib/commerce/products-store";
 import { shopifyShopDomain } from "@/lib/commerce/shopify-admin";
 import { PUBLIC_SITE_URL } from "@/lib/constants";
+import { resolvePublicAppUrl } from "@/lib/public-app-url";
 
 const DEFAULT_PROMO = `${PUBLIC_SITE_URL.replace(/\/$/, "")}/`;
 
@@ -33,11 +34,7 @@ export function absolutePublicMediaUrl(pathOrUrl) {
   const raw = String(pathOrUrl || "").trim();
   if (!raw) return null;
   if (/^https?:\/\//i.test(raw)) return raw;
-  const base = (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.APP_URL ||
-    "https://dashboard.triada-designs.com"
-  ).replace(/\/$/, "");
+  const base = resolvePublicAppUrl().replace(/\/$/, "");
   return `${base}${raw.startsWith("/") ? "" : "/"}${raw}`;
 }
 

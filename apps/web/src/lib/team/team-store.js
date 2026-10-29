@@ -18,6 +18,7 @@ import {
   defaultRoleDefinitions,
   normalizePermissions,
 } from "./permissions";
+import { resolvePublicAppUrl } from "@/lib/public-app-url";
 
 const WORKSPACE_ID = "triada-ops";
 const ROLES_TABLE = "team_roles";
@@ -988,41 +989,10 @@ export async function acceptInvite(token, profile) {
 }
 
 /**
- * App base URL for invite links.
+ * App base URL for invite links (Production dashboard only).
+ * Scrubs trycloudflare / Vercel preview / localhost — never email those.
  * @param {Request} [request]
  */
 export function inviteAppBaseUrl(request) {
-  const env =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
-  if (env) return env.replace(/\/$/, "");
-  if (request) {
-    try {
-      const forwarded =
-        request.headers.get("x-forwarded-host") ||
-        request.headers.get("host") ||
-        "";
-      const proto =
-        request.headers.get("x-forwarded-proto") ||
-        (forwarded.includes("localhost") || forwarded.startsWith("127.")
-          ? "http"
-          : "https");
-      if (
-        forwarded &&
-        !forwarded.startsWith("0.0.0.0") &&
-        !forwarded.startsWith("[::]")
-      ) {
-        return `${proto}://${forwarded}`.replace(/\/$/, "");
-      }
-      const url = new URL(request.url);
-      if (url.hostname && url.hostname !== "0.0.0.0") {
-        return url.origin;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  const ops = process.env.NEXT_PUBLIC_OPS_HOST || "ops.triada-designs.com";
-  return `https://${ops}`;
+  return resolvePublicAppUrl({ request: request || null });
 }
