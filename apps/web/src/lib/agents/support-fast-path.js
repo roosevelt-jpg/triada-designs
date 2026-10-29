@@ -17,8 +17,22 @@ const GREETING_RE =
  */
 export function isSimpleSupportGreeting(text) {
   const raw = String(text || "").trim();
-  if (!raw || raw.length > 48) return false;
-  return GREETING_RE.test(raw);
+  if (!raw) return false;
+  if (raw.length <= 48 && GREETING_RE.test(raw)) return true;
+
+  // Email / wrapped inbound often stores "Subject\n\nBody". Treat as greeting
+  // when the last paragraph is a short greeting and earlier lines look like a
+  // short subject (no question mark).
+  const paras = raw
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (paras.length < 2) return false;
+  const last = paras[paras.length - 1];
+  if (!last || last.length > 48 || !GREETING_RE.test(last)) return false;
+  return paras.slice(0, -1).every(
+    (p) => p.length <= 80 && !/[?]/.test(p) && p.split(/\s+/).length <= 12,
+  );
 }
 
 /**

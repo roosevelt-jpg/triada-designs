@@ -71,6 +71,8 @@ export async function POST(request) {
       send_mode: handled.reply?.send?.mode || handled.reply?.mode || null,
       send_ok: handled.reply?.send?.ok ?? null,
       send_error: handled.reply?.send?.error || handled.reply?.error || null,
+      fast_path: Boolean(handled.reply?.fast_path),
+      draft_latency_ms: handled.reply?.latency_ms ?? null,
     });
   }
 
@@ -79,5 +81,6 @@ export async function POST(request) {
     channel: "tiktok",
     replied,
     automations,
+    fast_path: automations.some((a) => a.fast_path),
   });
 }

@@ -145,10 +145,17 @@ for (const { channel, input } of cases) {
       `${channel} send not ok: ${JSON.stringify(handled.reply.send)}`,
     );
   }
+  const expectFast = String(input.body || "").trim() === "Hi";
+  if (expectFast && !handled.reply?.fast_path) {
+    throw new Error(
+      `${channel} expected greeting fast_path: ${JSON.stringify(handled.reply)}`,
+    );
+  }
   console.log(`ok ${channel} support reply`, {
     replied: handled.replied,
     mode: handled.reply?.send?.mode || handled.reply?.mode,
     send_ok: handled.reply?.send?.ok,
+    fast_path: handled.reply?.fast_path || false,
     preview: String(handled.reply?.reply || "").slice(0, 100),
   });
 }

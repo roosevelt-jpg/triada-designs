@@ -1,7 +1,8 @@
 /**
- * Soft-warm Meta inbound auto-reply modules so a later customer “Hi”
+ * Soft-warm inbound Support auto-reply modules so a later customer “Hi”
  * avoids the worst cold-start tax (module graph + credential resolvers).
- * Safe to call from crons / health — no outbound Graph send.
+ * Covers Meta + Telegram / webchat / email / TikTok / LinkedIn.
+ * Safe to call from crons / health — no outbound provider send.
  */
 
 import { getAnthropicStatus } from "@/lib/integrations/anthropic-credentials";
@@ -9,12 +10,19 @@ import { resolveWhatsAppCloudCredentials } from "@/lib/integrations/meta-credent
 import { listAgents } from "@/lib/agents/agent-store";
 import { isSimpleSupportGreeting } from "@/lib/agents/support-fast-path";
 import { normalizeMetaInboundMessages } from "@/lib/meta/normalize-inbound";
+import {
+  normalizeTelegramInbound,
+  normalizeEmailInbound,
+  normalizeTikTokInbound,
+  normalizeWebchatInbound,
+} from "@/lib/channels/normalize-inbound";
 
 /**
  * @returns {Promise<{
  *   ok: boolean,
  *   warmed: string[],
  *   greeting_fast_path: boolean,
+ *   channels_warmed: string[],
  *   anthropic: string,
  *   whatsapp_send_ready: boolean,
  *   agents: number,
@@ -24,11 +32,23 @@ import { normalizeMetaInboundMessages } from "@/lib/meta/normalize-inbound";
 export async function warmInboundRuntime() {
   const started = Date.now();
   const warmed = [];
+  const channelsWarmed = [];
 
   // Touch normalize + fast-path (pure, sync) so the module graph stays resident.
   normalizeMetaInboundMessages({ object: "whatsapp_business_account", entry: [] });
-  warmed.push("normalize-inbound");
-  const greetingOk = isSimpleSupportGreeting("Hi");
+  warmed.push("normalize-inbound-meta");
+  channelsWarmed.push("whatsapp", "instagram", "messenger", "facebook");
+
+  normalizeTelegramInbound({});
+  normalizeEmailInbound({ from: "warm@triada.local", body: "Hi" });
+  normalizeTikTokInbound({ text: "Hi", simulated: true });
+  normalizeWebchatInbound({ body: "Hi", visitor_id: "warm" });
+  warmed.push("normalize-inbound-channels");
+  channelsWarmed.push("telegram", "email", "tiktok", "webchat", "linkedin");
+
+  const greetingOk =
+    isSimpleSupportGreeting("Hi") &&
+    isSimpleSupportGreeting("Hello\n\nHi");
   warmed.push("support-fast-path");
 
   const [anthropic, wa, agents] = await Promise.all([
@@ -42,6 +62,7 @@ export async function warmInboundRuntime() {
     ok: true,
     warmed,
     greeting_fast_path: greetingOk,
+    channels_warmed: channelsWarmed,
     anthropic: anthropic?.source || (anthropic?.has_credentials ? "keyed" : "missing"),
     whatsapp_send_ready: Boolean(wa?.sendReady),
     agents: Array.isArray(agents?.data) ? agents.data.length : 0,

@@ -10,6 +10,10 @@ import {
   maybeHumanHandoffReply,
 } from "./human-handoff";
 import {
+  draftFastSupportReply,
+  isSimpleSupportGreeting,
+} from "./support-fast-path";
+import {
   SOCIAL_DM_CHANNELS,
   SUPPORT_PAGE_MESSAGING_CHANNELS,
   SUPPORT_TEXT_CHANNELS,
@@ -107,6 +111,8 @@ export async function replyUnansweredDm(input) {
       channel,
       reply: replyText,
       mode: send?.mode || "live",
+      fast_path: false,
+      latency_ms: null,
       dry_run: dryRun,
       send,
       conversation: saved,
@@ -115,21 +121,41 @@ export async function replyUnansweredDm(input) {
     };
   }
 
-  const collab = await runTeamCollaboration({
-    agent_key: "social_media_manager",
-    purpose: "draft_dm_reply",
-    message: inbound,
-    dry_run: dryRun,
-    context: {
-      channel,
-      conversation_id: conversation.id,
-      subject: conversation.subject,
-      contact_id: conversation.contact_id,
-      customer_message: inbound,
-      social_dm: true,
-    },
-    collaborators: ["quality_control", "leads_qualification"],
-  });
+  const customerName =
+    typeof conversation.metadata?.contact_name === "string"
+      ? conversation.metadata.contact_name
+      : undefined;
+
+  /** @type {Record<string, unknown>} */
+  let collab;
+  if (isSimpleSupportGreeting(inbound)) {
+    // Same greeting fast-path as Support inbound — no Anthropic / QC.
+    collab = draftFastSupportReply({
+      message: inbound,
+      customerName,
+    });
+  } else {
+    collab = await runTeamCollaboration({
+      agent_key: "social_media_manager",
+      purpose: "draft_dm_reply",
+      message: inbound,
+      dry_run: dryRun,
+      latency_mode: "fast",
+      max_tokens: 400,
+      context: {
+        channel,
+        conversation_id: conversation.id,
+        subject: conversation.subject,
+        contact_id: conversation.contact_id,
+        customer_message: inbound,
+        social_dm: true,
+        customer_name: customerName,
+        latency_mode: "fast",
+      },
+      // Reviews deferred off the sweep→send critical path.
+      collaborators: [],
+    });
+  }
 
   const replyText = String(collab.draft || collab.text || "").trim();
   if (!replyText) {
@@ -182,17 +208,18 @@ export async function replyUnansweredDm(input) {
     });
   }
 
-  await setSharedKv({
+  void setSharedKv({
     key: "collab.active_thread",
     value: {
       channel,
       conversation_id: conversation.id,
       agent_key: "social_media_manager",
       last_reply_preview: replyText.slice(0, 240),
+      fast_path: Boolean(collab.fast_path),
       updated_at: new Date().toISOString(),
     },
     written_by: "social_media_manager",
-    tags: [channel, "social", "auto_reply"],
+    tags: [channel, "social_dm", "auto_reply"],
   }).catch(() => null);
 
   return {
@@ -202,6 +229,8 @@ export async function replyUnansweredDm(input) {
     channel,
     reply: replyText,
     mode: collab.mode || send?.mode || "live",
+    fast_path: Boolean(collab.fast_path),
+    latency_ms: collab.latency_ms ?? null,
     dry_run: dryRun,
     send,
     conversation: saved,
@@ -246,14 +275,19 @@ export async function sweepUnansweredSocialDms(opts = {}) {
   const skipped = results.filter((r) => r.skipped).length;
   const failed = results.filter((r) => !r.ok).length;
 
-  await setSharedKv("collab.social_media_manager.last_sweep", {
-    at: new Date().toISOString(),
-    scanned: unanswered.length,
-    targeted: targets.length,
-    replied,
-    skipped,
-    failed,
-    dry_run: dryRun,
+  void setSharedKv({
+    key: "collab.social_media_manager.last_sweep",
+    value: {
+      at: new Date().toISOString(),
+      scanned: unanswered.length,
+      targeted: targets.length,
+      replied,
+      skipped,
+      failed,
+      dry_run: dryRun,
+    },
+    written_by: "social_media_manager",
+    tags: ["social_dm", "sweep"],
   }).catch(() => null);
 
   return {

@@ -62,5 +62,7 @@ export async function POST(request) {
     agent_key: "ai_support",
     mode: handled.reply?.send?.mode || handled.reply?.mode || "local_sim",
     send_ok: handled.reply?.send?.ok ?? null,
+    fast_path: Boolean(handled.reply?.fast_path),
+    draft_latency_ms: handled.reply?.latency_ms ?? null,
   });
 }
