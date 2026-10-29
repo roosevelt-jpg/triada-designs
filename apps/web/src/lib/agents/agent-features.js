@@ -7,7 +7,7 @@
 export const AGENT_FEATURES_BY_KEY = {
   ai_support: [
     "Answers product, order, sizing, materials, and care questions from approved knowledge",
-    "Handles WhatsApp, webchat, email, and Telegram conversations",
+    "Handles WhatsApp, webchat, email, Telegram, LinkedIn, TikTok, and Meta DMs",
     "Hands off when unsure — never invents prices, stock, or policy",
     "Escalates complaints, custom quotes, and wholesale to Escalation",
     "Routes purchase intent to Leads and quiet threads to Follow up",

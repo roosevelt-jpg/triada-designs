@@ -30,7 +30,17 @@ export const TEAM_ROSTER = [
     features: AGENT_FEATURES_BY_KEY.ai_support,
     status: "active",
     config: {
-      channels: ["whatsapp", "webchat", "email", "telegram"],
+      channels: [
+        "whatsapp",
+        "webchat",
+        "email",
+        "telegram",
+        "linkedin",
+        "tiktok",
+        "instagram",
+        "messenger",
+        "facebook",
+      ],
       escalation: true,
       collaborates_with: [
         "social_media_manager",

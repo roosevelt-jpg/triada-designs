@@ -83,6 +83,7 @@ import {
 import {
   SOCIAL_DM_CHANNELS,
   SUPPORT_PAGE_MESSAGING_CHANNELS,
+  SUPPORT_TEXT_CHANNELS,
   appendOutboundReply,
   getConversation,
   listConversations,
@@ -95,6 +96,8 @@ import {
 } from "@/lib/agents/social-media-manager";
 import { handleInboundWhatsApp } from "@/lib/agents/support-whatsapp";
 import { handleInboundPageMessaging } from "@/lib/agents/support-page-messaging";
+import { handleInboundSupportChannel } from "@/lib/agents/support-channel";
+import { normalizeWebchatInbound } from "@/lib/channels/normalize-inbound";
 import { collectLiveDashboardMetrics } from "@/lib/api/dashboard-metrics";
 import { syncWhatsAppContactsToCrm } from "@/lib/crm/meta-contact-sync";
 import { mapContactUploadRows } from "@/lib/crm/parse-contacts-file";
@@ -1381,6 +1384,53 @@ export async function dispatchV1(method, segments, request, body) {
           verify_token_hint: "triada-meta-verify-2026",
         });
       }
+      if (SUPPORT_TEXT_CHANNELS.includes(channel)) {
+        const from =
+          body && typeof body === "object" && body.from
+            ? String(body.from)
+            : channel === "email"
+              ? "customer@example.com"
+              : `sim-${channel}-user`;
+        const handled = await handleInboundSupportChannel({
+          channel,
+          body: inboundBody,
+          subject:
+            body && typeof body === "object" && body.subject
+              ? String(body.subject)
+              : undefined,
+          external_user_id: from,
+          external_conversation_id: `sim-meta-${channel}:${from}`,
+          provider_message_id: `sim-meta-${channel}-${Date.now().toString(36)}`,
+          contact_name:
+            body && typeof body === "object" && body.contact_name
+              ? String(body.contact_name)
+              : undefined,
+          metadata:
+            channel === "email"
+              ? { email: from, contact_name: from }
+              : channel === "telegram"
+                ? { chat_id: from }
+                : {},
+          auto_reply: body?.auto_reply !== false,
+          dry_run: body?.dry_run === true,
+        });
+        return jsonOk({
+          ok: true,
+          mode: "next_dual_run",
+          channel,
+          agent_key: "ai_support",
+          conversation: handled.conversation,
+          replied: handled.replied,
+          reply: handled.reply || null,
+          messages: [
+            {
+              conversation: handled.conversation,
+              body: inboundBody,
+            },
+          ],
+          verify_token_hint: "triada-meta-verify-2026",
+        });
+      }
       if (SOCIAL_DM_CHANNELS.includes(channel)) {
         const handled = await handleInboundSocialDm({
           channel,
@@ -1678,6 +1728,52 @@ export async function dispatchV1(method, segments, request, body) {
     );
   }
 
+  // Public website widget → Support AI auto-reply (returned as suggested_reply).
+  if (path === "webchat/messages" && m === "POST") {
+    const token =
+      body && typeof body === "object" && body.token
+        ? String(body.token).trim()
+        : "";
+    if (!token) {
+      return jsonErr("Widget token is required.", 401);
+    }
+    const inboundBody =
+      body && typeof body === "object" && body.body
+        ? String(body.body).trim()
+        : "";
+    if (!inboundBody) {
+      return jsonErr("Message body is required.", 422);
+    }
+
+    const [normalized] = normalizeWebchatInbound({
+      ...(body && typeof body === "object" ? body : {}),
+      token,
+      body: inboundBody,
+    });
+    const handled = await handleInboundSupportChannel({
+      channel: "webchat",
+      body: normalized.body,
+      external_user_id: normalized.external_user_id,
+      external_conversation_id: normalized.external_conversation_id,
+      provider_message_id: normalized.provider_message_id,
+      contact_name: normalized.contact_name,
+      metadata: normalized.metadata,
+      auto_reply: true,
+    });
+
+    return jsonOk({
+      ok: true,
+      conversation_id: handled.conversation?.id || null,
+      suggested_reply:
+        handled.reply?.reply ||
+        "Thanks — a Triada specialist can continue from here.",
+      replied: handled.replied,
+      agent_key: "ai_support",
+      mode: handled.reply?.send?.mode || handled.reply?.mode || "local_sim",
+      send_ok: handled.reply?.send?.ok ?? null,
+    });
+  }
+
   if (
     (path === "integrations/channels/connect" ||
       path === "integrations/channels/disconnect" ||
@@ -1718,6 +1814,58 @@ export async function dispatchV1(method, segments, request, body) {
           agent_key: "ai_support",
           channel,
           ai: { intent: "jewellery_inquiry", agent: "ai_support" },
+          conversation: handled.conversation,
+          replied: handled.replied,
+          reply: handled.reply || null,
+          messages: [
+            {
+              conversation: handled.conversation,
+              body: inboundBody,
+            },
+          ],
+          channels: buildSalesChannelsStatus({ meta }).channels,
+        });
+      }
+      if (SUPPORT_TEXT_CHANNELS.includes(channel)) {
+        const from =
+          body && typeof body === "object" && body.from
+            ? String(body.from)
+            : channel === "email"
+              ? "customer@example.com"
+              : `sim-${channel}-user`;
+        const handled = await handleInboundSupportChannel({
+          channel,
+          body: inboundBody,
+          subject:
+            body && typeof body === "object" && body.subject
+              ? String(body.subject)
+              : undefined,
+          external_user_id: from,
+          external_conversation_id: `sim-${channel}:${from}`,
+          provider_message_id: `sim-${channel}-${Date.now().toString(36)}`,
+          contact_name:
+            body && typeof body === "object" && body.contact_name
+              ? String(body.contact_name)
+              : undefined,
+          metadata:
+            channel === "email"
+              ? { email: from, contact_name: from }
+              : channel === "telegram"
+                ? { chat_id: from }
+                : {},
+          auto_reply: body?.auto_reply !== false,
+          dry_run: body?.dry_run === true,
+        });
+        return jsonOk({
+          ok: true,
+          mode: "next_dual_run",
+          agent_key: "ai_support",
+          channel,
+          ai: {
+            intent: "jewellery_inquiry",
+            agent: "ai_support",
+            suggested_reply: handled.reply?.reply || null,
+          },
           conversation: handled.conversation,
           replied: handled.replied,
           reply: handled.reply || null,

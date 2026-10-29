@@ -187,7 +187,11 @@ export function buildSalesChannelsStatus(opts = {}) {
       webhook_path:
         key === "facebook" || key === "instagram" || key === "whatsapp"
           ? "/api/webhooks/meta"
-          : `/api/webhooks/${key}`,
+          : key === "webchat"
+            ? "/api/v1/webchat/messages"
+            : key === "shopify"
+              ? "/api/webhooks/shopify"
+              : `/api/webhooks/${key}`,
       capabilities: capabilities(key),
       hub: hubPath(key),
     };

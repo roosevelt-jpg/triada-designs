@@ -7,10 +7,14 @@ import { runTeamCollaboration } from "./team-orchestrator";
 import { setSharedKv } from "./shared-memory";
 import {
   SOCIAL_DM_CHANNELS,
+  SUPPORT_PAGE_MESSAGING_CHANNELS,
+  SUPPORT_TEXT_CHANNELS,
   appendOutboundReply,
   ingestInboundDm,
   listUnansweredSocialDms,
 } from "@/lib/crm/conversations-store";
+import { sendSupportChannelText } from "@/lib/integrations/support-channel-send";
+import { sendPageMessagingText } from "@/lib/integrations/meta-page-text";
 
 export { SOCIAL_DM_CHANNELS };
 
@@ -68,11 +72,43 @@ export async function replyUnansweredDm(input) {
     };
   }
 
+  /** @type {Record<string, unknown> | null} */
+  let send = null;
+  /** @type {Record<string, unknown> | null} */
   let saved = null;
   if (!dryRun) {
+    // Prefer real channel send so sweep is not inbox-only (LinkedIn + Meta backlog).
+    if (SUPPORT_TEXT_CHANNELS.includes(channel)) {
+      const meta =
+        conversation.metadata && typeof conversation.metadata === "object"
+          ? /** @type {Record<string, unknown>} */ (conversation.metadata)
+          : {};
+      send = await sendSupportChannelText({
+        channel,
+        body: replyText,
+        external_user_id: String(conversation.external_user_id || "").trim(),
+        subject: conversation.subject
+          ? `Re: ${String(conversation.subject)}`
+          : undefined,
+        metadata: meta,
+      });
+    } else if (SUPPORT_PAGE_MESSAGING_CHANNELS.includes(channel)) {
+      send = await sendPageMessagingText({
+        channel,
+        recipient_id: String(conversation.external_user_id || "").trim(),
+        body: replyText,
+        page_or_account_id: String(conversation.page_or_account_id || "").trim(),
+      });
+    }
     saved = await appendOutboundReply(String(conversation.id), {
       body: replyText,
       agent_key: "social_media_manager",
+      provider_message_id: send?.provider_message_id
+        ? String(send.provider_message_id)
+        : null,
+      send_mode: send?.mode || null,
+      send_ok: send ? Boolean(send.ok) : true,
+      send_error: send?.error || null,
     });
   }
 
@@ -85,15 +121,17 @@ export async function replyUnansweredDm(input) {
   }).catch(() => null);
 
   return {
-    ok: true,
+    ok: Boolean(send ? send.ok : true),
     skipped: false,
     conversation_id: conversation.id,
     channel,
     reply: replyText,
-    mode: collab.mode || "live",
+    mode: collab.mode || send?.mode || "live",
     dry_run: dryRun,
+    send,
     conversation: saved,
     reviews: collab.reviews || [],
+    error: send && !send.ok ? send.error : null,
   };
 }
 

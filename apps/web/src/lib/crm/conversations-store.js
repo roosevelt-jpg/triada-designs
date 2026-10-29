@@ -1,7 +1,8 @@
 /**
  * Mutable dual-run conversation / DM store for Unified inbox.
- * AI Support owns Meta Page Messaging (Instagram / Messenger / Facebook) with Graph send.
- * Social Media Manager still sweeps leftover LinkedIn (+ backlog) DMs.
+ * AI Support owns Meta Page Messaging (Instagram / Messenger / Facebook) with Graph send,
+ * plus Telegram / webchat / email / TikTok / LinkedIn inbound auto-reply.
+ * Social Media Manager may still sweep Meta + LinkedIn backlog DMs.
  */
 
 import { getLocalDataDir } from "@/lib/local-data-dir";
@@ -17,6 +18,18 @@ export const SUPPORT_PAGE_MESSAGING_CHANNELS = [
   "instagram",
   "messenger",
   "facebook",
+];
+
+/**
+ * Non-Meta messaging channels answered by AI Support (+ channel send adapter).
+ * Webchat returns the reply to the widget; email/Telegram/LinkedIn/TikTok use providers.
+ */
+export const SUPPORT_TEXT_CHANNELS = [
+  "telegram",
+  "webchat",
+  "email",
+  "tiktok",
+  "linkedin",
 ];
 
 /** Channels Social Media Manager may still sweep (LinkedIn + Meta backlog). */
@@ -405,7 +418,8 @@ export async function ingestInboundDm(input) {
       : null;
   const agentKey = overrideAgent
     ? overrideAgent
-    : SUPPORT_PAGE_MESSAGING_CHANNELS.includes(channel)
+    : SUPPORT_PAGE_MESSAGING_CHANNELS.includes(channel) ||
+        SUPPORT_TEXT_CHANNELS.includes(channel)
       ? "ai_support"
       : SOCIAL_DM_CHANNELS.includes(channel)
         ? "social_media_manager"
