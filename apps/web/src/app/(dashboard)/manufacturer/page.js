@@ -44,6 +44,17 @@ export default function ManufacturerPage() {
   });
   const [contactStatus, setContactStatus] = useState("");
   const [actionStatus, setActionStatus] = useState("");
+  const [materialForm, setMaterialForm] = useState({
+    material_key: "",
+    display_name: "",
+    metal_price_per_gram: "",
+    making_charge_per_gram: "",
+    stock_grams: "",
+    low_stock_threshold_grams: "",
+    currency: "AED",
+  });
+  const [materialStatus, setMaterialStatus] = useState("");
+  const [editingMaterialId, setEditingMaterialId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -116,6 +127,86 @@ export default function ManufacturerPage() {
       setActionStatus(err.message || "Status update failed");
     } finally {
       setBusyId("");
+    }
+  }
+
+  async function saveMaterial(event) {
+    event.preventDefault();
+    setMaterialStatus("");
+    try {
+      const payload = {
+        id: editingMaterialId || undefined,
+        material_key: materialForm.material_key.trim(),
+        display_name: materialForm.display_name.trim(),
+        metal_price_per_gram:
+          materialForm.metal_price_per_gram === ""
+            ? null
+            : Number(materialForm.metal_price_per_gram),
+        making_charge_per_gram:
+          materialForm.making_charge_per_gram === ""
+            ? null
+            : Number(materialForm.making_charge_per_gram),
+        stock_grams:
+          materialForm.stock_grams === "" ? null : Number(materialForm.stock_grams),
+        low_stock_threshold_grams:
+          materialForm.low_stock_threshold_grams === ""
+            ? null
+            : Number(materialForm.low_stock_threshold_grams),
+        currency: materialForm.currency || "AED",
+      };
+      const path = editingMaterialId
+        ? `/v1/jewellery-ops/manufacturer/materials/${editingMaterialId}`
+        : "/v1/jewellery-ops/manufacturer/materials";
+      await apiFetch(path, {
+        method: editingMaterialId ? "PUT" : "POST",
+        body: payload,
+      });
+      setMaterialStatus(editingMaterialId ? "Material updated" : "Material added");
+      setEditingMaterialId(null);
+      setMaterialForm({
+        material_key: "",
+        display_name: "",
+        metal_price_per_gram: "",
+        making_charge_per_gram: "",
+        stock_grams: "",
+        low_stock_threshold_grams: "",
+        currency: "AED",
+      });
+      await load();
+    } catch (err) {
+      setMaterialStatus(err.message || "Save failed");
+    }
+  }
+
+  function editMaterial(m) {
+    setEditingMaterialId(m.id);
+    setMaterialForm({
+      material_key: m.material_key || "",
+      display_name: m.display_name || "",
+      metal_price_per_gram:
+        m.metal_price_per_gram != null ? String(m.metal_price_per_gram) : "",
+      making_charge_per_gram:
+        m.making_charge_per_gram != null ? String(m.making_charge_per_gram) : "",
+      stock_grams: m.stock_grams != null ? String(m.stock_grams) : "",
+      low_stock_threshold_grams:
+        m.low_stock_threshold_grams != null
+          ? String(m.low_stock_threshold_grams)
+          : "",
+      currency: m.currency || "AED",
+    });
+  }
+
+  async function deleteMaterial(m) {
+    if (!window.confirm(`Delete material “${m.display_name}”?`)) return;
+    setMaterialStatus("");
+    try {
+      await apiFetch(`/v1/jewellery-ops/manufacturer/materials/${m.id}`, {
+        method: "DELETE",
+      });
+      setMaterialStatus("Material deleted");
+      await load();
+    } catch (err) {
+      setMaterialStatus(err.message || "Delete failed");
     }
   }
 
@@ -249,21 +340,130 @@ export default function ManufacturerPage() {
           <section className="surface-card overflow-hidden">
             <div className="border-b border-line px-5 py-3.5">
               <h2 className="ops-section-title">Materials</h2>
+              <p className="mt-1 text-sm text-muted">
+                Admin-owned pricing catalog — empty until you add metals. Nothing is hardcoded.
+              </p>
             </div>
             <div className="divide-y divide-line">
+              {(data.materials || []).length === 0 ? (
+                <p className="px-5 py-4 text-sm text-muted">No materials yet.</p>
+              ) : null}
               {(data.materials || []).map((m) => (
-                <div key={m.id || m.material_key} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
+                <div
+                  key={m.id || m.material_key}
+                  className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm"
+                >
                   <div>
                     <p className="font-medium text-ink">{m.display_name}</p>
                     <p className="text-muted">
-                      Metal {m.metal_price_per_gram}/{m.unit} · making {m.making_charge_per_gram}/{m.unit} · stock{" "}
-                      {m.stock_grams ?? "—"}
+                      Metal {m.metal_price_per_gram}/{m.unit} · making {m.making_charge_per_gram}/
+                      {m.unit} · stock {m.stock_grams ?? "—"}
                     </p>
                   </div>
-                  <Badge>{m.material_key}</Badge>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge>{m.material_key}</Badge>
+                    <Button size="sm" variant="secondary" onClick={() => editMaterial(m)}>
+                      Edit
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => deleteMaterial(m)}>
+                      Delete
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
+            <form className="space-y-3 border-t border-line px-5 py-4" onSubmit={saveMaterial}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  label="Key"
+                  required
+                  value={materialForm.material_key}
+                  onChange={(e) =>
+                    setMaterialForm((f) => ({ ...f, material_key: e.target.value }))
+                  }
+                  placeholder="18k"
+                />
+                <Input
+                  label="Display name"
+                  required
+                  value={materialForm.display_name}
+                  onChange={(e) =>
+                    setMaterialForm((f) => ({ ...f, display_name: e.target.value }))
+                  }
+                  placeholder="18K gold"
+                />
+                <Input
+                  label="Metal price / g"
+                  type="number"
+                  step="0.01"
+                  value={materialForm.metal_price_per_gram}
+                  onChange={(e) =>
+                    setMaterialForm((f) => ({
+                      ...f,
+                      metal_price_per_gram: e.target.value,
+                    }))
+                  }
+                />
+                <Input
+                  label="Making charge / g"
+                  type="number"
+                  step="0.01"
+                  value={materialForm.making_charge_per_gram}
+                  onChange={(e) =>
+                    setMaterialForm((f) => ({
+                      ...f,
+                      making_charge_per_gram: e.target.value,
+                    }))
+                  }
+                />
+                <Input
+                  label="Stock grams"
+                  type="number"
+                  value={materialForm.stock_grams}
+                  onChange={(e) =>
+                    setMaterialForm((f) => ({ ...f, stock_grams: e.target.value }))
+                  }
+                />
+                <Input
+                  label="Low-stock threshold"
+                  type="number"
+                  value={materialForm.low_stock_threshold_grams}
+                  onChange={(e) =>
+                    setMaterialForm((f) => ({
+                      ...f,
+                      low_stock_threshold_grams: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="submit" size="sm">
+                  {editingMaterialId ? "Save material" : "Add material"}
+                </Button>
+                {editingMaterialId ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setEditingMaterialId(null);
+                      setMaterialForm({
+                        material_key: "",
+                        display_name: "",
+                        metal_price_per_gram: "",
+                        making_charge_per_gram: "",
+                        stock_grams: "",
+                        low_stock_threshold_grams: "",
+                        currency: "AED",
+                      });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                ) : null}
+              </div>
+              {materialStatus ? <p className="text-sm text-muted">{materialStatus}</p> : null}
+            </form>
           </section>
 
           <section className="surface-card overflow-hidden">

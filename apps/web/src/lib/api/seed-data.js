@@ -808,101 +808,74 @@ export function buildAiInsights(metrics = {}) {
   const newLeads = Number(metrics.new_leads ?? metrics.leads ?? 0);
   const contacts = Number(metrics.contacts ?? 0);
   const awaiting = Number(metrics.content_awaiting_approval ?? 0);
-  const unanswered = Number(metrics.unanswered_conversations ?? 0);
 
-  const channelMix = [
-    { channel: "instagram", key: "ig", share: 0.38, color: "var(--color-brand-brown)" },
-    { channel: "whatsapp", key: "wa", share: 0.28, color: "var(--color-brand-brown-dark)" },
-    { channel: "facebook", key: "fb", share: 0.18, color: "var(--color-brand-champagne)" },
-    { channel: "tiktok", key: "tt", share: 0.1, color: "var(--color-brand-sand)" },
-    { channel: "telegram", key: "tg", share: 0.06, color: "var(--color-muted)" },
-  ];
+  const channelColors = {
+    instagram: "var(--color-brand-brown)",
+    whatsapp: "var(--color-brand-brown-dark)",
+    facebook: "var(--color-brand-champagne)",
+    messenger: "var(--color-brand-champagne)",
+    tiktok: "var(--color-brand-sand)",
+    telegram: "var(--color-muted)",
+    email: "var(--color-muted)",
+    webchat: "var(--color-muted)",
+    linkedin: "var(--color-brand-sand)",
+  };
 
+  // Prefer real per-channel counts from live conversations — never invent shares.
+  const liveByChannel =
+    metrics.conversations_by_channel &&
+    typeof metrics.conversations_by_channel === "object"
+      ? /** @type {Record<string, number>} */ (metrics.conversations_by_channel)
+      : {};
+  const channelKeys = Object.keys(liveByChannel).length
+    ? Object.keys(liveByChannel)
+    : ["instagram", "whatsapp", "facebook", "tiktok", "telegram"];
   const conversationsByChannel = Object.fromEntries(
-    channelMix.map((c) => [
-      c.channel,
-      totalConv > 0 ? Math.max(0, Math.round(totalConv * c.share)) : 0,
-    ]),
+    channelKeys.map((ch) => [ch, Number(liveByChannel[ch] || 0) || 0]),
   );
 
+  // Snapshot-only volume (no fabricated weekday series). Place current totals on today.
   const volumeTrend = [];
-  const responseHistogram = [];
-  const leadFunnel = [];
   for (let i = 13; i >= 0; i -= 1) {
     const d = new Date(Date.now() - i * 86400000);
     const label = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-    const w = seriesWeight(13 - i);
-    const inbound =
-      totalConv > 0 ? Math.max(0, Math.round((totalConv / 7) * w)) : 0;
-    const aiReplies =
-      totalConv > 0
-        ? Math.max(0, Math.round(inbound * (aiHandled / totalConv)))
-        : 0;
+    const isToday = i === 0;
     volumeTrend.push({
       day: label,
-      inbound,
-      ai_replies: aiReplies,
-      human_handoffs:
-        totalConv > 0
-          ? Math.max(0, Math.round(inbound * (human / totalConv)))
-          : 0,
+      inbound: isToday ? totalConv : 0,
+      ai_replies: isToday ? aiHandled : 0,
+      human_handoffs: isToday ? human : 0,
     });
   }
 
-  // Response-time histogram buckets — scaled from open/unanswered load when present
-  const loadFactor =
-    openConv + unanswered > 0
-      ? Math.max(0.6, Math.min(1.8, (openConv + unanswered) / 4))
-      : 0;
-  const buckets = [
-    { bucket: "0–2m", minutes: 1 },
-    { bucket: "2–5m", minutes: 3.5 },
-    { bucket: "5–15m", minutes: 10 },
-    { bucket: "15–60m", minutes: 37 },
-    { bucket: "1–4h", minutes: 150 },
-    { bucket: "4h+", minutes: 300 },
+  // Honest empty histogram until latency events exist.
+  const responseHistogram = [
+    { bucket: "0–2m", count: 0 },
+    { bucket: "2–5m", count: 0 },
+    { bucket: "5–15m", count: 0 },
+    { bucket: "15–60m", count: 0 },
+    { bucket: "1–4h", count: 0 },
+    { bucket: "4h+", count: 0 },
   ];
-  const histWeights = [0.32, 0.28, 0.18, 0.12, 0.07, 0.03];
-  buckets.forEach((b, idx) => {
-    responseHistogram.push({
-      bucket: b.bucket,
-      count:
-        aiHandled > 0
-          ? Math.max(0, Math.round(aiHandled * histWeights[idx] * loadFactor))
-          : 0,
-    });
-  });
 
   const modePie = [
-    {
-      name: "AI mode",
-      value: aiHandled,
-      color: "#9a7958",
-    },
-    {
-      name: "Human mode",
-      value: human,
-      color: "#70563f",
-    },
-    {
-      name: "Open / queued",
-      value: openConv,
-      color: "#c7ae8a",
-    },
+    { name: "AI mode", value: aiHandled, color: "#9a7958" },
+    { name: "Human mode", value: human, color: "#70563f" },
+    { name: "Open / queued", value: openConv, color: "#c7ae8a" },
   ];
 
-  const channelBars = channelMix.map((c) => ({
-    channel: c.channel,
-    conversations: conversationsByChannel[c.channel],
-    color: c.color,
+  const channelBars = channelKeys.map((channel) => ({
+    channel,
+    conversations: conversationsByChannel[channel] || 0,
+    color: channelColors[channel] || "var(--color-muted)",
   }));
 
-  leadFunnel.push(
+  const leadFunnel = [
     { stage: "Contacts", value: contacts },
     { stage: "New leads", value: newLeads },
     { stage: "Qualified", value: qualified },
     { stage: "In review", value: awaiting },
-  );
+  ];
 
   return {
     range_days: 14,
@@ -913,7 +886,7 @@ export function buildAiInsights(metrics = {}) {
     response_histogram: responseHistogram,
     automation_mix: modePie,
     lead_funnel: leadFunnel,
-    summary: "Channel mix, volume, response time, and automation activity.",
+    summary: "Live channel mix and automation activity. Charts stay zero until events exist.",
   };
 }
 

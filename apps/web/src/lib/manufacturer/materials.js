@@ -4,6 +4,7 @@
 
 import {
   WORKSPACE_ID,
+  deleteManufacturerRow,
   listManufacturerRows,
   newManufacturerId,
   nowIso,
@@ -73,36 +74,43 @@ export function shapeManufacturerMaterial(input = {}) {
   };
 }
 
+/**
+ * List materials — empty by default (admin-owned). DEFAULT_MATERIALS is a
+ * template helper only; never auto-written into Production.
+ */
 export async function ensureManufacturerMaterials() {
   const listed = await listManufacturerRows(TABLE, {
     limit: 50,
     orderBy: "display_name",
     ascending: true,
   });
-  if (listed.data.length) {
-    return {
-      data: listed.data.map((r) => shapeManufacturerMaterial(r)),
-      storage: listed.storage,
-    };
-  }
-  for (const mat of DEFAULT_MATERIALS) {
-    await upsertManufacturerRow(
-      TABLE,
-      shapeManufacturerMaterial({
-        id: `mfrmat-${mat.material_key}`,
-        ...mat,
-      }),
-    );
-  }
-  const again = await listManufacturerRows(TABLE, {
-    limit: 50,
-    orderBy: "display_name",
-    ascending: true,
-  });
   return {
-    data: again.data.map((r) => shapeManufacturerMaterial(r)),
-    storage: again.storage,
+    data: listed.data.map((r) => shapeManufacturerMaterial(r)),
+    storage: listed.storage,
   };
+}
+
+/**
+ * @param {Partial<object>} input
+ */
+export async function upsertManufacturerMaterial(input) {
+  const shaped = shapeManufacturerMaterial({
+    ...input,
+    id: input.id || `mfrmat-${String(input.material_key || "custom")}`,
+    updated_at: nowIso(),
+  });
+  const result = await upsertManufacturerRow(TABLE, shaped);
+  return {
+    material: shapeManufacturerMaterial(result.row || shaped),
+    storage: result.storage,
+  };
+}
+
+/**
+ * @param {string} id
+ */
+export async function deleteManufacturerMaterial(id) {
+  return deleteManufacturerRow(TABLE, String(id || "").trim());
 }
 
 /**

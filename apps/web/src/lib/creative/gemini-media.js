@@ -8,6 +8,25 @@ import { hasGeminiEnv } from "@/lib/integrations/env-presence";
 
 const DEFAULT_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
+/** Soft-warn creative/status after Free Tier / billing 429s (process-local). */
+let lastGeminiQuotaAt = null;
+let lastGeminiQuotaMessage = "";
+
+export function recordGeminiQuotaHit(message = "") {
+  lastGeminiQuotaAt = Date.now();
+  lastGeminiQuotaMessage = String(message || "Gemini quota / billing limit").slice(0, 240);
+}
+
+export function getGeminiQuotaWarning() {
+  if (!lastGeminiQuotaAt) return null;
+  // Surface for 6 hours so status does not claim "Live AI" after Free Tier 429.
+  if (Date.now() - lastGeminiQuotaAt > 6 * 60 * 60 * 1000) return null;
+  return {
+    at: new Date(lastGeminiQuotaAt).toISOString(),
+    message: lastGeminiQuotaMessage || "Gemini quota exceeded (e.g. Free Tier 429).",
+  };
+}
+
 /** Top Gemini image models (Nano Banana family) — Interactions API first. */
 export const GEMINI_IMAGE_MODELS = [
   "gemini-nano-banana-2.1",
@@ -519,6 +538,7 @@ export async function generateGeminiImage(input) {
     }
     errors.push(`gc:${model}: ${gc.error}`);
     if (/429|quota|billing/i.test(String(gc.error || ""))) {
+      recordGeminiQuotaHit(gc.error);
       return {
         ok: false,
         error: `Gemini image quota exceeded for ${model}. Enable billing / raise limits on the Google AI Studio key used as GEMINI_API_KEY. (${gc.error})`,

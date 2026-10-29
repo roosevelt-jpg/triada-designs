@@ -288,15 +288,16 @@ async function readLocal() {
   try {
     const raw = await readFile(LOCAL_FILE, "utf8");
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed?.data) && parsed.data.length) {
+    if (Array.isArray(parsed?.data)) {
       return parsed.data.map((row) => shapeRecord(row));
     }
+    if (Array.isArray(parsed)) {
+      return parsed.map((row) => shapeRecord(row));
+    }
   } catch {
-    /* seed */
+    /* empty default — no fake DM seed */
   }
-  const seeded = seedConversations();
-  await writeLocal(seeded);
-  return seeded;
+  return [];
 }
 
 /** @param {ConversationRecord[]} rows */

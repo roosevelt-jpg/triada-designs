@@ -3,15 +3,19 @@
  * Empty workspaces return zeros — no fabricated growth placeholders.
  */
 
-import { buildIntegrationsList, buildLeads } from "@/lib/api/seed-data";
+import { buildIntegrationsList } from "@/lib/api/seed-data";
 import { listAgents, listTasks } from "@/lib/agents/agent-store";
-import { getContentItems } from "@/lib/content-schedule-store";
+import {
+  getContentItems,
+  hydrateContentFromSupabase,
+} from "@/lib/content-schedule-store";
 import { countContacts } from "@/lib/crm/contacts-store";
 import {
   listConversations,
   listUnansweredSocialDms,
 } from "@/lib/crm/conversations-store";
 import { listProducts } from "@/lib/commerce/products-store";
+import { listLeads } from "@/lib/crm/leads-store";
 
 /**
  * @param {Array<{ status?: string, automation_mode?: string, last_inbound_at?: string|null, unanswered?: boolean }>} conversations
@@ -66,7 +70,7 @@ function leadMetrics(leads) {
  * }} [integrationOpts]
  */
 export async function collectLiveDashboardMetrics(integrationOpts = {}) {
-  const [contacts, tasks, products, agents, conversations, unansweredSocial] =
+  const [contacts, tasks, products, agents, conversations, unansweredSocial, leadsListed] =
     await Promise.all([
       countContacts().catch(() => ({ count: 0 })),
       listTasks().catch(() => ({ data: [] })),
@@ -74,9 +78,11 @@ export async function collectLiveDashboardMetrics(integrationOpts = {}) {
       listAgents().catch(() => ({ data: [] })),
       listConversations().catch(() => []),
       listUnansweredSocialDms().catch(() => []),
+      listLeads().catch(() => ({ data: [] })),
+      hydrateContentFromSupabase().catch(() => null),
     ]);
 
-  const leads = buildLeads();
+  const leads = leadsListed.data || [];
   const conv = conversationMetrics(
     conversations,
     Array.isArray(unansweredSocial) ? unansweredSocial.length : 0,
@@ -88,6 +94,13 @@ export async function collectLiveDashboardMetrics(integrationOpts = {}) {
   const openTasks = (tasks.data || []).filter((t) => t.status === "open").length;
   const awaitingApproval = contentItems.filter((c) => c.status === "in_review").length;
 
+  /** @type {Record<string, number>} */
+  const conversations_by_channel = {};
+  for (const c of conversations) {
+    const ch = String(c.channel || "unknown").toLowerCase();
+    conversations_by_channel[ch] = (conversations_by_channel[ch] || 0) + 1;
+  }
+
   return {
     ...conv,
     contacts: Number(contacts.count) || 0,
@@ -95,6 +108,7 @@ export async function collectLiveDashboardMetrics(integrationOpts = {}) {
     open_tasks: openTasks,
     content_awaiting_approval: awaitingApproval,
     integration_failures: integrations.filter((i) => i.last_error_code).length,
+    conversations_by_channel,
     // Extra live counts for analytics (not all shown as Overview cards)
     messages: conversations.reduce(
       (sum, c) => sum + (Array.isArray(c.messages) ? c.messages.length : 0),

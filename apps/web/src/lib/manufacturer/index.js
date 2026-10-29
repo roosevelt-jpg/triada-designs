@@ -6,6 +6,8 @@ export {
 } from "@/lib/manufacturer/contacts";
 export {
   ensureManufacturerMaterials,
+  upsertManufacturerMaterial,
+  deleteManufacturerMaterial,
   estimateManufacturerCost,
   checkLowStock,
   DEFAULT_MATERIALS,

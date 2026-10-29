@@ -5,7 +5,6 @@
 
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { hasSupabaseAdminCredentials } from "@/lib/supabase/config";
-import { buildContacts } from "@/lib/api/seed-data";
 import { normalizePhoneToE164 } from "./phone-e164.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -99,33 +98,15 @@ export function shapeContact(input = {}) {
   };
 }
 
-/** Seed contacts → shaped records (first load when store empty). */
-function seedRecords() {
-  return buildContacts().map((c) =>
-    shapeContact({
-      id: c.id,
-      workspace_id: c.workspace_id,
-      name: c.display_name,
-      email: c.primary_email,
-      phone: c.primary_phone,
-      source: "seed",
-      lifecycle_status: "customer",
-      updated_at: c.updated_at,
-      created_at: c.updated_at,
-      metadata: { channel_hints: c.channel_hints || [] },
-    }),
-  );
-}
-
 /** @returns {Promise<ContactRecord[]>} */
 async function readLocal() {
   try {
     const raw = await readFile(LOCAL_FILE, "utf8");
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return seedRecords();
+    if (!Array.isArray(parsed)) return [];
     return parsed.map((row) => shapeContact(row));
   } catch {
-    return seedRecords();
+    return [];
   }
 }
 
@@ -158,10 +139,7 @@ export async function listContacts(opts = {}) {
       const { data, error } = await query;
       if (!error && Array.isArray(data)) {
         let rows = data.map((row) => shapeContact(row));
-        if (!rows.length) {
-          rows = seedRecords();
-          await upsertContacts(rows);
-        }
+        // Empty by default — never auto-seed fake contacts into Production.
         rows = filterContacts(rows, q, whatsappReadyOnly);
         return { mode: "supabase", data: rows };
       }

@@ -5,28 +5,49 @@
  */
 
 import {
-  PRODUCTS,
   WORKSPACE,
   buildAgents,
   buildAnalyticsPayload,
-  buildContent,
   buildConversations,
   buildDashboard,
   buildIntegrationsHealth,
   buildIntegrationsList,
-  buildLeads,
-  buildWorkflows,
   paginate,
 } from "@/lib/api/seed-data";
 import {
+  deleteContent,
   findContent,
   getContentItems,
   getPublications,
+  hydrateContentFromSupabase,
   listPendingApproval,
   listPendingReview,
   listScheduled,
   patchContent,
 } from "@/lib/content-schedule-store";
+import {
+  appendAutomationRun,
+  deleteWorkflow,
+  getAutomationRun,
+  getWorkflow,
+  listAutomationRuns,
+  listWorkflows,
+  upsertWorkflow,
+} from "@/lib/automations/automations-store";
+import { appendAuditEvent, listAuditEvents } from "@/lib/audit/audit-store";
+import {
+  deleteKnowledge,
+  listKnowledge,
+  upsertKnowledge,
+} from "@/lib/knowledge/knowledge-store";
+import {
+  deleteLead,
+  getLead,
+  listLeads,
+  listOpportunities,
+  presentLead,
+  upsertLead,
+} from "@/lib/crm/leads-store";
 import {
   notifyAdminPendingReview,
   syncPendingReviewNotifications,
@@ -61,7 +82,11 @@ import {
   saveAndMaybePublishProduct,
   syncShopifyCatalogInbound,
 } from "@/lib/commerce/product-channel-publish";
-import { listProducts, getProduct } from "@/lib/commerce/products-store";
+import {
+  deleteProduct,
+  getProduct,
+  listProducts,
+} from "@/lib/commerce/products-store";
 import {
   deleteService,
   getService,
@@ -167,6 +192,7 @@ import {
   executeJewelleryWorkflowAction,
   joinWaitlist,
   jewelleryPolicies,
+  resolveJewelleryPolicies,
   listAbandonmentEvents,
   listAfterSaleJobs,
   listCustomPieces,
@@ -263,10 +289,9 @@ import {
   whereIsMyOrder,
 } from "@/lib/manufacturer";
 
-/** @type {{ timezone: string, workflows: ReturnType<typeof buildWorkflows>, agents: Awaited<ReturnType<typeof listAgents>>["data"] }} */
+/** @type {{ timezone: string, agents: Awaited<ReturnType<typeof listAgents>>["data"] }} */
 const runtimeState = {
   timezone: WORKSPACE.timezone,
-  workflows: buildWorkflows(),
   agents: buildAgents(),
 };
 
@@ -740,6 +765,19 @@ export async function dispatchV1(method, segments, request, body) {
     });
   }
 
+  if (path.match(/^products\/[^/]+$/) && m === "DELETE") {
+    const id = segments[1];
+    const result = await deleteProduct(id);
+    if (!result.ok) return jsonErr(result.message || "Delete failed", 400);
+    await appendAuditEvent({
+      action: "products.delete",
+      actor: "admin",
+      entity_type: "product",
+      entity_id: id,
+    }).catch(() => {});
+    return jsonOk({ ok: true, id, mode: result.mode, source: "next_dual_run" });
+  }
+
   if (path.match(/^products\/[^/]+\/publish$/) && m === "POST") {
     const id = segments[1];
     const input =
@@ -811,6 +849,7 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "content" && m === "GET") {
+    await hydrateContentFromSupabase();
     return jsonOk(paginate(getContentItems()));
   }
 
@@ -1197,39 +1236,42 @@ export async function dispatchV1(method, segments, request, body) {
   if (path === "publications" && m === "GET") {
     const pubs = getPublications();
     return jsonOk({
-      data:
-        pubs.length > 0
-          ? pubs
-          : [
-              {
-                id: "pub-1",
-                content_item_id: "content-tides",
-                channel: "facebook",
-                adapter: "meta_page",
-                status: "scheduled",
-                scheduled_for: new Date(Date.now() + 86400000).toISOString(),
-              },
-            ],
+      data: pubs,
     });
   }
 
   if (path === "creative/status" && m === "GET") {
-    // Next dual-run: Gemini key drives live image + video pixels (Omni / Imagen cascade).
-    const live = hasGeminiEnv();
-    const mode = live ? "gemini" : "local_sim";
+    const { getGeminiQuotaWarning } = await import("@/lib/creative/gemini-media");
+    const keyed = hasGeminiEnv();
+    const quota = getGeminiQuotaWarning();
+    // Soft-warn: key present but recent Free Tier / billing 429 — do not claim Live AI.
+    const live = keyed && !quota;
+    const mode = live ? "gemini" : keyed ? "quota_limited" : "local_sim";
+    const warn = quota
+      ? "Media generation hit a provider limit. Pixels stay local until billing/quota is raised."
+      : null;
     return jsonOk({
       mode,
-      mode_label: creativeModeLabel(mode),
-      has_gemini: live,
+      mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
+      has_gemini: keyed,
+      quota_warning: quota,
       image: {
-        mode,
-        mode_label: creativeModeLabel(mode),
-        message: live ? "Image generation is connected." : "Image generation is local.",
+        mode: live ? "gemini" : "local_sim",
+        mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
+        message: warn
+          ? warn
+          : live
+            ? "Image generation is connected."
+            : "Image generation is local.",
       },
       video: {
-        mode,
-        mode_label: creativeModeLabel(mode),
-        message: live ? "Video generation is connected." : "Video generation is local.",
+        mode: live ? "gemini" : "local_sim",
+        mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
+        message: warn
+          ? warn
+          : live
+            ? "Video generation is connected."
+            : "Video generation is local.",
       },
       resize_engine: "triada",
       summary: "Generate, preview, approve, schedule, and publish.",
@@ -2529,7 +2571,57 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "leads" && m === "GET") {
-    return jsonOk({ data: buildLeads() });
+    const listed = await listLeads();
+    return jsonOk({
+      data: listed.data.map(presentLead),
+      mode: listed.mode,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "leads" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await upsertLead(input);
+    await appendAuditEvent({
+      action: "leads.create",
+      actor: "admin",
+      entity_type: "lead",
+      entity_id: result.lead.id,
+    }).catch(() => {});
+    return jsonOk(
+      { ...presentLead(result.lead), mode: result.mode, created: result.created },
+      201,
+    );
+  }
+
+  if (path.match(/^leads\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
+    const existing = await getLead(segments[1]);
+    if (!existing) return jsonErr("Lead not found", 404);
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await upsertLead({ ...existing, ...input, id: existing.id });
+    return jsonOk({
+      ...presentLead(result.lead),
+      mode: result.mode,
+      created: false,
+    });
+  }
+
+  if (path.match(/^leads\/[^/]+$/) && m === "DELETE") {
+    const result = await deleteLead(segments[1]);
+    if (!result.ok) return jsonErr(result.message || "Delete failed", 400);
+    await appendAuditEvent({
+      action: "leads.delete",
+      actor: "admin",
+      entity_type: "lead",
+      entity_id: segments[1],
+    }).catch(() => {});
+    return jsonOk({ ok: true, id: segments[1], mode: result.mode });
   }
 
   if (path.match(/^leads\/[^/]+\/sync-zoho$/) && m === "POST") {
@@ -2542,26 +2634,19 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "opportunities" && m === "GET") {
-    return jsonOk({
-      data: [
-        {
-          id: "opp-1",
-          title: "Custom 18K set",
-          stage: "proposal",
-          value: 4200,
-          currency: "AED",
-        },
-      ],
-    });
+    const listed = await listOpportunities();
+    return jsonOk({ data: listed.data, mode: listed.mode });
   }
 
   // ---- automations ----
   if (path === "automations" && m === "GET") {
+    const listed = await listWorkflows();
     return jsonOk({
-      data: runtimeState.workflows.map((w) => {
+      data: listed.data.map((w) => {
         const { definition, ...rest } = w;
         return rest;
       }),
+      mode: listed.mode,
       meta: {
         node_types: ["trigger", "action", "condition"],
         trigger_types: ["message_inbound", "schedule", "lead_stage_changed", "shopify_order"],
@@ -2579,6 +2664,18 @@ export async function dispatchV1(method, segments, request, body) {
     });
   }
 
+  if (path === "automations" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await upsertWorkflow(input);
+    return jsonOk(
+      { workflow: result.workflow, mode: result.mode, created: result.created },
+      201,
+    );
+  }
+
   if (path === "automations/validate" && m === "POST") {
     return jsonOk({
       valid: true,
@@ -2587,7 +2684,7 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path.match(/^automations\/[^/]+$/) && m === "GET") {
-    const wf = runtimeState.workflows.find((w) => w.id === segments[1]);
+    const wf = await getWorkflow(segments[1]);
     if (!wf) return jsonErr("Workflow not found.", 404);
     return jsonOk({
       workflow: wf,
@@ -2609,44 +2706,57 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path.match(/^automations\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
-    const idx = runtimeState.workflows.findIndex((w) => w.id === segments[1]);
-    if (idx < 0) return jsonErr("Workflow not found.", 404);
-    const current = runtimeState.workflows[idx];
+    const current = await getWorkflow(segments[1]);
+    if (!current) return jsonErr("Workflow not found.", 404);
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
     const next = {
       ...current,
-      ...(body && typeof body === "object" ? body : {}),
+      ...input,
       id: current.id,
       updated_at: new Date().toISOString(),
-      version: (current.version || 1) + (body?.definition ? 1 : 0),
+      version: (current.version || 1) + (input.definition ? 1 : 0),
     };
-    if (body?.definition && current.status === "active") {
+    if (input.definition && current.status === "active") {
       next.status = "draft";
       next.activated_at = null;
     }
-    runtimeState.workflows[idx] = next;
+    const saved = await upsertWorkflow(next);
     return jsonOk({
-      workflow: next,
+      workflow: saved.workflow,
       validation: { valid: true, errors: [], warnings: [] },
+      mode: saved.mode,
     });
   }
 
+  if (path.match(/^automations\/[^/]+$/) && m === "DELETE") {
+    const result = await deleteWorkflow(segments[1]);
+    if (!result.ok) return jsonErr(result.message || "Delete failed", 400);
+    return jsonOk({ ok: true, id: segments[1], mode: result.mode });
+  }
+
   if (path.match(/^automations\/[^/]+\/activate$/) && m === "POST") {
-    const wf = runtimeState.workflows.find((w) => w.id === segments[1]);
+    const wf = await getWorkflow(segments[1]);
     if (!wf) return jsonErr("Workflow not found.", 404);
-    wf.status = "active";
-    wf.activated_at = new Date().toISOString();
-    return jsonOk({ workflow: wf, ok: true });
+    const saved = await upsertWorkflow({
+      ...wf,
+      status: "active",
+      activated_at: new Date().toISOString(),
+    });
+    return jsonOk({ workflow: saved.workflow, ok: true, mode: saved.mode });
   }
 
   if (path.match(/^automations\/[^/]+\/deactivate$/) && m === "POST") {
-    const wf = runtimeState.workflows.find((w) => w.id === segments[1]);
+    const wf = await getWorkflow(segments[1]);
     if (!wf) return jsonErr("Workflow not found.", 404);
-    wf.status = "disabled";
-    return jsonOk({ workflow: wf, ok: true });
+    const saved = await upsertWorkflow({ ...wf, status: "disabled" });
+    return jsonOk({ workflow: saved.workflow, ok: true, mode: saved.mode });
   }
 
   if (path.match(/^automations\/[^/]+\/(dry-run|run)$/) && m === "POST") {
-    const wf = runtimeState.workflows.find((w) => w.id === segments[1]);
+    const wf = await getWorkflow(segments[1]);
     if (!wf) return jsonErr("Automation not found.", 404);
     const dryRun = segments[2] === "dry-run";
     const input =
@@ -2792,43 +2902,29 @@ export async function dispatchV1(method, segments, request, body) {
     }
 
     const failed = steps.some((s) => s.ok === false);
+    const runMode = dryRun ? "dry_run" : "live";
+    const run = await appendAutomationRun({
+      id: `run-${Date.now()}`,
+      workflow_id: segments[1],
+      status: failed ? "failed" : "completed",
+      mode: runMode,
+      steps,
+    });
     return jsonOk({
       ok: !failed,
-      run: {
-        id: `run-${Date.now()}`,
-        workflow_id: segments[1],
-        status: failed ? "failed" : "completed",
-        mode: dryRun ? "dry_run" : "live",
-        steps,
-        media_path: true,
-      },
+      run: { ...run, media_path: true },
     });
   }
 
   if (path.match(/^automations\/[^/]+\/runs$/) && m === "GET") {
-    return jsonOk({
-      data: [
-        {
-          id: "run-seed-1",
-          workflow_id: segments[1],
-          status: "completed",
-          mode: "live",
-          started_at: new Date(Date.now() - 3600000).toISOString(),
-        },
-      ],
-    });
+    const listed = await listAutomationRuns(segments[1]);
+    return jsonOk({ data: listed.data });
   }
 
   if (path.match(/^automations\/[^/]+\/runs\/[^/]+$/) && m === "GET") {
-    return jsonOk({
-      run: {
-        id: segments[3],
-        workflow_id: segments[1],
-        status: "completed",
-        mode: "live",
-        steps: [],
-      },
-    });
+    const run = await getAutomationRun(segments[1], segments[3]);
+    if (!run) return jsonErr("Run not found.", 404);
+    return jsonOk({ run });
   }
 
   // ---- channel templates ----
@@ -3373,40 +3469,75 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "knowledge" && m === "GET") {
-    const training = await listTrainingDocs();
+    const [listed, training] = await Promise.all([
+      listKnowledge(),
+      listTrainingDocs(),
+    ]);
+    const data = [
+      ...listed.data,
+      ...training.data.map((doc) => ({
+        id: doc.id,
+        title: doc.title,
+        source_type: "training_doc",
+        status: doc.status,
+        body: doc.body,
+        tags: doc.tags,
+        category: doc.category,
+        updated_at: doc.updated_at,
+        read_only: true,
+      })),
+    ];
     return jsonOk({
-      data: [
-        {
-          id: "ks-1",
-          title: "Materials & making time",
-          source_type: "faq",
-          status: "published",
-          body: "Silver with gold plating; 14K/18K on request. ~7 days to make. Prices from approved catalog only.",
-          tags: ["materials", "making"],
-          updated_at: new Date().toISOString(),
-        },
-        {
-          id: "ks-2",
-          title: "Care & plating",
-          source_type: "faq",
-          status: "published",
-          body: "Store dry, wipe gently after wear, avoid harsh chemicals.",
-          tags: ["care"],
-          updated_at: new Date().toISOString(),
-        },
-        ...training.data.map((doc) => ({
-          id: doc.id,
-          title: doc.title,
-          source_type: "training_doc",
-          status: doc.status,
-          body: doc.body,
-          tags: doc.tags,
-          category: doc.category,
-          updated_at: doc.updated_at,
-        })),
-      ],
+      data,
+      mode: listed.mode,
       brand: { name: BRAND.name, logo_url: brandLogoUrl() },
     });
+  }
+
+  if (path === "knowledge" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    if (String(input.source_type || "faq") === "training_doc") {
+      return jsonErr("Create training docs on /agents/training.", 422);
+    }
+    const result = await upsertKnowledge(input);
+    await appendAuditEvent({
+      action: "knowledge.create",
+      actor: "admin",
+      entity_type: "knowledge",
+      entity_id: result.knowledge.id,
+    }).catch(() => {});
+    return jsonOk(
+      { ...result.knowledge, mode: result.mode, created: result.created },
+      201,
+    );
+  }
+
+  if (path.match(/^knowledge\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await upsertKnowledge({ ...input, id: segments[1] });
+    return jsonOk({
+      ...result.knowledge,
+      mode: result.mode,
+      created: result.created,
+    });
+  }
+
+  if (path.match(/^knowledge\/[^/]+$/) && m === "DELETE") {
+    const result = await deleteKnowledge(segments[1]);
+    if (!result.ok) return jsonErr(result.message || "Delete failed", 400);
+    await appendAuditEvent({
+      action: "knowledge.delete",
+      actor: "admin",
+      entity_type: "knowledge",
+      entity_id: segments[1],
+    }).catch(() => {});
+    return jsonOk({ ok: true, id: segments[1], mode: result.mode });
   }
 
   if (path === "calendar" && m === "GET") {
@@ -3664,16 +3795,8 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "audit-logs" && m === "GET") {
-    return jsonOk({
-      data: [
-        {
-          id: "audit-1",
-          action: "auth.login",
-          actor: "info@triada-designs.com",
-          at: new Date().toISOString(),
-        },
-      ],
-    });
+    const listed = await listAuditEvents({ limit: 100 });
+    return jsonOk({ data: listed.data, mode: listed.mode });
   }
 
   // ---- jewellery ops (Next-native runners; no Laravel) ----
@@ -3682,7 +3805,7 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "jewellery-ops/policies" && m === "GET") {
-    return jsonOk({ data: jewelleryPolicies(), ok: true });
+    return jsonOk({ data: await resolveJewelleryPolicies(), ok: true });
   }
 
   if (path === "jewellery-ops/answer-bot" && m === "POST") {
@@ -3705,7 +3828,7 @@ export async function dispatchV1(method, segments, request, body) {
       detected_language_name: result.detected_language_name,
       language_rtl: result.language_rtl,
       handoff: false,
-      policies: jewelleryPolicies(),
+      policies: await resolveJewelleryPolicies(),
     });
   }
 
@@ -3910,6 +4033,42 @@ export async function dispatchV1(method, segments, request, body) {
     const result = await deleteInvoiceDoc(id);
     if (!result.ok) return jsonErr(result.message || "Delete failed", 400);
     return jsonOk(result);
+  }
+
+  if (path === "jewellery-ops/manufacturer/materials" && m === "GET") {
+    const { ensureManufacturerMaterials } = await import("@/lib/manufacturer");
+    const listed = await ensureManufacturerMaterials();
+    return jsonOk({ data: listed.data, storage: listed.storage });
+  }
+
+  if (path === "jewellery-ops/manufacturer/materials" && m === "POST") {
+    const { upsertManufacturerMaterial } = await import("@/lib/manufacturer");
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await upsertManufacturerMaterial(input);
+    return jsonOk({ material: result.material, storage: result.storage }, 201);
+  }
+
+  if (
+    path.match(/^jewellery-ops\/manufacturer\/materials\/[^/]+$/) &&
+    (m === "PUT" || m === "PATCH")
+  ) {
+    const { upsertManufacturerMaterial } = await import("@/lib/manufacturer");
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await upsertManufacturerMaterial({ ...input, id: segments[3] });
+    return jsonOk({ material: result.material, storage: result.storage });
+  }
+
+  if (path.match(/^jewellery-ops\/manufacturer\/materials\/[^/]+$/) && m === "DELETE") {
+    const { deleteManufacturerMaterial } = await import("@/lib/manufacturer");
+    const result = await deleteManufacturerMaterial(segments[3]);
+    if (!result.ok) return jsonErr(result.message || "Delete failed", 400);
+    return jsonOk({ ok: true, id: segments[3], storage: result.storage });
   }
 
   if (path === "jewellery-ops/manufacturer" && m === "GET") {

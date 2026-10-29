@@ -53,14 +53,8 @@ export function shapeManufacturerContact(input = {}) {
   };
 }
 
-async function ensureDefaultContact() {
-  const listed = await listManufacturerRows(TABLE, { limit: 50 });
-  if (listed.data.length) return listed;
-  const seeded = shapeManufacturerContact({
-    id: "mfrcontact-primary",
-    ...DEFAULT_CONTACT,
-  });
-  await upsertManufacturerRow(TABLE, seeded);
+/** Empty by default — admin adds contacts. DEFAULT_CONTACT is a template only. */
+async function listContactsRaw() {
   return listManufacturerRows(TABLE, { limit: 50 });
 }
 
@@ -78,7 +72,7 @@ async function clearOtherPrimaries(keepId) {
 }
 
 export async function listManufacturerContacts() {
-  const listed = await ensureDefaultContact();
+  const listed = await listContactsRaw();
   return {
     data: listed.data.map((r) => shapeManufacturerContact(r)),
     storage: listed.storage,

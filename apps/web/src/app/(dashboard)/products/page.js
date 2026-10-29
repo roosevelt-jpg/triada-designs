@@ -164,6 +164,22 @@ export default function ProductsPage() {
     }
   }
 
+  async function deleteOne(item) {
+    if (!window.confirm(`Delete “${item.title}”?`)) return;
+    setBusy(`del-${item.id}`);
+    setError("");
+    setNotice("");
+    try {
+      await apiFetch(`/v1/products/${item.id}`, { method: "DELETE" });
+      setNotice("Product deleted.");
+      await load();
+    } catch (err) {
+      setError(err.message || "Delete failed");
+    } finally {
+      setBusy("");
+    }
+  }
+
   const shopifyLabel =
     channelStatus.shopify?.status_label ||
     (channelStatus.shopify?.connected ? "Connected" : "Waiting credentials");
@@ -174,7 +190,7 @@ export default function ProductsPage() {
   return (
     <DashboardShell
       title="Products"
-      description="Create and edit the Triada catalog. Publish to Shopify and WordPress when Connected."
+      description="Add, edit, and delete the Triada catalog. Nothing is hardcoded — publish to Shopify and WordPress when Connected."
       actions={
         <Button size="sm" onClick={openCreate}>
           Add product
@@ -295,8 +311,8 @@ export default function ProductsPage() {
 
       {!loading && !error && items.length === 0 ? (
         <EmptyState
-          title="No products"
-          description="Add a catalog piece, or sync from Shopify when Connected."
+          title="No products yet"
+          description="Add a catalog piece, or sync from Shopify when Connected. The catalog starts empty."
         />
       ) : null}
 
@@ -355,6 +371,14 @@ export default function ProductsPage() {
                     onClick={() => publishOne(item)}
                   >
                     {busy === `publish-${item.id}` ? "Publishing…" : "Publish"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy === `del-${item.id}`}
+                    onClick={() => deleteOne(item)}
+                  >
+                    Delete
                   </Button>
                 </div>
               </article>

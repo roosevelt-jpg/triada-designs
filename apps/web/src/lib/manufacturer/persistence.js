@@ -180,3 +180,37 @@ export async function upsertManufacturerRow(table, row) {
   await writeLocal(table, rows);
   return { row: shaped, storage: "local_file" };
 }
+
+/**
+ * @param {string} table
+ * @param {string} id
+ * @returns {Promise<{ ok: boolean, storage?: string, message?: string }>}
+ */
+export async function deleteManufacturerRow(table, id) {
+  const key = String(id || "").trim();
+  if (!key) return { ok: false, message: "Missing id" };
+
+  if (hasSupabaseAdminCredentials()) {
+    try {
+      const supabase = createAdminSupabaseClient();
+      if (supabase) {
+        const { error } = await supabase
+          .from(table)
+          .delete()
+          .eq("workspace_id", WORKSPACE_ID)
+          .eq("id", key);
+        if (!error) return { ok: true, storage: "supabase" };
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
+  const rows = await readLocal(table);
+  const next = rows.filter((r) => r.id !== key);
+  if (next.length === rows.length) {
+    return { ok: false, message: "Not found" };
+  }
+  await writeLocal(table, next);
+  return { ok: true, storage: "local_file" };
+}
