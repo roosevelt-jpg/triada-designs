@@ -181,7 +181,7 @@ export default function ProductsPage() {
         </Button>
       }
     >
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-6 ops-actions">
         <Badge tone={channelStatus.shopify?.connected ? "success" : "warning"}>
           Shopify · {shopifyLabel}
         </Badge>
@@ -254,7 +254,7 @@ export default function ProductsPage() {
               rows={4}
               value={form.description}
               onChange={(e) => updateField("description", e.target.value)}
-              className="w-full rounded-sm border border-line bg-white px-3 py-2 text-sm text-ink focus:border-brown focus:outline-none"
+              className="ops-field px-3 py-2 text-ink focus:border-brown focus:outline-none"
               placeholder="Materials, make time, collection notes…"
             />
           </label>
@@ -267,7 +267,7 @@ export default function ProductsPage() {
             />
             Publish &amp; sync to Shopify + WordPress when credentials are present
           </label>
-          <div className="flex flex-wrap gap-2">
+          <div className="ops-actions">
             <Button type="submit" disabled={busy === "save"}>
               {busy === "save"
                 ? "Saving…"
@@ -312,7 +312,7 @@ export default function ProductsPage() {
                   <p className="mt-1 text-xs uppercase tracking-wide text-muted">{item.sku}</p>
                 ) : null}
                 <p className="mt-2 flex-1 text-sm text-muted">{item.description}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-4 ops-actions">
                   <Badge tone="brand">
                     {formatCurrency(item.price, item.currency || "USD")}
                   </Badge>
@@ -325,7 +325,7 @@ export default function ProductsPage() {
                     {item.published_status}
                   </Badge>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 ops-actions">
                   <Badge tone={channelTone(shopify?.status)}>
                     Shopify · {channelLabel(shopify?.status)}
                   </Badge>
@@ -345,7 +345,7 @@ export default function ProductsPage() {
                       .join(" · ")}
                   </p>
                 ) : null}
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-4 ops-actions">
                   <Button size="sm" variant="secondary" onClick={() => openEdit(item)}>
                     Edit
                   </Button>

@@ -94,7 +94,7 @@ export default function JewelleryOpsPage() {
 
       {!loading && !error && overview ? (
         <div className="space-y-5">
-          <div className="flex flex-wrap gap-2">
+          <div className="ops-actions">
             {Object.entries(overview.automations || {}).map(([key, val]) => (
               <Badge key={key} tone={val ? "success" : "neutral"}>
                 {key.replaceAll("_", " ")}
@@ -104,14 +104,14 @@ export default function JewelleryOpsPage() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {Object.entries(overview.counts || {}).map(([key, val]) => (
-              <div key={key} className="border border-line bg-white px-4 py-3">
+              <div key={key} className="surface-card px-4 py-3">
                 <p className="text-[11px] uppercase tracking-[0.12em] text-muted">{key.replaceAll("_", " ")}</p>
                 <p className="mt-1 font-display text-2xl text-ink">{val}</p>
               </div>
             ))}
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="ops-actions">
             {LINKS.map((link) => (
               <Link key={link.href} href={link.href}>
                 <Button size="sm" variant="secondary">

@@ -123,7 +123,7 @@ export default function IntegrationsPage() {
       title="Integrations"
       description="Channel and provider status. Connected or Waiting credentials."
       actions={
-        <div className="flex flex-wrap gap-2">
+        <div className="ops-actions">
           <Link href="/integrations/meta">
             <Button size="sm">Meta hub</Button>
           </Link>
@@ -267,7 +267,7 @@ export default function IntegrationsPage() {
                     Facebook Messenger, Instagram, and WhatsApp.
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="ops-actions">
                   <StatusPill
                     status={health.meta.status}
                     hasCredentials={health.meta.connected}

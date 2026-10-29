@@ -295,7 +295,7 @@ export default function CalendarPage() {
                   <div className="min-w-0">
                     <p className="font-medium">{item.title}</p>
                     <p className="mt-1 line-clamp-2 text-sm text-muted">{item.body}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="mt-2 ops-actions">
                       <Badge tone="warning">{item.status}</Badge>
                       <Badge tone="neutral">{item.channel || "channel"}</Badge>
                     </div>
@@ -338,7 +338,7 @@ export default function CalendarPage() {
                   >
                     <div>
                       <p className="font-medium">{item.title}</p>
-                      <div className="mt-1 flex flex-wrap gap-2">
+                      <div className="mt-1 ops-actions">
                         <Badge tone="brand">approved · v{item.approval_version ?? 0}</Badge>
                         {proposal ? (
                           <Badge tone="warning">AI proposed {formatDateTime(proposal)}</Badge>

@@ -183,7 +183,7 @@ export default function CampaignsPage() {
           </div>
 
           {bestsellers.length ? (
-            <ul className="mt-4 flex flex-wrap gap-2">
+            <ul className="mt-4 ops-actions">
               {bestsellers.map((p) => (
                 <li key={p.id}>
                   <button
@@ -220,7 +220,7 @@ export default function CampaignsPage() {
             <label className="text-sm">
               <span className="mb-1 block text-muted">Send mode</span>
               <select
-                className="w-full rounded-md border border-line bg-ivory px-3 py-2"
+                className="ops-field px-3 py-2"
                 value={form.send_mode}
                 onChange={(e) => updateField("send_mode", e.target.value)}
               >
@@ -244,7 +244,7 @@ export default function CampaignsPage() {
             <label className="md:col-span-2 text-sm">
               <span className="mb-1 block text-muted">Broadcast body</span>
               <textarea
-                className="min-h-[120px] w-full rounded-md border border-line bg-ivory px-3 py-2 text-sm"
+                className="min-h-[120px] ops-field px-3 py-2 text-sm"
                 name="body"
                 value={form.body}
                 onChange={(e) => updateField("body", e.target.value)}
@@ -254,7 +254,7 @@ export default function CampaignsPage() {
             <label className="text-sm">
               <span className="mb-1 block text-muted">Media type</span>
               <select
-                className="w-full rounded-md border border-line bg-ivory px-3 py-2"
+                className="ops-field px-3 py-2"
                 value={form.media_type}
                 onChange={(e) => updateField("media_type", e.target.value)}
               >

@@ -47,7 +47,7 @@ export default function ServicesPage() {
             <article key={item.id} className="surface-card p-5">
               <h3 className="font-display text-2xl">{item.name}</h3>
               <p className="mt-2 text-sm text-muted">{item.description}</p>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 ops-actions">
                 <Badge tone="brand">
                   {formatCurrency(item.price, item.currency || "USD")}
                 </Badge>

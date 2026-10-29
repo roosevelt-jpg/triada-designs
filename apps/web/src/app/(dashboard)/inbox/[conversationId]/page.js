@@ -163,7 +163,7 @@ export default function ConversationDetailPage() {
                 onChange={(e) => setBody(e.target.value)}
                 rows={3}
                 placeholder="Write a reply…"
-                className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm"
+                className="ops-field px-3 py-2"
               />
               <div className="mt-3 flex justify-end">
                 <Button type="submit" disabled={busy || !body.trim()}>

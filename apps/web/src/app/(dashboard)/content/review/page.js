@@ -169,7 +169,7 @@ function ContentReviewInner() {
                       <Badge tone="warning">{item.status}</Badge>
                     </div>
 
-                    <div className="flex flex-wrap gap-2 text-xs">
+                    <div className="ops-actions text-xs">
                       <Badge tone="neutral">{item.channel || "channel"}</Badge>
                       {asset?.kind ? <Badge tone="brand">{asset.kind}</Badge> : null}
                       {asset?.mode ? (
@@ -230,7 +230,7 @@ function ContentReviewInner() {
                       </div>
                     ) : null}
 
-                    <div className="mt-auto flex flex-wrap gap-2 pt-2">
+                    <div className="mt-auto pt-2 ops-actions">
                       <Button
                         disabled={busyId === `approve-${item.id}`}
                         onClick={() => approve(item)}

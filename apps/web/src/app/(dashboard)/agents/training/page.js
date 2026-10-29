@@ -189,7 +189,7 @@ export default function TrainingDocsPage() {
                 <label className="block text-sm">
                   <span className="mb-1.5 block text-[13px] font-medium text-ink">Category</span>
                   <select
-                    className="w-full rounded-sm border border-line bg-white px-3 py-2 text-sm"
+                    className="ops-field px-3 py-2"
                     value={form.category}
                     onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                   >
@@ -209,7 +209,7 @@ export default function TrainingDocsPage() {
                 <label className="block text-sm">
                   <span className="mb-1.5 block text-[13px] font-medium text-ink">Body</span>
                   <textarea
-                    className="min-h-[140px] w-full rounded-sm border border-line bg-white px-3 py-2 text-sm focus:border-brown focus:outline-none"
+                    className="ops-field min-h-[140px] px-3 py-2"
                     value={form.body}
                     onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
                     required

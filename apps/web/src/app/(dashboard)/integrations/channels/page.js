@@ -99,7 +99,7 @@ export default function ChannelsIntegrationsPage() {
       title="Sales channels"
       description="Jewellery retail across Facebook, Website, Shopify, TikTok, Instagram, WhatsApp, LinkedIn, Email, and Telegram. Status only."
       actions={
-        <div className="flex flex-wrap gap-2">
+        <div className="ops-actions">
           <Button size="sm" variant="secondary" onClick={load}>
             Re-check status
           </Button>
@@ -165,7 +165,7 @@ export default function ChannelsIntegrationsPage() {
               <label className="text-sm">
                 <span className="mb-1 block text-muted">Channel</span>
                 <select
-                  className="w-full rounded-md border border-line bg-white px-3 py-2"
+                  className="ops-field px-3 py-2"
                   value={sim.channel}
                   onChange={(e) => setSim((prev) => ({ ...prev, channel: e.target.value }))}
                 >

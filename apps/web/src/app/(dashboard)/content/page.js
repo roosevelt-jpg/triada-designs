@@ -497,7 +497,7 @@ export default function ContentPage() {
                   <p className="mt-4 text-sm text-muted">No creative image yet — generate pack below.</p>
                 )}
 
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-4 ops-actions">
                   <Button
                     disabled={busyId === `pack-${item.id}`}
                     onClick={() => ensureCreative(item)}
@@ -621,7 +621,7 @@ export default function ContentPage() {
                   </div>
                 ) : null}
 
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-4 ops-actions">
                   {item.status === "in_review" || item.status === "draft" ? (
                     <Button
                       disabled={busyId === `approve-${item.id}`}

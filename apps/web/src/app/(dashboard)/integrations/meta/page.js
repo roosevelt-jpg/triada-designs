@@ -386,7 +386,7 @@ export default function MetaIntegrationsPage() {
               <div className="rounded-md border border-line px-3 py-3">
                 <p className="text-xs uppercase tracking-wide text-muted">Verify token</p>
                 <p className="mt-1 break-all font-mono text-sm">{status.webhook?.verify_token}</p>
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-2 ops-actions">
                   <Button variant="secondary" onClick={() => copyText(status.webhook?.verify_token || "")}>
                     Copy token
                   </Button>
@@ -430,7 +430,7 @@ export default function MetaIntegrationsPage() {
                       ))}
                     </ul>
                   ) : null}
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-4 ops-actions">
                     <Button
                       variant="secondary"
                       onClick={() =>
@@ -549,7 +549,7 @@ export default function MetaIntegrationsPage() {
                 <label className="text-sm">
                   <span className="mb-1 block text-muted">Category</span>
                   <select
-                    className="w-full rounded-md border border-line bg-ivory px-3 py-2"
+                    className="ops-field px-3 py-2"
                     value={waEditForm.category}
                     onChange={(e) => setWaEditForm((prev) => ({ ...prev, category: e.target.value }))}
                   >
@@ -566,7 +566,7 @@ export default function MetaIntegrationsPage() {
                     onChange={(e) => setWaEditForm((prev) => ({ ...prev, body: e.target.value }))}
                   />
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="ops-actions">
                   <Button type="submit" disabled={busy === "wa-edit"}>
                     Save / re-submit
                   </Button>
@@ -586,7 +586,7 @@ export default function MetaIntegrationsPage() {
               <label className="text-sm">
                 <span className="mb-1 block text-muted">Category</span>
                 <select
-                  className="w-full rounded-md border border-line bg-ivory px-3 py-2"
+                  className="ops-field px-3 py-2"
                   value={waForm.category}
                   onChange={(e) => setWaForm((prev) => ({ ...prev, category: e.target.value }))}
                 >
@@ -633,7 +633,7 @@ export default function MetaIntegrationsPage() {
               <label className="text-sm">
                 <span className="mb-1 block text-muted">Media type</span>
                 <select
-                  className="w-full rounded-md border border-line bg-ivory px-3 py-2"
+                  className="ops-field px-3 py-2"
                   value={waMediaForm.media_type}
                   onChange={(e) =>
                     setWaMediaForm((prev) => ({ ...prev, media_type: e.target.value }))
@@ -684,7 +684,7 @@ export default function MetaIntegrationsPage() {
               <label className="text-sm">
                 <span className="mb-1 block text-muted">Channel</span>
                 <select
-                  className="w-full rounded-md border border-line bg-ivory px-3 py-2"
+                  className="ops-field px-3 py-2"
                   value={sim.channel}
                   onChange={(e) => setSim((prev) => ({ ...prev, channel: e.target.value }))}
                 >

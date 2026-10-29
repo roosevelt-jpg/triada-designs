@@ -232,7 +232,7 @@ export default function TeamPage() {
       title="Team"
       description="Invite teammates, complete profiles via branded email, and control what each role can see and manage."
     >
-      <div className="mb-5 flex flex-wrap gap-2">
+      <div className="ops-actions mb-5">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -240,8 +240,8 @@ export default function TeamPage() {
             onClick={() => setTab(t.id)}
             className={
               tab === t.id
-                ? "rounded-md bg-black px-3 py-2 text-sm font-medium text-gold"
-                : "rounded-md border border-line bg-white px-3 py-2 text-sm text-ink hover:bg-stone"
+                ? "inline-flex h-9 items-center justify-center rounded-md bg-black px-3.5 text-sm font-medium text-gold"
+                : "inline-flex h-9 items-center justify-center rounded-md border border-line-strong bg-field px-3.5 text-sm text-ink hover:bg-stone"
             }
           >
             {t.label}
@@ -273,7 +273,7 @@ export default function TeamPage() {
             description="Invite staff with the Invite tab."
           />
         ) : (
-          <div className="divide-y divide-line overflow-hidden rounded-md border border-line bg-white/80">
+          <div className="surface-card divide-y divide-line overflow-hidden">
             {members
               .filter((m) => m.status !== "replaced")
               .map((member) => (
@@ -289,13 +289,13 @@ export default function TeamPage() {
                       Last login: {formatDateTime(member.last_login_at) || "—"}
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="ops-actions">
                     <Badge tone="brand">{member.role?.name || "Role"}</Badge>
                     <Badge tone={member.status === "active" ? "neutral" : "danger"}>
                       {member.status}
                     </Badge>
                     <select
-                      className="h-10 rounded-md border border-line bg-white px-2 text-sm"
+                      className="ops-field h-10 w-auto px-2"
                       value={member.role?.id || ""}
                       disabled={busy}
                       onChange={(e) => changeMemberRole(member.id, e.target.value)}
@@ -336,7 +336,7 @@ export default function TeamPage() {
       {!loading && !error && tab === "invite" ? (
         <form
           onSubmit={sendInvite}
-          className="max-w-xl space-y-4 rounded-md border border-line bg-white/80 p-5"
+          className="surface-card max-w-xl space-y-4 p-5"
         >
           <p className="text-sm text-muted">
             Sends a branded Triada invitation via Resend. The invitee sets a password and
@@ -359,7 +359,7 @@ export default function TeamPage() {
           <label className="block space-y-1.5">
             <span className="block text-[13px] font-medium text-ink">Role</span>
             <select
-              className="h-11 w-full rounded-sm border border-line bg-white px-3 text-sm"
+              className="ops-field h-11 px-3"
               value={inviteRoleId}
               onChange={(e) => setInviteRoleId(e.target.value)}
             >
@@ -383,7 +383,7 @@ export default function TeamPage() {
             description="New invitations appear here until accepted or revoked."
           />
         ) : (
-          <div className="divide-y divide-line overflow-hidden rounded-md border border-line bg-white/80">
+          <div className="surface-card divide-y divide-line overflow-hidden">
             {invites.map((invite) => (
               <div
                 key={invite.id}
@@ -416,7 +416,7 @@ export default function TeamPage() {
 
       {!loading && !error && tab === "roles" ? (
         <div className="grid gap-5 lg:grid-cols-[240px_1fr]">
-          <div className="space-y-2 rounded-md border border-line bg-white/80 p-3">
+          <div className="surface-card space-y-2 p-3">
             {roles.map((r) => (
               <button
                 key={r.id}
@@ -450,7 +450,7 @@ export default function TeamPage() {
           </div>
 
           {roleDraft ? (
-            <div className="space-y-4 rounded-md border border-line bg-white/80 p-5">
+            <div className="surface-card space-y-4 p-5">
               <Input
                 label="Role name"
                 value={roleDraft.name}

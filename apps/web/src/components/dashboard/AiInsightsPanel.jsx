@@ -49,7 +49,7 @@ function ChartCard({ title, summary, children, className }) {
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-champagne/70 to-transparent"
         aria-hidden
       />
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="ops-card-header">
         <div className="min-w-0">
           <h3 className="font-display text-[1.25rem] leading-tight tracking-[-0.02em] text-ink">
             {title}

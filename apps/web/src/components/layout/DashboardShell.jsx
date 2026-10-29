@@ -198,8 +198,11 @@ export function DashboardShell({ children, title, description, actions }) {
                   </p>
                 ) : null}
               </div>
-              {actions ? <div className="shrink-0 fade-rise-delay">{actions}</div> : null}
+              {actions ? (
+                <div className="ops-actions shrink-0 fade-rise-delay">{actions}</div>
+              ) : null}
             </div>
+            <div className="ops-divider mb-5" role="presentation" />
             {children}
           </main>
         </div>

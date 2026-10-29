@@ -235,7 +235,7 @@ export function PlacesLocationPicker({
           type="text"
           disabled={disabled}
           placeholder="Start typing — pick a Google Places suggestion"
-          className="h-11 w-full rounded-sm border border-line bg-white px-3 text-sm text-ink placeholder:text-muted/80 transition-colors duration-150 focus:border-brown focus:outline-none disabled:opacity-60"
+          className="ops-field h-11 px-3 disabled:opacity-60"
           autoComplete="off"
         />
       </label>

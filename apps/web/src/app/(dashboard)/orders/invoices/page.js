@@ -218,7 +218,7 @@ export default function InvoiceEditorPage() {
       title="Invoice editor"
       description="Edit every invoice content field in plain text. Logo header, address footer, and warm greetings stay aligned in the branded preview."
       actions={
-        <div className="flex flex-wrap gap-2">
+        <div className="ops-actions">
           <Link href="/orders">
             <Button variant="secondary" size="sm">
               Back to orders
@@ -253,7 +253,7 @@ export default function InvoiceEditorPage() {
                 <label className="block text-sm">
                   <span className="mb-1.5 block text-[13px] font-medium text-ink">Document type</span>
                   <select
-                    className="h-11 w-full rounded-sm border border-line bg-white px-3 text-sm"
+                    className="ops-field h-11 px-3"
                     value={form.document_type}
                     onChange={(e) => setForm((f) => ({ ...f, document_type: e.target.value }))}
                   >
@@ -309,7 +309,7 @@ export default function InvoiceEditorPage() {
                     Warm greeting (plain text)
                   </span>
                   <textarea
-                    className="min-h-[72px] w-full rounded-sm border border-line bg-white px-3 py-2 text-sm text-ink focus:border-brown focus:outline-none"
+                    className="ops-field min-h-[72px] px-3 py-2"
                     value={form.greeting}
                     onChange={(e) => setForm((f) => ({ ...f, greeting: e.target.value }))}
                     placeholder="Leave blank to use Triada warm greeting"
@@ -324,7 +324,7 @@ export default function InvoiceEditorPage() {
                     Prepared-for line (plain text)
                   </span>
                   <textarea
-                    className="min-h-[56px] w-full rounded-sm border border-line bg-white px-3 py-2 text-sm text-ink focus:border-brown focus:outline-none"
+                    className="ops-field min-h-[56px] px-3 py-2"
                     value={form.prepared_for}
                     onChange={(e) => setForm((f) => ({ ...f, prepared_for: e.target.value }))}
                     placeholder="Leave blank for “Prepared for {customer}”"
@@ -336,7 +336,7 @@ export default function InvoiceEditorPage() {
                     Line items (plain text)
                   </span>
                   <textarea
-                    className="min-h-[120px] w-full rounded-sm border border-line bg-white px-3 py-2 font-mono text-sm text-ink focus:border-brown focus:outline-none"
+                    className="ops-field min-h-[120px] px-3 py-2 font-mono"
                     value={form.line_items_text}
                     onChange={(e) => setForm((f) => ({ ...f, line_items_text: e.target.value }))}
                     placeholder={"title | sku | qty | price\nAura Signet Ring | TD-RING-AURA-01 | 1 | 1450"}
@@ -365,13 +365,13 @@ export default function InvoiceEditorPage() {
                 <label className="block space-y-1.5">
                   <span className="block text-[13px] font-medium text-ink">Notes (plain text)</span>
                   <textarea
-                    className="min-h-[88px] w-full rounded-sm border border-line bg-white px-3 py-2 text-sm text-ink focus:border-brown focus:outline-none"
+                    className="ops-field min-h-[88px] px-3 py-2"
                     value={form.notes}
                     onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                   />
                 </label>
 
-                <div className="flex flex-wrap gap-2 pt-1">
+                <div className="pt-1 ops-actions">
                   <Button type="submit" size="sm" disabled={Boolean(busy)}>
                     {busy === "save" ? "Saving…" : "Save invoice"}
                   </Button>

@@ -50,7 +50,7 @@ export default function OverviewPage() {
       title="Overview"
       description={`Workspace pulse${today ? ` · ${today}` : ""}`}
       actions={
-        <div className="flex flex-wrap gap-2">
+        <>
           <Link href="/inbox">
             <Button size="sm">Open inbox</Button>
           </Link>
@@ -59,7 +59,7 @@ export default function OverviewPage() {
               Full analytics
             </Button>
           </Link>
-        </div>
+        </>
       }
     >
       {loading ? (

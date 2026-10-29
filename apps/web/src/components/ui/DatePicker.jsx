@@ -200,10 +200,9 @@ export function DatePicker({
             if (!disabled) setOpen(true);
           }}
           className={cn(
-            "h-11 w-full cursor-pointer rounded-sm border border-line bg-white py-0 pl-3 pr-10 text-sm text-ink placeholder:text-muted/80",
-            "transition-colors duration-150 focus:border-brown focus:outline-none",
+            "ops-field h-11 cursor-pointer py-0 pl-3 pr-10",
             disabled && "cursor-not-allowed opacity-60",
-            error && "border-danger"
+            error && "ops-field-error"
           )}
         />
         <button
@@ -294,7 +293,7 @@ export function DatePicker({
               <label className="flex flex-1 items-center gap-1.5 text-xs text-muted">
                 <span>Hour</span>
                 <select
-                  className="h-9 w-full rounded-sm border border-line bg-white px-2 text-sm text-ink"
+                  className="ops-field h-9 px-2"
                   value={hour}
                   onChange={(e) => emitTime(Number(e.target.value), minute)}
                 >
@@ -308,7 +307,7 @@ export function DatePicker({
               <label className="flex flex-1 items-center gap-1.5 text-xs text-muted">
                 <span>Min</span>
                 <select
-                  className="h-9 w-full rounded-sm border border-line bg-white px-2 text-sm text-ink"
+                  className="ops-field h-9 px-2"
                   value={minute}
                   onChange={(e) => emitTime(hour, Number(e.target.value))}
                 >

@@ -19,21 +19,21 @@ export function Button({
     primary:
       "bg-black text-gold hover:bg-ink disabled:bg-stone disabled:text-muted",
     secondary:
-      "bg-white text-ink border border-line hover:bg-stone disabled:opacity-60",
+      "bg-white text-ink border border-line-strong hover:bg-stone disabled:opacity-60",
     ghost: "bg-transparent text-ink hover:bg-sand/70 disabled:opacity-60",
     danger: "bg-danger text-white hover:opacity-90 disabled:opacity-60",
   };
 
   const sizes = {
-    sm: "h-9 px-3 text-sm",
-    md: "h-11 px-4 text-sm",
-    lg: "h-12 px-5 text-base",
+    sm: "h-9 min-h-9 px-3.5 text-sm",
+    md: "h-11 min-h-11 px-4 text-sm",
+    lg: "h-12 min-h-12 px-5 text-base",
   };
 
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors duration-150",
+        "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors duration-150",
         variants[variant],
         sizes[size],
         className

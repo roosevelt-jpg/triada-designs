@@ -45,9 +45,8 @@ export function Input({ label, hint, error, className, id, type = "text", onChan
         value={value}
         onChange={onChange}
         className={cn(
-          "h-11 w-full rounded-sm border border-line bg-white px-3 text-sm text-ink placeholder:text-muted/80",
-          "transition-colors duration-150 focus:border-brown focus:outline-none",
-          error && "border-danger",
+          "ops-field h-11 px-3",
+          error && "ops-field-error",
           className
         )}
         {...props}

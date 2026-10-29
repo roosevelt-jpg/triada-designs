@@ -44,7 +44,7 @@ export default function ManufacturerPage() {
       {!loading && !error && data ? (
         <div className="space-y-5">
           {(data.low_stock || []).length ? (
-            <div className="border border-line bg-white px-4 py-3 text-sm text-ink">
+            <div className="surface-card px-4 py-3 text-sm text-ink">
               Low stock alerts: {(data.low_stock || []).map((r) => r.display_name).join(", ")}
             </div>
           ) : null}

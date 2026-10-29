@@ -197,7 +197,7 @@ export default function QuoteInspirationPage() {
               </Badge>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="ops-actions">
               {ALL_WEEKDAYS.map((day) => {
                 const on = weekdaySet.has(day.value);
                 return (
@@ -224,7 +224,7 @@ export default function QuoteInspirationPage() {
                   type="number"
                   min={0}
                   max={23}
-                  className="mt-1 block h-10 w-20 rounded-md border border-line bg-white px-2 text-ink"
+                  className="ops-field mt-1 block h-10 w-20 px-2"
                   value={settings.send_hour_utc}
                   onChange={(e) =>
                     setSettings((s) => ({
@@ -284,7 +284,7 @@ export default function QuoteInspirationPage() {
               <label className="min-w-[16rem] flex-1 text-sm text-muted">
                 Theme
                 <input
-                  className="mt-1 block h-11 w-full rounded-md border border-line bg-white px-3 text-ink"
+                  className="ops-field mt-1 block h-11 px-3"
                   value={theme}
                   onChange={(e) => setTheme(e.target.value)}
                   placeholder="quiet luxury jewellery"
@@ -293,7 +293,7 @@ export default function QuoteInspirationPage() {
               <label className="text-sm text-muted">
                 Language
                 <select
-                  className="mt-1 block h-11 rounded-md border border-line bg-white px-3 text-ink"
+                  className="ops-field mt-1 block h-11 px-3"
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
                 >
@@ -314,7 +314,7 @@ export default function QuoteInspirationPage() {
                 </select>
               </label>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="ops-actions">
               <Button disabled={busy === "generate"} onClick={generate}>
                 Generate quote card
               </Button>

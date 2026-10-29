@@ -73,7 +73,7 @@ export default function ShopifyIntegrationsPage() {
       title="Shopify"
       description="Store sync status. Connected or Waiting credentials."
       actions={
-        <div className="flex flex-wrap gap-2">
+        <div className="ops-actions">
           <Button size="sm" variant="secondary" onClick={load}>
             Re-check status
           </Button>
@@ -112,7 +112,7 @@ export default function ShopifyIntegrationsPage() {
               <p className="text-xs text-muted">
                 Products in workspace: {status.product_count ?? 0}
               </p>
-              <div className="flex flex-wrap gap-2 pt-1">
+              <div className="pt-1 ops-actions">
                 <Button variant="secondary" disabled={!!busy} onClick={() => syncNow("products")}>
                   {busy === "sync-products" ? "Syncing…" : "Sync products"}
                 </Button>

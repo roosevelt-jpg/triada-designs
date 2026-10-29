@@ -48,7 +48,7 @@ function CategorySelect({ value, onChange, id }) {
       <span className="block text-[13px] font-medium text-ink">Category</span>
       <select
         id={id}
-        className="h-10 w-full rounded-sm border border-line bg-white px-3 text-sm"
+        className="ops-field h-10 px-3"
         value={normalizeTemplateCategory(value, "general")}
         onChange={(e) => onChange(e.target.value)}
         required
@@ -180,7 +180,7 @@ export default function ChannelTemplatesPage() {
       title="Channel templates"
       description="Create, approve, and publish message and post templates per platform."
       actions={
-        <div className="flex flex-wrap gap-2">
+        <div className="ops-actions">
           <Link href="/integrations/meta">
             <Button size="sm" variant="secondary">
               WhatsApp Cloud
@@ -205,7 +205,7 @@ export default function ChannelTemplatesPage() {
               <label className="text-sm text-muted">
                 Platform{" "}
                 <select
-                  className="ml-2 h-9 rounded-sm border border-line bg-white px-2 text-sm"
+                  className="ops-field ml-2 h-9 w-auto px-2"
                   value={platformFilter}
                   onChange={(e) => setPlatformFilter(e.target.value)}
                 >
@@ -228,7 +228,7 @@ export default function ChannelTemplatesPage() {
                 description="Create a template on the right to get started."
               />
             ) : (
-              <ul className="divide-y divide-line overflow-hidden rounded-md border border-line bg-white">
+              <ul className="surface-card divide-y divide-line overflow-hidden">
                 {items.map((tpl) => (
                   <li key={tpl.id}>
                     <button
@@ -281,12 +281,12 @@ export default function ChannelTemplatesPage() {
                 <label className="block space-y-1.5">
                   <span className="block text-[13px] font-medium text-ink">Body</span>
                   <textarea
-                    className="min-h-[120px] w-full rounded-sm border border-line bg-white px-3 py-2 text-sm"
+                    className="ops-field min-h-[120px] px-3 py-2"
                     value={form.body}
                     onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
                   />
                 </label>
-                <div className="flex flex-wrap gap-2">
+                <div className="ops-actions">
                   <Button size="sm" disabled={!!busy} onClick={saveSelected}>
                     Save
                   </Button>
@@ -325,7 +325,7 @@ export default function ChannelTemplatesPage() {
               <label className="block space-y-1.5">
                 <span className="block text-[13px] font-medium text-ink">Platform</span>
                 <select
-                  className="h-10 w-full rounded-sm border border-line bg-white px-3 text-sm"
+                  className="ops-field h-10 px-3"
                   value={form.platform}
                   onChange={(e) => setForm((f) => ({ ...f, platform: e.target.value }))}
                 >
@@ -351,7 +351,7 @@ export default function ChannelTemplatesPage() {
                 <span className="block text-[13px] font-medium text-ink">Body</span>
                 <textarea
                   required
-                  className="min-h-[100px] w-full rounded-sm border border-line bg-white px-3 py-2 text-sm"
+                  className="ops-field min-h-[100px] px-3 py-2"
                   value={form.body}
                   onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
                 />

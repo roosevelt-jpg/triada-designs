@@ -54,7 +54,7 @@ export default function InboxPage() {
       title="Unified inbox"
       description="Conversations across webchat and Meta. Human takeover suppresses automatic replies."
     >
-      <div className="mb-4 flex flex-wrap gap-2" role="toolbar" aria-label="Channel filters">
+      <div className="mb-4 ops-actions" role="toolbar" aria-label="Channel filters">
         {CHANNEL_FILTERS.map((filter) => (
           <button
             key={filter.value || "all"}

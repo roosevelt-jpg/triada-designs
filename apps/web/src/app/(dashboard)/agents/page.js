@@ -240,7 +240,7 @@ export default function AgentsPage() {
       title="AI agents"
       description="Create agents, assign work, and collaborate from one place."
       actions={
-        <div className="flex flex-wrap gap-2">
+        <div className="ops-actions">
           <Link href="/agents/training">
             <Button variant="secondary" size="sm">
               Training docs
@@ -351,7 +351,7 @@ export default function AgentsPage() {
               <label className="block text-sm">
                 <span className="mb-1.5 block text-[13px] font-medium text-ink">System prompt</span>
                 <textarea
-                  className="min-h-[80px] w-full rounded-sm border border-line bg-white px-3 py-2 text-sm focus:border-brown focus:outline-none"
+                  className="ops-field min-h-[80px] px-3 py-2"
                   value={agentForm.system_prompt}
                   onChange={(e) => setAgentForm((f) => ({ ...f, system_prompt: e.target.value }))}
                 />
@@ -369,7 +369,7 @@ export default function AgentsPage() {
                 <label className="block text-sm">
                   <span className="mb-1.5 block text-[13px] font-medium text-ink">System prompt</span>
                   <textarea
-                    className="min-h-[120px] w-full rounded-sm border border-line bg-white px-3 py-2 text-sm transition-colors duration-150 focus:border-brown focus:outline-none"
+                    className="ops-field min-h-[120px] px-3 py-2"
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                   />
@@ -387,7 +387,7 @@ export default function AgentsPage() {
                       : "Without an AI key, dry runs stay on local assistance."
                   }
                 />
-                <div className="flex flex-wrap gap-2">
+                <div className="ops-actions">
                   <Button size="sm" variant="secondary" disabled={busy === "test"} onClick={() => runTest({ collaborate: false })}>
                     {busy === "test" ? "Running…" : "Test run (solo)"}
                   </Button>
@@ -436,7 +436,7 @@ export default function AgentsPage() {
                 <label className="block text-sm">
                   <span className="mb-1.5 block text-[13px] font-medium text-ink">Description</span>
                   <textarea
-                    className="min-h-[72px] w-full rounded-sm border border-line bg-white px-3 py-2 text-sm focus:border-brown focus:outline-none"
+                    className="ops-field min-h-[72px] px-3 py-2"
                     value={taskForm.description}
                     onChange={(e) => setTaskForm((f) => ({ ...f, description: e.target.value }))}
                   />
@@ -444,7 +444,7 @@ export default function AgentsPage() {
                 <label className="block text-sm">
                   <span className="mb-1.5 block text-[13px] font-medium text-ink">Priority</span>
                   <select
-                    className="h-10 w-full rounded-sm border border-line bg-white px-3 text-sm"
+                    className="ops-field h-10 px-3"
                     value={taskForm.priority}
                     onChange={(e) => setTaskForm((f) => ({ ...f, priority: e.target.value }))}
                   >

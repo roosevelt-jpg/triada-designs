@@ -507,7 +507,7 @@ export default function AutomationBuilderPage() {
                     <p className="text-sm text-muted">Select a run to inspect steps.</p>
                   ) : (
                     <div className="space-y-3">
-                      <div className="flex flex-wrap gap-2">
+                      <div className="ops-actions">
                         <Badge tone={statusTone(selectedRun.mode)}>
                           {selectedRun.mode}
                         </Badge>

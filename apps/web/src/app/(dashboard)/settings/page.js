@@ -91,13 +91,17 @@ export default function SettingsPage() {
       {notice ? <p className="mb-4 text-sm text-brown-dark">{notice}</p> : null}
 
       {!loading && workspace ? (
-        <div className="space-y-6">
-          <section className="surface-card space-y-3 p-5">
-            <h2 className="font-display text-2xl">{workspace.name}</h2>
-            <p className="text-sm text-muted">
-              {workspace.slug} · {workspace.timezone} · {workspace.default_language}
-            </p>
-            <div className="flex flex-wrap gap-2">
+        <div className="space-y-5">
+          <section className="surface-card p-5">
+            <div className="ops-card-header">
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl">{workspace.name}</h2>
+                <p className="mt-1 text-sm text-muted">
+                  {workspace.slug} · {workspace.timezone} · {workspace.default_language}
+                </p>
+              </div>
+            </div>
+            <div className="ops-actions">
               <Badge tone={workspace.outbound_paused ? "danger" : "success"}>
                 Outbound {workspace.outbound_paused ? "paused" : "active"}
               </Badge>
@@ -107,14 +111,17 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          <section className="surface-card space-y-4 p-5">
-            <h2 className="font-display text-2xl">Timezone & system time</h2>
-            <p className="max-w-2xl text-sm text-muted">
-              Ops UI clocks, calendar “now”, and scheduling displays use the server clock aligned to this
-              IANA timezone via <code className="text-ink">GET /api/v1/system/time</code>. Historical
-              seed message timestamps stay as stored; live surfaces always use current time.
-            </p>
-            <p className="text-sm text-muted">
+          <section className="surface-card p-5">
+            <div className="ops-card-header">
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl">Timezone & system time</h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted">
+                  Ops UI clocks, calendar “now”, and scheduling displays use the server clock aligned to this
+                  IANA timezone. Historical seed message timestamps stay as stored; live surfaces always use current time.
+                </p>
+              </div>
+            </div>
+            <p className="mb-4 text-sm text-muted">
               Current workspace time: <span className="font-medium text-ink">{systemNow || "…"}</span>
             </p>
             <form className="flex max-w-xl flex-col gap-3 sm:flex-row sm:items-end" onSubmit={saveTimezone}>
@@ -139,16 +146,20 @@ export default function SettingsPage() {
             </form>
           </section>
 
-          <section className="surface-card space-y-4 p-5">
-            <h2 className="font-display text-2xl">AI agents</h2>
-            <p className="max-w-2xl text-sm text-muted">
-              Check AI status on{" "}
-              <Link href="/integrations" className="text-brown-dark underline">
-                Integrations
-              </Link>
-              . Agents stay on local assistance until credentials are connected.
-            </p>
-            <div className="flex flex-wrap gap-2">
+          <section className="surface-card p-5">
+            <div className="ops-card-header">
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl">AI agents</h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted">
+                  Check AI status on{" "}
+                  <Link href="/integrations" className="text-brown-dark underline">
+                    Integrations
+                  </Link>
+                  . Agents stay on local assistance until credentials are connected.
+                </p>
+              </div>
+            </div>
+            <div className="ops-actions">
               <Link href="/agents">
                 <Button variant="secondary">Open agents</Button>
               </Link>
@@ -158,34 +169,42 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          <section className="surface-card space-y-4 p-5">
-            <h2 className="font-display text-2xl">Brand on outbound</h2>
-            <p className="max-w-2xl text-sm text-muted">
-              WhatsApp, email, invoices, receipts, and channel templates include the Triada logo
-              header, address footer, and warm greetings. Logo sourced from{" "}
-              <a
-                href="https://triada-designs.com"
-                className="text-brown-dark underline"
-                target="_blank"
-                rel="noreferrer"
-              >
-                triada-designs.com
-              </a>
-              . Edit invoice content in plain text while keeping that brand chrome.
-            </p>
-            <div className="flex flex-wrap gap-2">
+          <section className="surface-card p-5">
+            <div className="ops-card-header">
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl">Brand on outbound</h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted">
+                  WhatsApp, email, invoices, receipts, and channel templates include the Triada logo
+                  header, address footer, and warm greetings. Logo sourced from{" "}
+                  <a
+                    href="https://triada-designs.com"
+                    className="text-brown-dark underline"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    triada-designs.com
+                  </a>
+                  . Edit invoice content in plain text while keeping that brand chrome.
+                </p>
+              </div>
+            </div>
+            <div className="ops-actions">
               <Link href="/orders/invoices">
                 <Button variant="secondary">Invoice editor</Button>
               </Link>
             </div>
           </section>
 
-          <section className="surface-card space-y-4 p-5">
-            <h2 className="font-display text-2xl">Emergency controls</h2>
-            <p className="max-w-2xl text-sm text-muted">
-              Pause stops eligible Meta/webchat outbound and workflow execution workspace-wide. Resume when ready.
-            </p>
-            <div className="flex flex-wrap gap-2">
+          <section className="surface-card p-5">
+            <div className="ops-card-header">
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl">Emergency controls</h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted">
+                  Pause stops eligible Meta/webchat outbound and workflow execution workspace-wide. Resume when ready.
+                </p>
+              </div>
+            </div>
+            <div className="ops-actions">
               <Button
                 disabled={busy}
                 onClick={() => patch({ outbound_paused: !workspace.outbound_paused })}
@@ -202,14 +221,20 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          <section className="surface-card space-y-3 p-5">
-            <h2 className="font-display text-2xl">Meta messaging</h2>
-            <p className="text-sm text-muted">
-              Connect Pages / IG / WABA, webhooks, token health, and simulators from the Meta hub.
-            </p>
-            <Link href="/integrations/meta">
-              <Button variant="secondary">Open Meta hub</Button>
-            </Link>
+          <section className="surface-card p-5">
+            <div className="ops-card-header">
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl">Meta messaging</h2>
+                <p className="mt-1 text-sm text-muted">
+                  Connect Pages / IG / WABA, webhooks, token health, and simulators from the Meta hub.
+                </p>
+              </div>
+            </div>
+            <div className="ops-actions">
+              <Link href="/integrations/meta">
+                <Button variant="secondary">Open Meta hub</Button>
+              </Link>
+            </div>
           </section>
         </div>
       ) : null}

@@ -151,7 +151,7 @@ export default function NotificationsPage() {
       ) : null}
 
       {!loading && !error && visible.length > 0 ? (
-        <ul className="divide-y divide-line/80 overflow-hidden rounded-md border border-line bg-white/90">
+        <ul className="surface-card divide-y divide-line overflow-hidden">
           {visible.map((item) => {
             const href = item.href || "/content/review";
             const unreadItem = !item.read_at;
