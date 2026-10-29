@@ -57,6 +57,7 @@ import {
   generateQuoteInspiration,
   processQuoteInspirationCron,
 } from "@/lib/content/quote-inspiration-engine";
+import { fanOutCreativeToSubscribers } from "@/lib/content/creative-subscriber-fanout";
 import {
   WEEKDAY_LABELS,
   getQuoteInspirationSettings,
@@ -1113,22 +1114,118 @@ export async function dispatchV1(method, segments, request, body) {
           422
         );
       }
-      const content = patchContent(contentId, {
+      const adapter = String(body?.adapter || "meta_page").trim() || "meta_page";
+      const shareAll =
+        adapter === "all_channels" ||
+        body?.share_all === true ||
+        body?.fanout_subscribers !== false;
+      let content = patchContent(contentId, {
         status: "published",
         published_at: new Date().toISOString(),
-        publish_metadata: { adapter: body?.adapter || "meta_page", mode: "local_sim" },
+        publish_metadata: {
+          adapter,
+          mode: "local_sim",
+          share_all_channels: adapter === "all_channels" || body?.share_all === true,
+        },
       });
+
+      let subscriberFanout = null;
+      if (shareAll) {
+        try {
+          subscriberFanout = await fanOutCreativeToSubscribers({
+            content,
+            force: Boolean(body?.force_fanout),
+          });
+          if (subscriberFanout && !subscriberFanout.skipped) {
+            content = patchContent(contentId, {
+              publish_metadata: {
+                ...(content.publish_metadata || {}),
+                adapter,
+                mode: "local_sim",
+                share_all_channels:
+                  adapter === "all_channels" || body?.share_all === true,
+                subscriber_fanout: {
+                  attempted: subscriberFanout.attempted,
+                  sent: subscriberFanout.sent,
+                  failed: subscriberFanout.failed,
+                  at: subscriberFanout.at,
+                  channels: {
+                    email: subscriberFanout.channels?.email
+                      ? {
+                          attempted: subscriberFanout.channels.email.attempted,
+                          sent: subscriberFanout.channels.email.sent,
+                        }
+                      : null,
+                    whatsapp: subscriberFanout.channels?.whatsapp
+                      ? {
+                          attempted: subscriberFanout.channels.whatsapp.attempted,
+                          sent: subscriberFanout.channels.whatsapp.sent,
+                        }
+                      : null,
+                    telegram: subscriberFanout.channels?.telegram
+                      ? {
+                          attempted: subscriberFanout.channels.telegram.attempted,
+                          sent: subscriberFanout.channels.telegram.sent,
+                        }
+                      : null,
+                  },
+                  media: subscriberFanout.media || null,
+                },
+              },
+            });
+          }
+        } catch (err) {
+          subscriberFanout = {
+            ok: false,
+            error: err instanceof Error ? err.message : "fanout_failed",
+          };
+        }
+      }
+
       return jsonOk({
         ok: true,
         content,
         publication: {
           id: `pub-${contentId}`,
           channel: body?.channel || item.channel || "instagram",
-          adapter: body?.adapter || "meta_page",
+          adapter,
           status: "published",
           approval_version_checked: item.approval_version || 0,
           published_at: content.published_at,
         },
+        subscriber_fanout: subscriberFanout
+          ? {
+              ok: subscriberFanout.ok !== false,
+              skipped: Boolean(subscriberFanout.skipped),
+              attempted: subscriberFanout.attempted ?? null,
+              sent: subscriberFanout.sent ?? null,
+              failed: subscriberFanout.failed ?? null,
+              channels: subscriberFanout.channels
+                ? {
+                    email: subscriberFanout.channels.email
+                      ? {
+                          attempted: subscriberFanout.channels.email.attempted,
+                          sent: subscriberFanout.channels.email.sent,
+                        }
+                      : null,
+                    whatsapp: subscriberFanout.channels.whatsapp
+                      ? {
+                          attempted: subscriberFanout.channels.whatsapp.attempted,
+                          sent: subscriberFanout.channels.whatsapp.sent,
+                        }
+                      : null,
+                    telegram: subscriberFanout.channels.telegram
+                      ? {
+                          attempted: subscriberFanout.channels.telegram.attempted,
+                          sent: subscriberFanout.channels.telegram.sent,
+                        }
+                      : null,
+                  }
+                : null,
+              media: subscriberFanout.media || null,
+              error: subscriberFanout.error || null,
+            }
+          : null,
         result: { ok: true, mode: "local_sim" },
       });
     }

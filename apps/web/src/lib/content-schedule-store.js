@@ -252,8 +252,9 @@ export function listPendingReview() {
 /**
  * Dual-run cron: mark due scheduled items published.
  * Uses Meta/WP adapters when tokens exist; otherwise honest local_sim.
+ * Also fans out to subscriber email / WhatsApp / Telegram.
  */
-export function processDueContentPublish() {
+export async function processDueContentPublish() {
   const now = Date.now();
   const due = getContentItems().filter(
     (c) =>
@@ -261,6 +262,10 @@ export function processDueContentPublish() {
       c.scheduled_for &&
       new Date(c.scheduled_for).getTime() <= now &&
       (c.approval_version || 0) > 0,
+  );
+
+  const { fanOutCreativeToSubscribers } = await import(
+    "@/lib/content/creative-subscriber-fanout"
   );
 
   const results = [];
@@ -292,17 +297,74 @@ export function processDueContentPublish() {
     };
     ensureLoaded();
     publications = [pub, ...(publications || [])].slice(0, 50);
-    patchContent(item.id, {
+    let content = patchContent(item.id, {
       status: "published",
       published_at: pub.published_at,
       publish_metadata: { adapter, mode, publication_id: pub.id },
     });
+
+    let subscriberFanout = null;
+    try {
+      subscriberFanout = await fanOutCreativeToSubscribers({ content });
+      if (subscriberFanout && !subscriberFanout.skipped) {
+        content = patchContent(item.id, {
+          publish_metadata: {
+            ...(content.publish_metadata || {}),
+            adapter,
+            mode,
+            publication_id: pub.id,
+            subscriber_fanout: {
+              attempted: subscriberFanout.attempted,
+              sent: subscriberFanout.sent,
+              failed: subscriberFanout.failed,
+              at: subscriberFanout.at,
+              channels: {
+                email: subscriberFanout.channels?.email
+                  ? {
+                      attempted: subscriberFanout.channels.email.attempted,
+                      sent: subscriberFanout.channels.email.sent,
+                    }
+                  : null,
+                whatsapp: subscriberFanout.channels?.whatsapp
+                  ? {
+                      attempted: subscriberFanout.channels.whatsapp.attempted,
+                      sent: subscriberFanout.channels.whatsapp.sent,
+                    }
+                  : null,
+                telegram: subscriberFanout.channels?.telegram
+                  ? {
+                      attempted: subscriberFanout.channels.telegram.attempted,
+                      sent: subscriberFanout.channels.telegram.sent,
+                    }
+                  : null,
+              },
+              media: subscriberFanout.media || null,
+            },
+          },
+        });
+      }
+    } catch (err) {
+      subscriberFanout = {
+        ok: false,
+        error: err instanceof Error ? err.message : "fanout_failed",
+      };
+    }
+
     results.push({
       content_item_id: item.id,
       title: item.title,
       scheduled_for: item.scheduled_for,
       published: true,
       adapters: [{ adapter, ok: true, mode }],
+      subscriber_fanout: subscriberFanout
+        ? {
+            ok: subscriberFanout.ok !== false,
+            attempted: subscriberFanout.attempted ?? null,
+            sent: subscriberFanout.sent ?? null,
+            skipped: Boolean(subscriberFanout.skipped),
+            error: subscriberFanout.error || null,
+          }
+        : null,
     });
   }
 

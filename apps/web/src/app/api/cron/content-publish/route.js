@@ -26,7 +26,7 @@ async function handle(request) {
   }
 
   await hydrateContentFromSupabase();
-  const local = processDueContentPublish();
+  const local = await processDueContentPublish();
   return NextResponse.json(
     {
       ok: true,

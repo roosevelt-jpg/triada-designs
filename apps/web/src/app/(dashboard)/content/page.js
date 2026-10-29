@@ -186,13 +186,23 @@ export default function ContentPage() {
         method: "POST",
         body: {
           adapter,
+          share_all: adapter === "all_channels",
           approval_version: item.approval_version,
         },
       });
       if (!result.ok) {
         setError(result.error || "Publish blocked");
       } else {
-        setNotice(`Published via ${adapter} (${result.result?.mode || "local"}).`);
+        const fan = result.subscriber_fanout;
+        const fanNote =
+          fan && !fan.skipped
+            ? ` · Subscribers emailed ${fan.channels?.email?.sent ?? 0}, WhatsApp ${fan.channels?.whatsapp?.sent ?? 0}, Telegram ${fan.channels?.telegram?.sent ?? 0}`
+            : "";
+        setNotice(
+          adapter === "all_channels"
+            ? `Shared on all channels (${result.result?.mode || "local"})${fanNote}.`
+            : `Published via ${adapter} (${result.result?.mode || "local"})${fanNote}.`,
+        );
       }
       await load();
     } catch (err) {
@@ -669,6 +679,13 @@ export default function ContentPage() {
                         {proposedFor(item) ? "Override & schedule" : "Schedule on calendar"}
                       </Button>
                       <Button
+                        disabled={busyId === `publish-${item.id}-all_channels`}
+                        onClick={() => publish(item, "all_channels")}
+                      >
+                        Share all channels
+                      </Button>
+                      <Button
+                        variant="secondary"
                         disabled={busyId === `publish-${item.id}-wordpress`}
                         onClick={() => publish(item, "wordpress")}
                       >
@@ -712,6 +729,13 @@ export default function ContentPage() {
                         Cancel schedule
                       </Button>
                       <Button
+                        disabled={busyId === `publish-${item.id}-all_channels`}
+                        onClick={() => publish(item, "all_channels")}
+                      >
+                        Share all channels
+                      </Button>
+                      <Button
+                        variant="secondary"
                         disabled={busyId === `publish-${item.id}-wordpress`}
                         onClick={() => publish(item, "wordpress")}
                       >
