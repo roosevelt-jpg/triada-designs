@@ -85,11 +85,13 @@ import {
   SUPPORT_PAGE_MESSAGING_CHANNELS,
   SUPPORT_TEXT_CHANNELS,
   appendOutboundReply,
+  conversationsStorageMode,
   getConversation,
   listConversations,
   listUnansweredSocialDms,
   patchConversation,
 } from "@/lib/crm/conversations-store";
+import { shapeConversationForInbox } from "@/lib/crm/inbox-shape";
 import {
   handleInboundSocialDm,
   sweepUnansweredSocialDms,
@@ -332,6 +334,35 @@ function jsonOk(body, status = 200) {
 /** @param {string} message @param {number} [status] */
 function jsonErr(message, status = 400) {
   return { status, body: { message } };
+}
+
+/**
+ * Resolve CRM contacts for inbox list/detail shaping.
+ * @param {Array<{ contact_id?: string | null }>} conversations
+ * @returns {Promise<Map<string, Record<string, unknown>>>}
+ */
+async function buildContactMapForConversations(conversations) {
+  /** @type {Map<string, Record<string, unknown>>} */
+  const map = new Map();
+  const ids = [
+    ...new Set(
+      (conversations || [])
+        .map((c) => (c?.contact_id ? String(c.contact_id) : ""))
+        .filter(Boolean),
+    ),
+  ];
+  if (!ids.length) return map;
+  try {
+    const listed = await listContacts({});
+    for (const row of listed.data || []) {
+      if (ids.includes(String(row.id))) {
+        map.set(String(row.id), row);
+      }
+    }
+  } catch {
+    /* metadata.contact_name still used as fallback */
+  }
+  return map;
 }
 
 /**
@@ -2291,12 +2322,25 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "conversations" && m === "GET") {
-    const data = await listConversations();
+    const url = new URL(request.url);
+    const channelFilter = url.searchParams.get("channel") || "";
+    const data = await listConversations({
+      channel: channelFilter ? String(channelFilter) : "",
+    });
     const unanswered = await listUnansweredSocialDms();
+    const contactMap = await buildContactMapForConversations(data);
+    const shaped = data.map((row) =>
+      shapeConversationForInbox(
+        row,
+        row.contact_id ? contactMap.get(String(row.contact_id)) || null : null,
+      ),
+    );
+    const storage = await conversationsStorageMode();
     return jsonOk({
-      data,
+      data: shaped,
       unanswered_social_dms: unanswered.length,
       social_dm_channels: SOCIAL_DM_CHANNELS,
+      storage,
       source: "next_dual_run",
     });
   }
@@ -2313,13 +2357,17 @@ export async function dispatchV1(method, segments, request, body) {
 
   if (path.match(/^conversations\/[^/]+$/) && m === "GET") {
     const c = await getConversation(segments[1]);
-    return c
-      ? jsonOk({
-          conversation: c,
-          messages: c.messages || [],
-          source: "next_dual_run",
-        })
-      : jsonErr("Conversation not found.", 404);
+    if (!c) return jsonErr("Conversation not found.", 404);
+    const contactMap = await buildContactMapForConversations([c]);
+    const shaped = shapeConversationForInbox(
+      c,
+      c.contact_id ? contactMap.get(String(c.contact_id)) || null : null,
+    );
+    // Laravel-compatible: conversation fields at root (inbox detail page).
+    return jsonOk({
+      ...shaped,
+      source: "next_dual_run",
+    });
   }
 
   if (path.match(/^conversations\/[^/]+\/(takeover|resume-ai|messages)$/) && m === "POST") {
@@ -2329,9 +2377,20 @@ export async function dispatchV1(method, segments, request, body) {
       const patched = await patchConversation(id, {
         automation_mode: action === "takeover" ? "human" : "ai",
       });
-      return patched
-        ? jsonOk({ ok: true, id, automation_mode: patched.automation_mode, conversation: patched })
-        : jsonErr("Conversation not found.", 404);
+      if (!patched) return jsonErr("Conversation not found.", 404);
+      const contactMap = await buildContactMapForConversations([patched]);
+      const shaped = shapeConversationForInbox(
+        patched,
+        patched.contact_id
+          ? contactMap.get(String(patched.contact_id)) || null
+          : null,
+      );
+      return jsonOk({
+        ok: true,
+        id,
+        automation_mode: patched.automation_mode,
+        ...shaped,
+      });
     }
     // messages — human/outbound note
     const text =
@@ -2343,9 +2402,19 @@ export async function dispatchV1(method, segments, request, body) {
       body: text,
       agent_key: "human",
     });
-    return saved
-      ? jsonOk({ ok: true, conversation: saved, messages: saved.messages || [] })
-      : jsonErr("Conversation not found.", 404);
+    if (!saved) return jsonErr("Conversation not found.", 404);
+    const contactMap = await buildContactMapForConversations([saved]);
+    const shaped = shapeConversationForInbox(
+      saved,
+      saved.contact_id
+        ? contactMap.get(String(saved.contact_id)) || null
+        : null,
+    );
+    return jsonOk({
+      ok: true,
+      ...shaped,
+      messages: shaped.messages || [],
+    });
   }
 
   if (path === "leads" && m === "GET") {

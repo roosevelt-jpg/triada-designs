@@ -20,9 +20,55 @@ import {
   appendOutboundReply,
   findConversationByExternal,
   ingestInboundDm,
+  patchConversation,
 } from "@/lib/crm/conversations-store";
+import { upsertContacts } from "@/lib/crm/contacts-store";
 import { sendWhatsAppTextMessage } from "@/lib/integrations/whatsapp-cloud-text";
 import { rememberInboundWhatsAppPeer } from "@/lib/crm/meta-contact-sync";
+
+/**
+ * Upsert CRM contact + link conversation.contact_id (off the Graph hot path).
+ * Inbox still shows metadata.contact_name immediately.
+ * @param {{
+ *   conversationId?: string | null,
+ *   externalUserId: string,
+ *   contactName?: string | null,
+ * }} input
+ */
+async function linkWhatsAppContact(input) {
+  const waId = String(input.externalUserId || "")
+    .replace(/^\+/, "")
+    .trim();
+  if (!waId) return;
+  const phone = `+${waId}`;
+  try {
+    const result = await upsertContacts([
+      {
+        name: input.contactName || null,
+        phone,
+        source: "whatsapp_inbound",
+        metadata: { wa_id: waId },
+      },
+    ]);
+    const contactId = result.upserted?.[0]?.id || null;
+    if (contactId && input.conversationId) {
+      await patchConversation(String(input.conversationId), {
+        contact_id: contactId,
+      });
+    }
+  } catch {
+    /* non-blocking */
+  }
+  try {
+    await rememberInboundWhatsAppPeer({
+      phone,
+      name: input.contactName || null,
+      wa_id: waId,
+    });
+  } catch {
+    /* non-blocking */
+  }
+}
 
 /**
  * Draft + send a Support reply for one WhatsApp conversation.
@@ -251,6 +297,7 @@ export async function handleInboundWhatsApp(input) {
     body: input.body,
     subject: input.body || "WhatsApp message",
     conversation_id: existing?.id || undefined,
+    contact_id: existing?.contact_id || undefined,
     external_user_id: externalUserId,
     external_conversation_id: externalConversationId,
     provider_message_id: input.provider_message_id,
@@ -263,20 +310,22 @@ export async function handleInboundWhatsApp(input) {
     },
   });
 
+  const scheduleContactLink = () => {
+    if (!externalUserId) return;
+    void linkWhatsAppContact({
+      conversationId: conversation?.id,
+      externalUserId,
+      contactName: input.contact_name || null,
+    }).catch(() => null);
+  };
+
   if (input.auto_reply === false) {
-    if (externalUserId) {
-      void rememberInboundWhatsAppPeer({
-        phone: externalUserId.startsWith("+")
-          ? externalUserId
-          : `+${externalUserId}`,
-        name: input.contact_name || null,
-        wa_id: externalUserId.replace(/^\+/, ""),
-      }).catch(() => null);
-    }
+    scheduleContactLink();
     return { ok: true, conversation, replied: false, queued: true };
   }
 
   if (conversation.automation_mode === "human") {
+    scheduleContactLink();
     return {
       ok: true,
       conversation,
@@ -286,21 +335,13 @@ export async function handleInboundWhatsApp(input) {
     };
   }
 
-  // Draft + Graph send first; CRM peer remember runs after (non-blocking).
+  // Draft + Graph send first; CRM contact link runs after (non-blocking).
   const reply = await replyWhatsAppSupport({
     conversation,
     dry_run: input.dry_run === true,
   });
 
-  if (externalUserId) {
-    void rememberInboundWhatsAppPeer({
-      phone: externalUserId.startsWith("+")
-        ? externalUserId
-        : `+${externalUserId}`,
-      name: input.contact_name || null,
-      wa_id: externalUserId.replace(/^\+/, ""),
-    }).catch(() => null);
-  }
+  scheduleContactLink();
 
   return {
     ok: Boolean(reply.ok),
