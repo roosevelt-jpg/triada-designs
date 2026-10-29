@@ -4,7 +4,9 @@ namespace App\Services\AI;
 
 use App\Models\AgentConfig;
 use App\Models\AiRun;
+use App\Models\Contact;
 use App\Models\ContentItem;
+use App\Models\Conversation;
 use App\Models\KnowledgeSource;
 use App\Models\Lead;
 use App\Models\Product;
@@ -200,6 +202,88 @@ class AiOrchestrator
      */
     public function processInbound(Workspace $workspace, array $context): array
     {
+        $preference = app(FirstContactLanguagePreference::class);
+        $contactId = $context['contact_id'] ?? null;
+        $conversationId = $context['conversation_id'] ?? null;
+        $message = (string) ($context['message'] ?? $context['body'] ?? '');
+        $contact = $contactId ? Contact::query()->find($contactId) : null;
+        $conversation = $conversationId ? Conversation::query()->find($conversationId) : null;
+
+        if ($contact && $conversation && $preference->needsFirstContactAsk($contact, $conversation)) {
+            $ask = $preference->draftFirstContactAsk(
+                is_string($contact->name) ? $contact->name : null
+            );
+            $preference->markAsked($contact);
+
+            return [
+                'ok' => true,
+                'intent' => 'first_contact_language_ask',
+                'classify' => null,
+                'draft' => $ask,
+                'qualify' => null,
+                'escalate' => null,
+                'suggested_reply' => $ask['text'] ?? null,
+                'detected_language' => 'en',
+                'detected_language_name' => 'English',
+                'language_rtl' => false,
+                'needs_human' => false,
+                'first_contact_language_ask' => true,
+                'fast_path' => true,
+            ];
+        }
+
+        if ($contact && $preference->isPreferencePending($contact)) {
+            $resolved = $preference->resolveFromReply(
+                $message,
+                (string) ($contact->preferred_language ?: 'en')
+            );
+            $preference->markLocked($contact, $resolved['code']);
+
+            if ($preference->isChoiceOnly($message) || $this->looksLikeSimpleGreeting($message)) {
+                $ack = $preference->draftLockedAck(
+                    $resolved['code'],
+                    is_string($contact->name) ? $contact->name : null
+                );
+
+                return [
+                    'ok' => true,
+                    'intent' => 'language_preference_locked',
+                    'classify' => null,
+                    'draft' => $ack,
+                    'qualify' => null,
+                    'escalate' => null,
+                    'suggested_reply' => $ack['text'] ?? null,
+                    'detected_language' => $resolved['code'],
+                    'detected_language_name' => $resolved['name'],
+                    'language_rtl' => (bool) ($resolved['rtl'] ?? false),
+                    'needs_human' => false,
+                    'language_preference_phase' => 'locked',
+                    'fast_path' => true,
+                ];
+            }
+
+            $context = array_merge($context, [
+                'preferred_language' => $resolved['code'],
+                'detected_language' => $resolved['code'],
+                'language_preference_locked' => true,
+            ]);
+        } elseif ($contact && $preference->isLocked($contact)) {
+            $locked = (string) ($contact->preferred_language ?: 'en');
+            $detected = app(CustomerLanguageDetector::class)->detect($message, [
+                'hint' => $locked,
+                'fallback' => $locked,
+            ]);
+            $code = (string) ($detected['code'] ?? $locked);
+            if ($code !== $locked && ($detected['confidence'] ?? 0) >= 0.55) {
+                $preference->markLocked($contact, $code);
+            }
+            $context = array_merge($context, [
+                'preferred_language' => $contact->preferred_language ?: $locked,
+                'detected_language' => $code,
+                'language_preference_locked' => true,
+            ]);
+        }
+
         $classify = $this->runAgent($workspace, 'support', 'classify', $context);
         $intent = (string) data_get($classify, 'parsed.intent', 'general_inquiry');
 
@@ -233,6 +317,19 @@ class AiOrchestrator
             'needs_human' => (bool) data_get($escalate, 'parsed.escalate', false)
                 || (bool) data_get($classify, 'parsed.needs_human', false),
         ];
+    }
+
+    protected function looksLikeSimpleGreeting(string $text): bool
+    {
+        $raw = trim($text);
+        if ($raw === '' || mb_strlen($raw) > 48) {
+            return false;
+        }
+
+        return (bool) preg_match(
+            '/^(hi+|hello|hey+|hola|hallo|salut|bonjour|ciao|olá|ola|привет|مرحبا|أهلا|اهلا|bun[aă]|yo)([\s,.!?…]|👋|🙏)*$/iu',
+            $raw
+        );
     }
 
     /**
@@ -315,7 +412,10 @@ Hard rules:
 - Posts, broadcasts, and custom quotes require human approval before sending.
 - Never mention internal tooling or implementation details in customer-facing copy.
 Language lock (hard rule):
-- Always match the latest customer message language on every reply (default English only if unclear).
+- First contact with a new customer: the FIRST reply is always an English greeting, then ask which language they speak / prefer.
+- After they choose (or clearly write in) a language, lock subsequent replies to that preference.
+- Still re-detect every turn: if the customer switches language in their latest message, switch with them and lock to the new preference.
+- Always match the latest customer message language on every reply after preference is set (default English only if unclear).
 - Never answer in a different language unless the customer switches in their latest message — then switch with them.
 - Do not hallucinate or drift into another language; greetings, follow-ups, escalation outlines, lead notes, and marketing chat stay locked.
 - Supported customer languages include Arabic, Romanian, German, French, Russian, Spanish, Portuguese, and English — and match other languages when the customer writes them.

@@ -140,12 +140,22 @@ class ChannelInboundProcessor
                 'integration_id' => $conversation->integration_id ?: $integration?->id,
             ])->save();
 
-            if (
-                empty($contact->preferred_language)
-                || $contact->preferred_language === 'en'
-                || $detected['confidence'] >= 0.7
-            ) {
-                $contact->forceFill(['preferred_language' => $langCode])->save();
+            // Do not overwrite preferred_language on first contact before the
+            // English greeting + language-preference ask locks a choice.
+            $contactMeta = is_array($contact->metadata) ? $contact->metadata : [];
+            $langLocked = ($contactMeta['language_preference_locked'] ?? false) === true
+                || ($contactMeta['language_preference_confirmed'] ?? false) === true;
+            $langAsked = ($contactMeta['language_preference_asked'] ?? false) === true;
+            if ($langLocked && $detected['confidence'] >= 0.7 && $langCode !== ($contact->preferred_language ?: '')) {
+                // Customer switched languages mid-thread — follow them.
+                $contactMeta['language_preference_locked'] = true;
+                $contactMeta['language_preference_confirmed'] = true;
+                $contact->forceFill([
+                    'preferred_language' => $langCode,
+                    'metadata' => $contactMeta,
+                ])->save();
+            } elseif (! $langAsked && ! $langLocked && empty($contact->preferred_language)) {
+                $contact->forceFill(['preferred_language' => 'en'])->save();
             }
 
             if ($integration) {

@@ -193,6 +193,33 @@ function filterContacts(rows, q, whatsappReadyOnly) {
 }
 
 /**
+ * Fetch one contact by id (Supabase when keyed, else local mock).
+ * @param {string} id
+ * @returns {Promise<ContactRecord | null>}
+ */
+export async function getContact(id) {
+  const contactId = String(id || "").trim();
+  if (!contactId) return null;
+
+  if (hasSupabaseAdminCredentials()) {
+    const supabase = createAdminSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from(TABLE)
+        .select("*")
+        .eq("workspace_id", WORKSPACE_ID)
+        .eq("id", contactId)
+        .limit(1)
+        .maybeSingle();
+      if (!error && data) return shapeContact(data);
+    }
+  }
+
+  const rows = await readLocal();
+  return rows.find((c) => c.id === contactId) || null;
+}
+
+/**
  * Upsert by phone_normalized (preferred) or email_normalized.
  * @param {Array<Partial<ContactRecord>>} inputs
  * @returns {Promise<{ mode: string, upserted: ContactRecord[], created: number, updated: number }>}

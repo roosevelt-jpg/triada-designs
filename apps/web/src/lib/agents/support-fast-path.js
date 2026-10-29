@@ -41,6 +41,7 @@ export function isSimpleSupportGreeting(text) {
  *   message: string,
  *   customerName?: string | null,
  *   languageHint?: string,
+ *   languageOverride?: string,
  * }} input
  */
 export function draftFastSupportReply(input) {
@@ -48,9 +49,11 @@ export function draftFastSupportReply(input) {
   const message = String(input.message || "").trim() || "Hi";
   const detected = detectCustomerLanguage(message, {
     hint: input.languageHint || "",
-    fallback: "en",
+    fallback: input.languageHint || "en",
   });
-  const lang = detected.code || "en";
+  const lang = String(input.languageOverride || detected.code || "en")
+    .trim()
+    .toLowerCase() || "en";
   const cores = FAST_GREETING_CORE[lang] || FAST_GREETING_CORE.en;
   const body = `${cores}\n\n${FAST_HUMAN[lang] || FAST_HUMAN.en}`;
   const branded = ensureBrandedOutboundText(body, {
@@ -68,7 +71,7 @@ export function draftFastSupportReply(input) {
     collaboration: false,
     collaborators: [],
     reviews: [],
-    detected_language: detected.code,
+    detected_language: lang,
     detected_language_name: detected.name,
     language_rtl: detected.rtl,
     latency_ms: Date.now() - started,

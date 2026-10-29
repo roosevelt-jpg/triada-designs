@@ -3,6 +3,7 @@
  * Retrieves training docs (RAG-style) into Anthropic system prompts.
  * Hard rule: never fabricate off-brand words — retrieve docs when unsure.
  * Customer replies match inbound language (detect from latest message).
+ * First contact: English greeting + language preference ask (see language-preference.js).
  */
 
 import { completeAnthropic } from "./anthropic-client";

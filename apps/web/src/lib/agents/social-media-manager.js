@@ -3,16 +3,12 @@
  * so no inbound message is left unanswered.
  */
 
-import { runTeamCollaboration } from "./team-orchestrator";
 import { setSharedKv } from "./shared-memory";
 import {
   finalizeHumanHandoff,
   maybeHumanHandoffReply,
 } from "./human-handoff";
-import {
-  draftFastSupportReply,
-  isSimpleSupportGreeting,
-} from "./support-fast-path";
+import { draftInboundSupportReply } from "./support-draft";
 import {
   SOCIAL_DM_CHANNELS,
   SUPPORT_PAGE_MESSAGING_CHANNELS,
@@ -126,36 +122,19 @@ export async function replyUnansweredDm(input) {
       ? conversation.metadata.contact_name
       : undefined;
 
-  /** @type {Record<string, unknown>} */
-  let collab;
-  if (isSimpleSupportGreeting(inbound)) {
-    // Same greeting fast-path as Support inbound — no Anthropic / QC.
-    collab = draftFastSupportReply({
-      message: inbound,
-      customerName,
-    });
-  } else {
-    collab = await runTeamCollaboration({
-      agent_key: "social_media_manager",
-      purpose: "draft_dm_reply",
-      message: inbound,
-      dry_run: dryRun,
-      latency_mode: "fast",
-      max_tokens: 400,
-      context: {
-        channel,
-        conversation_id: conversation.id,
-        subject: conversation.subject,
-        contact_id: conversation.contact_id,
-        customer_message: inbound,
-        social_dm: true,
-        customer_name: customerName,
-        latency_mode: "fast",
-      },
-      // Reviews deferred off the sweep→send critical path.
-      collaborators: [],
-    });
-  }
+  // Shared Support draft: English first-contact language ask, then lock / re-detect.
+  const collab = await draftInboundSupportReply({
+    message: inbound,
+    customerName,
+    channel,
+    conversation,
+    dry_run: dryRun,
+    agent_key: "social_media_manager",
+    context: {
+      social_dm: true,
+      page_or_account_id: conversation.page_or_account_id,
+    },
+  });
 
   const replyText = String(collab.draft || collab.text || "").trim();
   if (!replyText) {
