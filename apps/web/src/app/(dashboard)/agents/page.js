@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AgentDetailModal } from "@/components/agents/AgentDetailModal";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +11,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import { featuresForAgent } from "@/lib/agents/agent-features";
 import {
   aiStatusSummary,
   connectionLabel,
@@ -46,6 +48,24 @@ export default function AgentsPage() {
   const [testResult, setTestResult] = useState(null);
   const [agentForm, setAgentForm] = useState(emptyAgentForm);
   const [taskForm, setTaskForm] = useState(emptyTaskForm);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailAgent, setDetailAgent] = useState(null);
+  const configRef = useRef(null);
+
+  const openAgentDetail = useCallback((agent) => {
+    setDetailAgent(agent);
+    setDetailOpen(true);
+    setSelected(agent);
+    setPrompt(agent?.config?.system_prompt || "");
+  }, []);
+
+  const selectForConfig = useCallback((agent) => {
+    setSelected(agent);
+    setPrompt(agent?.config?.system_prompt || "");
+    requestAnimationFrame(() => {
+      configRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,6 +97,10 @@ export default function AgentsPage() {
           return rows[0];
         }
         return null;
+      });
+      setDetailAgent((prev) => {
+        if (!prev) return prev;
+        return rows.find((a) => a.id === prev.id) || prev;
       });
     } catch (err) {
       setError(err.message || "Failed to load agents");
@@ -290,15 +314,22 @@ export default function AgentsPage() {
       {!loading && agents.length > 0 ? (
         <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
           <div className="space-y-3">
-            {agents.map((agent) => (
-              <button
+            {agents.map((agent) => {
+              const previewFeatures = featuresForAgent(agent).slice(0, 2);
+              return (
+              <div
                 key={agent.id}
-                type="button"
-                onClick={() => {
-                  setSelected(agent);
-                  setPrompt(agent.config?.system_prompt || "");
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${agent.name} details`}
+                onClick={() => openAgentDetail(agent)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openAgentDetail(agent);
+                  }
                 }}
-                className={`surface-card w-full p-4 text-left transition-colors duration-150 md:p-5 ${
+                className={`surface-card w-full cursor-pointer p-4 text-left transition-colors duration-150 md:p-5 ${
                   selected?.id === agent.id ? "border-brown ring-1 ring-brown/30" : "hover:bg-stone/30"
                 }`}
               >
@@ -308,13 +339,22 @@ export default function AgentsPage() {
                   <Badge tone="neutral">{agent.role}</Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted">{agent.description}</p>
+                {previewFeatures.length ? (
+                  <ul className="mt-2 space-y-1">
+                    {previewFeatures.map((feature) => (
+                      <li key={feature} className="text-xs text-muted">
+                        · {feature}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 <p className="mt-2 text-xs text-muted">
                   Channels: {(agent.config?.channels || []).join(", ") || "—"}
                   {(agent.config?.collaborates_with || []).length
                     ? ` · Peers: ${agent.config.collaborates_with.join(", ")}`
                     : ""}
                 </p>
-                <div className="mt-3">
+                <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     variant="secondary"
                     size="sm"
@@ -326,9 +366,19 @@ export default function AgentsPage() {
                   >
                     {agent.status === "paused" ? "Resume" : "Pause"}
                   </Button>
+                  <Button
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openAgentDetail(agent);
+                    }}
+                  >
+                    View details
+                  </Button>
                 </div>
-              </button>
-            ))}
+              </div>
+              );
+            })}
 
             <form className="surface-card space-y-3 p-5" onSubmit={createAgent}>
               <h3 className="ops-section-title">Create agent</h3>
@@ -362,10 +412,19 @@ export default function AgentsPage() {
             </form>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-4" ref={configRef}>
             {selected ? (
               <div className="surface-card space-y-4 p-5">
-                <h3 className="ops-section-title">{selected.name} config</h3>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="ops-section-title">{selected.name} config</h3>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => openAgentDetail(selected)}
+                  >
+                    View capabilities
+                  </Button>
+                </div>
                 <label className="block text-sm">
                   <span className="mb-1.5 block text-[13px] font-medium text-ink">System prompt</span>
                   <textarea
@@ -529,6 +588,15 @@ export default function AgentsPage() {
           </div>
         </div>
       ) : null}
+
+      <AgentDetailModal
+        open={detailOpen}
+        agent={detailAgent}
+        busy={busy}
+        onClose={() => setDetailOpen(false)}
+        onTogglePause={togglePause}
+        onConfigure={selectForConfig}
+      />
     </DashboardShell>
   );
 }

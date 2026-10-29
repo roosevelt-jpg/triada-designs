@@ -80,25 +80,43 @@ function applyRosterPromptUpdates(agents, tasks = []) {
     const roster = TEAM_ROSTER.find((r) => r.key === agent.key || r.id === agent.id);
     if (!roster) return agent;
     const rosterVersion = Number(roster.config?.prompt_version || 0);
-    if (!rosterVersion) return agent;
     const currentVersion = Number(agent.config?.prompt_version || 0);
-    if (currentVersion >= rosterVersion) return agent;
-    changed = true;
-    return {
-      ...agent,
-      description: roster.description || agent.description,
-      config: {
-        ...(agent.config || {}),
-        ...(roster.config || {}),
-        prompt_version: rosterVersion,
-        system_prompt: roster.config?.system_prompt,
-        channels: roster.config?.channels || agent.config?.channels,
-        collaborates_with:
-          roster.config?.collaborates_with || agent.config?.collaborates_with,
-        allowed_tools: roster.config?.allowed_tools || agent.config?.allowed_tools,
-      },
-      updated_at: nowIso(),
-    };
+    const rosterFeatures = Array.isArray(roster.features) ? roster.features : [];
+    const currentFeatures = Array.isArray(agent.features) ? agent.features : [];
+    const featuresStale =
+      rosterFeatures.length > 0 &&
+      JSON.stringify(rosterFeatures) !== JSON.stringify(currentFeatures);
+
+    if (rosterVersion && currentVersion < rosterVersion) {
+      changed = true;
+      return {
+        ...agent,
+        description: roster.description || agent.description,
+        features: rosterFeatures.length ? rosterFeatures : currentFeatures,
+        config: {
+          ...(agent.config || {}),
+          ...(roster.config || {}),
+          prompt_version: rosterVersion,
+          system_prompt: roster.config?.system_prompt,
+          channels: roster.config?.channels || agent.config?.channels,
+          collaborates_with:
+            roster.config?.collaborates_with || agent.config?.collaborates_with,
+          allowed_tools: roster.config?.allowed_tools || agent.config?.allowed_tools,
+        },
+        updated_at: nowIso(),
+      };
+    }
+
+    if (featuresStale) {
+      changed = true;
+      return {
+        ...agent,
+        features: rosterFeatures,
+        updated_at: nowIso(),
+      };
+    }
+
+    return agent;
   });
 
   // Ensure every roster seed key exists (admin may have partial local seed).

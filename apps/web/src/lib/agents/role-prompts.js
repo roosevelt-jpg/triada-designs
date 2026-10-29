@@ -7,7 +7,7 @@
 import { creativeAgentSystemPrompt } from "../creative/jewellery-prompts";
 
 /** Bump when any seeded roster prompt changes so agent-store syncs live rows. */
-export const TEAM_PROMPT_VERSION = 8;
+export const TEAM_PROMPT_VERSION = 9;
 
 /**
  * Language-matching hook — expanded by detect-language + orchestrator per turn.

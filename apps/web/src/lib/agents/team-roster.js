@@ -3,6 +3,7 @@
  * Agents collaborate via shared memory/kv + team orchestration.
  */
 
+import { AGENT_FEATURES_BY_KEY } from "./agent-features";
 import { TEAM_PROMPT_VERSION, systemPromptForRole } from "./role-prompts";
 
 /** @typedef {{
@@ -11,6 +12,7 @@ import { TEAM_PROMPT_VERSION, systemPromptForRole } from "./role-prompts";
  *   name: string,
  *   role: string,
  *   description: string,
+ *   features?: string[],
  *   status: "active" | "paused",
  *   config: Record<string, unknown>,
  * }} SeedAgent
@@ -25,6 +27,7 @@ export const TEAM_ROSTER = [
     role: "support",
     description:
       "Answers product, order, sizing, materials, and care questions from approved knowledge. Hands off when unsure.",
+    features: AGENT_FEATURES_BY_KEY.ai_support,
     status: "active",
     config: {
       channels: ["whatsapp", "webchat", "email", "telegram"],
@@ -48,6 +51,7 @@ export const TEAM_ROSTER = [
     role: "social_media_manager",
     description:
       "Owns Instagram, Messenger, Facebook, and LinkedIn DMs — replies so no inbound message is left unanswered.",
+    features: AGENT_FEATURES_BY_KEY.social_media_manager,
     status: "active",
     config: {
       channels: ["instagram", "messenger", "facebook", "linkedin"],
@@ -74,6 +78,7 @@ export const TEAM_ROSTER = [
     role: "creative",
     description:
       "Drafts viral UGC scripts, high-converting captions, creative briefs, and platform variants for Meta/IG/TikTok/WhatsApp. Human approval before publish.",
+    features: AGENT_FEATURES_BY_KEY.content_creator,
     status: "active",
     config: {
       channels: [
@@ -104,6 +109,7 @@ export const TEAM_ROSTER = [
     role: "follow_up",
     description:
       "Friendly cart/sizing abandonment reminders and after-sale care sequences. Opt-in WhatsApp only.",
+    features: AGENT_FEATURES_BY_KEY.follow_up,
     status: "active",
     config: {
       channels: ["whatsapp", "email", "instagram"],
@@ -119,6 +125,7 @@ export const TEAM_ROSTER = [
     role: "marketing",
     description:
       "Campaign concepts, channel-ready copy, and calendar proposals for human approval.",
+    features: AGENT_FEATURES_BY_KEY.marketing,
     status: "active",
     config: {
       channels: ["content_studio", "campaigns", "calendar"],
@@ -134,6 +141,7 @@ export const TEAM_ROSTER = [
     role: "quality_control",
     description:
       "Reviews drafts for accuracy, brand voice, catalog facts, and policy alignment before send/publish.",
+    features: AGENT_FEATURES_BY_KEY.quality_control,
     status: "active",
     config: {
       channels: ["internal"],
@@ -149,6 +157,7 @@ export const TEAM_ROSTER = [
     role: "compliance",
     description:
       "Checks WhatsApp opt-in, consent, outreach rules, and disclosure requirements.",
+    features: AGENT_FEATURES_BY_KEY.compliance,
     status: "active",
     config: {
       channels: ["internal", "whatsapp", "email", "linkedin"],
@@ -164,6 +173,7 @@ export const TEAM_ROSTER = [
     role: "lead_qualification",
     description:
       "Scores inbound intent, updates CRM lead stage, and routes hot leads to humans or Escalation.",
+    features: AGENT_FEATURES_BY_KEY.leads_qualification,
     status: "active",
     config: {
       channels: ["webchat", "facebook", "instagram", "whatsapp", "telegram", "email"],
@@ -180,6 +190,7 @@ export const TEAM_ROSTER = [
     role: "escalation",
     description:
       "Handles complaints, custom quotes, wholesale/B2B, and anything Support cannot verify. Prepares human handoff.",
+    features: AGENT_FEATURES_BY_KEY.escalation_officer,
     status: "active",
     config: {
       channels: ["internal", "telegram", "email", "whatsapp"],
