@@ -214,6 +214,18 @@ import {
   updateMember,
   updateRole,
 } from "@/lib/team/team-store";
+import {
+  acknowledgeManufacturerOrder,
+  getManufacturerOverview,
+  listCommerceOrders,
+  listManufacturerContacts,
+  MANUFACTURER_STATUSES,
+  resendManufacturerOrder,
+  updateManufacturerOrderStatus,
+  upsertCommerceOrder,
+  upsertManufacturerContact,
+  whereIsMyOrder,
+} from "@/lib/manufacturer";
 
 /** @type {{ timezone: string, workflows: ReturnType<typeof buildWorkflows>, agents: Awaited<ReturnType<typeof listAgents>>["data"] }} */
 const runtimeState = {
@@ -3606,40 +3618,22 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "jewellery-ops/orders" && m === "GET") {
+    const listed = await listCommerceOrders();
     return jsonOk({
-      data: [
-        {
-          id: "ord-1",
-          external_ref: "TD-1001",
-          status: "in_production",
-          customer_name: "Layla Al Maktoum",
-          total: 1450,
-          currency: "AED",
-        },
-      ],
+      data: listed.data,
+      storage: listed.storage,
     });
   }
 
   if (path === "jewellery-ops/orders" && m === "POST") {
-    return jsonOk(
-      {
-        order: {
-          id: `ord-${Date.now()}`,
-          status: "received",
-          ...(body && typeof body === "object" ? body : {}),
-        },
-      },
-      201,
-    );
+    const input = body && typeof body === "object" ? body : {};
+    const result = await upsertCommerceOrder(input);
+    return jsonOk(result, 201);
   }
 
   if (path === "jewellery-ops/orders/where-is-my-order" && m === "POST") {
-    return jsonOk({
-      ok: true,
-      query: body?.query,
-      order: { id: "ord-1", status: "in_production", eta_days: 5 },
-      message: "Your piece is with the manufacturer — about 5 days remaining.",
-    });
+    const input = body && typeof body === "object" ? body : {};
+    return jsonOk(await whereIsMyOrder(input));
   }
 
   if (path === "jewellery-ops/invoices" && m === "GET") {
@@ -3737,30 +3731,77 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "jewellery-ops/manufacturer" && m === "GET") {
-    return jsonOk({
-      materials: [
-        {
-          material_key: "silver_gold_plate",
-          display_name: "Silver with gold plating",
-          stock_grams: 420,
-          low_stock_threshold_grams: 80,
-        },
-        {
-          material_key: "14k",
-          display_name: "14K gold",
-          stock_grams: 35,
-          low_stock_threshold_grams: 40,
-        },
-        {
-          material_key: "18k",
-          display_name: "18K gold",
-          stock_grams: 22,
-          low_stock_threshold_grams: 25,
-        },
-      ],
-      open_jobs: 1,
-      honesty: "Manufacturer board.",
+    return jsonOk(await getManufacturerOverview());
+  }
+
+  if (path === "jewellery-ops/manufacturer/contacts" && m === "GET") {
+    const listed = await listManufacturerContacts();
+    return jsonOk({ data: listed.data, storage: listed.storage });
+  }
+
+  if (path === "jewellery-ops/manufacturer/contacts" && m === "POST") {
+    const input = body && typeof body === "object" ? body : {};
+    const saved = await upsertManufacturerContact(input);
+    return jsonOk(saved, 201);
+  }
+
+  if (
+    path.match(/^jewellery-ops\/manufacturer\/contacts\/[^/]+$/) &&
+    (m === "PUT" || m === "PATCH")
+  ) {
+    const id = segments[3];
+    const input = body && typeof body === "object" ? body : {};
+    const saved = await upsertManufacturerContact({ ...input, id });
+    return jsonOk(saved);
+  }
+
+  if (
+    path.match(/^jewellery-ops\/manufacturer\/orders\/[^/]+\/ack$/) &&
+    m === "POST"
+  ) {
+    const id = segments[3];
+    const input = body && typeof body === "object" ? body : {};
+    const auth = await requireAuth(request);
+    const result = await acknowledgeManufacturerOrder(id, {
+      acked_by:
+        (typeof input.acked_by === "string" && input.acked_by) ||
+        (auth.ok ? auth.user?.email : null) ||
+        "admin",
+      note: input.note,
     });
+    if (!result.ok) return jsonErr(result.error || "Ack failed", 404);
+    return jsonOk(result);
+  }
+
+  if (
+    path.match(/^jewellery-ops\/manufacturer\/orders\/[^/]+\/status$/) &&
+    (m === "POST" || m === "PATCH")
+  ) {
+    const id = segments[3];
+    const input = body && typeof body === "object" ? body : {};
+    const result = await updateManufacturerOrderStatus(id, {
+      status: String(input.status || ""),
+      note: input.note,
+    });
+    if (!result.ok) {
+      return jsonErr(
+        result.error === "invalid_status"
+          ? `Invalid status. Allowed: ${(result.allowed || MANUFACTURER_STATUSES).join(", ")}`
+          : result.error || "Status update failed",
+        result.error === "invalid_status" ? 400 : 404,
+      );
+    }
+    return jsonOk(result);
+  }
+
+  if (
+    path.match(/^jewellery-ops\/manufacturer\/orders\/[^/]+\/resend$/) &&
+    m === "POST"
+  ) {
+    const id = segments[3];
+    const result = await resendManufacturerOrder(id);
+    if (!result.ok) return jsonErr(result.error || "Resend failed", 404);
+    return jsonOk(result);
   }
 
   if (path === "jewellery-ops/ugc" && m === "GET") {

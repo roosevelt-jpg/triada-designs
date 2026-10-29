@@ -52,6 +52,7 @@ export default function OrdersPage() {
           total: 890,
           currency: "AED",
           whatsapp_opt_in: true,
+          customer_name: "Client",
           customer_email: "client@example.com",
           line_items: [
             {
@@ -66,7 +67,15 @@ export default function OrdersPage() {
           paid: true,
         },
       });
-      setCreateStatus(`Order ${result.order?.order_number} · invoice ${result.invoice?.invoice?.invoice_number || "queued"}`);
+      const mfr = result.manufacturer_order?.manufacturer_order || result.manufacturer_order;
+      const mode = mfr?.delivery_mode || "recorded";
+      setCreateStatus(
+        `Order ${result.order?.order_number} · invoice ${
+          result.invoice?.invoice?.invoice_number || result.invoice?.number || "queued"
+        } · manufacturer ${mfr?.external_ref || "—"} (${mode}${
+          mfr?.status ? ` · ${mfr.status}` : ""
+        })`,
+      );
       load();
     } catch (err) {
       setCreateStatus(err.message);
@@ -89,7 +98,7 @@ export default function OrdersPage() {
   return (
     <DashboardShell
       title="Orders & invoices"
-      description="WhatsApp order lifecycle (opt-in business only), where-is-my-order, automatic invoice + UAE e-invoicing path for B2B."
+      description="Paid orders create branded invoices and send manufacture jobs to your primary manufacturer contact. Confirm placement on Manufacturer."
       actions={
         <Link href="/orders/invoices">
           <Button size="sm">Edit invoices</Button>
@@ -103,12 +112,20 @@ export default function OrdersPage() {
         <div className="space-y-5">
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
-              <h2 className="ops-section-title">Create paid order (local)</h2>
-              <p className="mt-1 text-sm text-muted">Triggers invoice PDF, manufacturer push, and WhatsApp lifecycle copy when opted in.</p>
+              <h2 className="ops-section-title">Create paid order</h2>
+              <p className="mt-1 text-sm text-muted">
+                Triggers invoice PDF, manufacturer send to the primary contact, and WhatsApp lifecycle when opted in.
+              </p>
               <Button className="mt-3" size="sm" onClick={createSample}>
                 Seed order + invoice
               </Button>
               {createStatus ? <p className="mt-2 text-sm text-muted">{createStatus}</p> : null}
+              <p className="mt-2 text-sm text-muted">
+                <Link href="/manufacturer" className="underline underline-offset-2">
+                  Open manufacturer board
+                </Link>{" "}
+                to confirm placement.
+              </p>
             </Card>
             <Card>
               <h2 className="ops-section-title">Where is my order?</h2>
@@ -118,7 +135,9 @@ export default function OrdersPage() {
                   Look up
                 </Button>
               </form>
-              {lookupResult ? <p className="mt-3 text-sm text-ink">{lookupResult.reply}</p> : null}
+              {lookupResult ? (
+                <p className="mt-3 text-sm text-ink">{lookupResult.reply || lookupResult.message}</p>
+              ) : null}
             </Card>
           </div>
 
@@ -134,9 +153,10 @@ export default function OrdersPage() {
                     <p className="font-medium text-ink">{o.order_number}</p>
                     <p className="text-sm text-muted">
                       {o.total} {o.currency} · profit {o.profit ?? "—"}
+                      {o.manufacturer_order_id ? " · manufacturer job linked" : ""}
                     </p>
                   </div>
-                  <Badge>{o.lifecycle_status}</Badge>
+                  <Badge>{o.lifecycle_status || o.status}</Badge>
                 </div>
               ))}
             </div>
