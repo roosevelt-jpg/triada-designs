@@ -27,6 +27,8 @@ import {
  *   message?: string,
  *   dry_run?: boolean,
  *   context?: Record<string, unknown>,
+ *   latency_mode?: "fast" | "full",
+ *   max_tokens?: number,
  * }} input
  */
 export async function runAgentOrchestration(input = {}) {
@@ -34,6 +36,7 @@ export async function runAgentOrchestration(input = {}) {
   const purpose = String(input.purpose || "draft_reply");
   const message = String(input.message || input.context?.message || "").trim();
   const agentKey = String(input.agent_key || input.agent?.key || "ai_support");
+  const fast = input.latency_mode === "fast" || input.context?.latency_mode === "fast";
   const seeded = buildAgents();
   const stored = input.agent ? null : await findAgent(agentKey);
   const agent =
@@ -62,8 +65,11 @@ export async function runAgentOrchestration(input = {}) {
     fallback: "en",
   });
 
-  const training = await retrieveTrainingDocs(message || purpose, { limit: 4 });
-  const status = await getAnthropicStatus();
+  const trainingLimit = fast ? 2 : 4;
+  const [training, status] = await Promise.all([
+    retrieveTrainingDocs(message || purpose, { limit: trainingLimit }),
+    getAnthropicStatus(),
+  ]);
   const system = buildSystemPrompt({
     agent,
     purpose,
@@ -75,6 +81,7 @@ export async function runAgentOrchestration(input = {}) {
   });
   const userPrompt = [
     `Purpose: ${purpose}`,
+    fast ? "Keep the reply short (2–4 short sentences)." : "",
     input.context?.intent ? `Intent hint: ${input.context.intent}` : "",
     `Reply language: ${detected.name} (${detected.code})${detected.rtl ? " [RTL]" : ""}`,
     input.context?.draft ? `Prior draft to review:\n${input.context.draft}` : "",
@@ -83,11 +90,21 @@ export async function runAgentOrchestration(input = {}) {
     .filter(Boolean)
     .join("\n");
 
+  const maxTokens =
+    typeof input.max_tokens === "number"
+      ? input.max_tokens
+      : /review/i.test(purpose)
+        ? 256
+        : fast
+          ? 400
+          : 1024;
+
   let completion = await completeAnthropic({
     system,
     prompt: userPrompt,
     temperature: 0.2,
-    max_tokens: 1024,
+    max_tokens: maxTokens,
+    timeout_ms: fast ? 12_000 : 25_000,
   });
 
   let text = completion.text || "";

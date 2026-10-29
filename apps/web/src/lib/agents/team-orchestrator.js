@@ -1,12 +1,15 @@
 /**
  * Multi-agent collaboration: primary agent + collaborators share memory/kv,
  * then optionally QC/Compliance/Escalation review the draft.
+ *
+ * latency_mode "fast" (inbound Support auto-reply): one primary draft only —
+ * skip collaborator LLM reviews on the critical path so Graph send is not
+ * blocked by sequential Anthropic calls. Shared-memory handoff still writes.
  */
 
 import { runAgentOrchestration } from "./orchestrator";
-import { findAgent, listAgents, listTasks } from "./agent-store";
+import { listAgents, listTasks } from "./agent-store";
 import {
-  getSharedKv,
   readCollaborationContext,
   setSharedKv,
 } from "./shared-memory";
@@ -20,6 +23,8 @@ import { resolveAgent } from "./team-roster";
  *   dry_run?: boolean,
  *   context?: Record<string, unknown>,
  *   collaborators?: string[],
+ *   latency_mode?: "fast" | "full",
+ *   max_tokens?: number,
  * }} input
  */
 export async function runTeamCollaboration(input = {}) {
@@ -27,10 +32,15 @@ export async function runTeamCollaboration(input = {}) {
   const purpose = String(input.purpose || "draft_reply");
   const message = String(input.message || "").trim();
   const dryRun = input.dry_run !== false;
+  const latencyMode = input.latency_mode === "fast" ? "fast" : "full";
+  const fast = latencyMode === "fast";
 
   const listed = await listAgents();
+  const wantedKey = String(input.agent_key || "ai_support");
   const primary =
-    (await findAgent(input.agent_key || "ai_support")) || listed.data[0];
+    listed.data.find((a) => a.key === wantedKey || a.id === wantedKey) ||
+    resolveAgent(wantedKey, listed.data) ||
+    listed.data[0];
   if (!primary) {
     return { ok: false, error: "No agents configured." };
   }
@@ -45,17 +55,25 @@ export async function runTeamCollaboration(input = {}) {
     (k) => k && k !== primary.key,
   );
 
-  const shared = await readCollaborationContext([
-    "workspace.brand",
-    "collab.active_thread",
-    "collab.last_handoff",
-    `thread.${primary.key}`,
-    ...(Array.isArray(input.context?.memory_keys)
-      ? input.context.memory_keys.map(String)
-      : []),
+  const memoryKeys = fast
+    ? ["collab.active_thread", `thread.${primary.key}`]
+    : [
+        "workspace.brand",
+        "collab.active_thread",
+        "collab.last_handoff",
+        `thread.${primary.key}`,
+        ...(Array.isArray(input.context?.memory_keys)
+          ? input.context.memory_keys.map(String)
+          : []),
+      ];
+
+  const [shared, openTasks] = await Promise.all([
+    readCollaborationContext(memoryKeys),
+    fast
+      ? Promise.resolve({ data: [] })
+      : listTasks(primary.id).catch(() => ({ data: [] })),
   ]);
 
-  const openTasks = await listTasks(primary.id);
   const taskLines = (openTasks.data || [])
     .filter((t) => t.status === "open" || t.status === "in_progress")
     .slice(0, 5)
@@ -67,6 +85,7 @@ export async function runTeamCollaboration(input = {}) {
     shared_memory: shared.summary,
     assigned_tasks: taskLines,
     team: listed.data.map((a) => a.key),
+    latency_mode: latencyMode,
   };
 
   const primaryResult = await runAgentOrchestration({
@@ -76,6 +95,13 @@ export async function runTeamCollaboration(input = {}) {
     message,
     dry_run: dryRun,
     context: enrichedContext,
+    latency_mode: latencyMode,
+    max_tokens:
+      typeof input.max_tokens === "number"
+        ? input.max_tokens
+        : fast
+          ? 400
+          : undefined,
   });
 
   const detectedLanguage = String(primaryResult.detected_language || "en");
@@ -98,117 +124,138 @@ export async function runTeamCollaboration(input = {}) {
   let draft = String(primaryResult.text || "");
   const reviews = [];
 
-  for (const key of collaboratorKeys) {
-    const peer = resolveAgent(key, listed.data);
-    if (!peer || peer.status === "paused") continue;
+  if (!fast) {
+    const reviewers = [];
+    for (const key of collaboratorKeys) {
+      const peer = resolveAgent(key, listed.data);
+      if (!peer || peer.status === "paused") continue;
 
-    const role = String(peer.role || peer.key);
-    const isReviewer =
-      role.includes("quality") ||
-      role.includes("compliance") ||
-      role.includes("escalation");
+      const role = String(peer.role || peer.key);
+      const isReviewer =
+        role.includes("quality") ||
+        role.includes("compliance") ||
+        role.includes("escalation");
 
-    if (!isReviewer && role !== "follow_up" && role !== "lead_qualification") {
-      // Still share context note for non-reviewer collaborators
-      await setSharedKv({
-        key: `collab.note.${peer.key}`,
-        value: {
-          from: primary.key,
-          purpose,
-          excerpt: draft.slice(0, 400),
-          at: new Date().toISOString(),
-        },
-        written_by: primary.key,
-        tags: ["collab", "note"],
-      });
-      steps.push({
-        agent_key: peer.key,
-        agent_name: peer.name,
-        role: peer.role,
-        step: "context_shared",
-        ok: true,
-      });
-      continue;
+      if (!isReviewer && role !== "follow_up" && role !== "lead_qualification") {
+        void setSharedKv({
+          key: `collab.note.${peer.key}`,
+          value: {
+            from: primary.key,
+            purpose,
+            excerpt: draft.slice(0, 400),
+            at: new Date().toISOString(),
+          },
+          written_by: primary.key,
+          tags: ["collab", "note"],
+        }).catch(() => null);
+        steps.push({
+          agent_key: peer.key,
+          agent_name: peer.name,
+          role: peer.role,
+          step: "context_shared",
+          ok: true,
+        });
+        continue;
+      }
+
+      reviewers.push({ peer, role });
     }
 
-    const reviewPurpose =
-      role.includes("escalation")
-        ? "escalation_review"
-        : role.includes("compliance")
-          ? "compliance_review"
-          : "quality_review";
+    // Parallel QC / Compliance / Escalation reviews (was sequential).
+    const reviewResults = await Promise.all(
+      reviewers.map(async ({ peer, role }) => {
+        const reviewPurpose =
+          role.includes("escalation")
+            ? "escalation_review"
+            : role.includes("compliance")
+              ? "compliance_review"
+              : "quality_review";
 
-    const review = await runAgentOrchestration({
-      agent_key: peer.key,
-      agent: peer,
-      purpose: reviewPurpose,
-      message: `Review this draft for ${reviewPurpose.replace("_", " ")}.\n\nCustomer message:\n${message}\n\nDraft:\n${draft}`,
-      dry_run: true,
-      context: {
-        ...enrichedContext,
-        primary_agent: primary.key,
-        customer_message: message,
-        detected_language: detectedLanguage,
-        draft,
-      },
-    });
+        const review = await runAgentOrchestration({
+          agent_key: peer.key,
+          agent: peer,
+          purpose: reviewPurpose,
+          message: `Review this draft for ${reviewPurpose.replace("_", " ")}.\n\nCustomer message:\n${message}\n\nDraft:\n${draft}`,
+          dry_run: true,
+          context: {
+            ...enrichedContext,
+            primary_agent: primary.key,
+            customer_message: message,
+            detected_language: detectedLanguage,
+            draft,
+          },
+          max_tokens: 256,
+        });
 
-    reviews.push({
-      agent_key: peer.key,
-      agent_name: peer.name,
-      role: peer.role,
-      purpose: reviewPurpose,
-      text: review.text,
-      mode: review.mode,
-    });
+        void setSharedKv({
+          key: `collab.review.${peer.key}`,
+          value: {
+            purpose: reviewPurpose,
+            notes: String(review.text || "").slice(0, 600),
+            primary: primary.key,
+            at: new Date().toISOString(),
+          },
+          written_by: peer.key,
+          tags: ["collab", "review", reviewPurpose],
+        }).catch(() => null);
+
+        return {
+          agent_key: peer.key,
+          agent_name: peer.name,
+          role: peer.role,
+          purpose: reviewPurpose,
+          text: review.text,
+          mode: review.mode,
+        };
+      }),
+    );
+
+    for (const review of reviewResults) {
+      reviews.push(review);
+      steps.push({
+        agent_key: review.agent_key,
+        agent_name: review.agent_name,
+        role: review.role,
+        step: review.purpose,
+        text: review.text,
+        mode: review.mode,
+      });
+    }
+  } else if (collaboratorKeys.length) {
     steps.push({
-      agent_key: peer.key,
-      agent_name: peer.name,
-      role: peer.role,
-      step: reviewPurpose,
-      text: review.text,
-      mode: review.mode,
-    });
-
-    await setSharedKv({
-      key: `collab.review.${peer.key}`,
-      value: {
-        purpose: reviewPurpose,
-        notes: String(review.text || "").slice(0, 600),
-        primary: primary.key,
-        at: new Date().toISOString(),
-      },
-      written_by: peer.key,
-      tags: ["collab", "review", reviewPurpose],
+      step: "reviews_deferred",
+      reason: "latency_mode_fast",
+      collaborators: collaboratorKeys,
     });
   }
 
-  await setSharedKv({
+  // Non-blocking handoff writes — do not serialize Graph send behind KV.
+  void setSharedKv({
     key: "collab.last_handoff",
     value: {
       primary: primary.key,
       purpose,
       collaborators: collaboratorKeys,
       dry_run: dryRun,
+      latency_mode: latencyMode,
       at: new Date().toISOString(),
     },
     written_by: primary.key,
     tags: ["orchestration", "handoff"],
-  });
+  }).catch(() => null);
 
-  await setSharedKv({
+  void setSharedKv({
     key: `thread.${primary.key}`,
     value: {
       last_message: message.slice(0, 500),
       last_draft: draft.slice(0, 800),
       purpose,
+      latency_mode: latencyMode,
       at: new Date().toISOString(),
     },
     written_by: primary.key,
     tags: ["thread", primary.key],
-  });
-
-  const lastHandoff = await getSharedKv("collab.last_handoff");
+  }).catch(() => null);
 
   return {
     ok: true,
@@ -223,6 +270,7 @@ export async function runTeamCollaboration(input = {}) {
     reviews,
     text: draft,
     output: draft,
+    draft,
     provider: primaryResult.provider,
     mode: primaryResult.mode,
     detected_language: detectedLanguage,
@@ -232,10 +280,11 @@ export async function runTeamCollaboration(input = {}) {
     shared_memory: {
       storage: shared.storage,
       entries_used: shared.entries.map((e) => e.key),
-      last_handoff: lastHandoff?.value ?? null,
+      last_handoff: null,
     },
     assigned_tasks: openTasks.data?.slice(0, 8) || [],
     dry_run: dryRun,
+    latency_mode: latencyMode,
     latency_ms: Date.now() - started,
   };
 }

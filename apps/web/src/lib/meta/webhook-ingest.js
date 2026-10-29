@@ -44,14 +44,13 @@ function extractProviderEventId(payload) {
 }
 
 /**
- * Store the raw webhook, then route inbound messages to inbox + AI auto-reply.
- * WhatsApp → AI Support (draft + Cloud API text send).
- * Instagram / Messenger / Facebook → AI Support (draft + Page Graph send).
- * Other social (e.g. LinkedIn sim) → Social Media Manager inbox reply.
- *
- * @param {{ payload: unknown, rawBody: string, headers?: Record<string, string | null | undefined> }} input
+ * Persist raw webhook row (Supabase or local mock).
+ * @param {{
+ *   payload: unknown,
+ *   rawBody: string,
+ * }} input
  */
-export async function ingestMetaWebhook(input) {
+async function storeWebhookEvent(input) {
   const { payload, rawBody } = input;
   const hash = payloadHash(rawBody || payload);
   const providerEventId = extractProviderEventId(payload);
@@ -70,89 +69,105 @@ export async function ingestMetaWebhook(input) {
     received_at: new Date().toISOString(),
   };
 
-  /** @type {{ ok: boolean, storage: string, id: string | null, provider_event_id: string | null, message?: string, warning?: string }} */
-  let stored;
-
   if (hasSupabaseAdminCredentials()) {
     const supabase = createAdminSupabaseClient();
     if (!supabase) {
       const mock = await appendMetaWebhookMockEvent(row);
-      stored = {
+      return {
         ok: true,
         storage: mock.mode,
         id: mock.id,
         provider_event_id: providerEventId,
         message: "Stored locally (admin client unavailable).",
       };
-    } else {
-      const { data, error } = await supabase
-        .from(TABLE)
-        .insert(row)
-        .select("id")
-        .maybeSingle();
-
-      if (error) {
-        console.error("[meta-webhook] supabase insert failed; using local mock", error.message);
-        const mock = await appendMetaWebhookMockEvent({
-          ...row,
-          last_error: error.message,
-        });
-        stored = {
-          ok: true,
-          storage: mock.mode,
-          id: mock.id,
-          provider_event_id: providerEventId,
-          warning: error.message,
-        };
-      } else {
-        console.info("[meta-webhook] stored in supabase", {
-          id: data?.id,
-          provider_event_id: providerEventId,
-          object_type: objectType,
-        });
-        stored = {
-          ok: true,
-          storage: "supabase",
-          id: data?.id ?? null,
-          provider_event_id: providerEventId,
-        };
-      }
     }
-  } else {
-    const mock = await appendMetaWebhookMockEvent(row);
-    console.info("[meta-webhook] stored in local mock (no Supabase admin credentials)", {
-      id: mock.id,
+
+    const { data, error } = await supabase
+      .from(TABLE)
+      .insert(row)
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      console.error("[meta-webhook] supabase insert failed; using local mock", error.message);
+      const mock = await appendMetaWebhookMockEvent({
+        ...row,
+        last_error: error.message,
+      });
+      return {
+        ok: true,
+        storage: mock.mode,
+        id: mock.id,
+        provider_event_id: providerEventId,
+        warning: error.message,
+      };
+    }
+
+    console.info("[meta-webhook] stored in supabase", {
+      id: data?.id,
       provider_event_id: providerEventId,
+      object_type: objectType,
     });
-    stored = {
+    return {
       ok: true,
-      storage: mock.mode,
-      id: mock.id,
+      storage: "supabase",
+      id: data?.id ?? null,
       provider_event_id: providerEventId,
-      message: "Awaiting Supabase credentials — local mock store.",
     };
   }
 
-  const processed = await processInboundMessages(payload);
+  const mock = await appendMetaWebhookMockEvent(row);
+  console.info("[meta-webhook] stored in local mock (no Supabase admin credentials)", {
+    id: mock.id,
+    provider_event_id: providerEventId,
+  });
+  return {
+    ok: true,
+    storage: mock.mode,
+    id: mock.id,
+    provider_event_id: providerEventId,
+    message: "Awaiting Supabase credentials — local mock store.",
+  };
+}
 
+/**
+ * Store the raw webhook, then route inbound messages to inbox + AI auto-reply.
+ * Store + inbound processing run in parallel so Graph send is not blocked on
+ * webhook row insert latency.
+ *
+ * WhatsApp → AI Support (draft + Cloud API text send).
+ * Instagram / Messenger / Facebook → AI Support (draft + Page Graph send).
+ * Other social (e.g. LinkedIn sim) → Social Media Manager inbox reply.
+ *
+ * @param {{ payload: unknown, rawBody: string, headers?: Record<string, string | null | undefined> }} input
+ */
+export async function ingestMetaWebhook(input) {
+  const { payload, rawBody } = input;
+  const started = Date.now();
+
+  // Critical path: process inbound (draft + Graph) in parallel with store.
+  const [stored, processed] = await Promise.all([
+    storeWebhookEvent({ payload, rawBody }),
+    processInboundMessages(payload),
+  ]);
+
+  // Status update is non-blocking — never delay Meta 200 / customer send.
   if (stored.id && hasSupabaseAdminCredentials() && stored.storage === "supabase") {
     const supabase = createAdminSupabaseClient();
     if (supabase) {
-      try {
-        await supabase
-          .from(TABLE)
-          .update({
-            processing_status: processed.messages.length
-              ? processed.failed
-                ? "partial"
-                : "processed"
-              : "ignored",
-            processed_at: new Date().toISOString(),
-          })
-          .eq("id", stored.id);
-      } catch {
-        /* non-blocking status update */
-      }
+      void supabase
+        .from(TABLE)
+        .update({
+          processing_status: processed.messages.length
+            ? processed.failed
+              ? "partial"
+              : "processed"
+            : "ignored",
+          processed_at: new Date().toISOString(),
+        })
+        .eq("id", stored.id)
+        .then(() => null)
+        .catch(() => null);
     }
   }
 
@@ -163,6 +178,7 @@ export async function ingestMetaWebhook(input) {
     automations: processed.automations,
     replied: processed.replied,
     processing: processed,
+    latency_ms: Date.now() - started,
   };
 }
 
@@ -212,6 +228,8 @@ async function processInboundMessages(payload) {
           reason: handled.reason || handled.reply?.reason || null,
           send_mode: handled.reply?.send?.mode || null,
           send_ok: handled.reply?.send?.ok ?? null,
+          fast_path: Boolean(handled.reply?.fast_path),
+          draft_latency_ms: handled.reply?.latency_ms ?? null,
           conversation_id: handled.conversation?.id || null,
         });
         if (handled.replied) replied += 1;
@@ -248,6 +266,7 @@ async function processInboundMessages(payload) {
           send_mode: handled.reply?.send?.mode || null,
           send_ok: handled.reply?.send?.ok ?? null,
           send_error: handled.reply?.send?.error || handled.reply?.error || null,
+          fast_path: Boolean(handled.reply?.fast_path),
           conversation_id: handled.conversation?.id || null,
         });
         if (handled.replied) replied += 1;

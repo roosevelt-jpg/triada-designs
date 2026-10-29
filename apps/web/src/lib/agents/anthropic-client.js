@@ -18,6 +18,7 @@ const DEFAULT_BASE = "https://api.anthropic.com";
  *   prompt: string,
  *   max_tokens?: number,
  *   temperature?: number,
+ *   timeout_ms?: number,
  * }} request
  * @returns {Promise<{
  *   ok: boolean,
@@ -57,6 +58,13 @@ export async function completeAnthropic(request) {
   };
   if (request.system) payload.system = String(request.system);
 
+  const timeoutMs = Math.max(
+    3_000,
+    Number(request.timeout_ms || process.env.ANTHROPIC_TIMEOUT_MS || 25_000),
+  );
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
     const response = await fetch(`${base}/v1/messages`, {
       method: "POST",
@@ -66,6 +74,7 @@ export async function completeAnthropic(request) {
         "anthropic-version": ANTHROPIC_VERSION,
       },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
 
     const json = await response.json().catch(() => ({}));
@@ -93,6 +102,9 @@ export async function completeAnthropic(request) {
       mode: "live",
     };
   } catch (err) {
+    const aborted =
+      (err && typeof err === "object" && "name" in err && err.name === "AbortError") ||
+      (err instanceof Error && /aborted/i.test(err.message));
     return {
       ok: false,
       provider: "anthropic",
@@ -100,9 +112,15 @@ export async function completeAnthropic(request) {
       text: "",
       prompt_tokens: 0,
       completion_tokens: 0,
-      error: err instanceof Error ? err.message : "Anthropic request failed",
-      mode: "error",
+      error: aborted
+        ? `Anthropic timeout after ${timeoutMs}ms`
+        : err instanceof Error
+          ? err.message
+          : "Anthropic request failed",
+      mode: aborted ? "timeout" : "error",
     };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

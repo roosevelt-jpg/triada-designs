@@ -6,6 +6,10 @@
 import { runTeamCollaboration } from "./team-orchestrator";
 import { setSharedKv } from "./shared-memory";
 import {
+  draftFastSupportReply,
+  isSimpleSupportGreeting,
+} from "./support-fast-path";
+import {
   SUPPORT_PAGE_MESSAGING_CHANNELS,
   appendOutboundReply,
   findConversationByExternal,
@@ -40,23 +44,32 @@ export async function replyPageMessagingSupport(input) {
     };
   }
 
-  const collab = await runTeamCollaboration({
-    agent_key: "ai_support",
-    purpose: "draft_reply",
-    message: inbound,
-    dry_run: dryRun,
-    context: {
-      channel,
-      conversation_id: conversation.id,
-      subject: conversation.subject,
-      contact_id: conversation.contact_id,
-      customer_message: inbound,
-      external_user_id: conversation.external_user_id,
-      page_or_account_id: conversation.page_or_account_id,
-      page_messaging: true,
-    },
-    collaborators: ["quality_control", "compliance"],
-  });
+  /** @type {Record<string, unknown>} */
+  let collab;
+  if (isSimpleSupportGreeting(inbound)) {
+    collab = draftFastSupportReply({ message: inbound });
+  } else {
+    collab = await runTeamCollaboration({
+      agent_key: "ai_support",
+      purpose: "draft_reply",
+      message: inbound,
+      dry_run: dryRun,
+      latency_mode: "fast",
+      max_tokens: 400,
+      context: {
+        channel,
+        conversation_id: conversation.id,
+        subject: conversation.subject,
+        contact_id: conversation.contact_id,
+        customer_message: inbound,
+        external_user_id: conversation.external_user_id,
+        page_or_account_id: conversation.page_or_account_id,
+        page_messaging: true,
+        latency_mode: "fast",
+      },
+      collaborators: [],
+    });
+  }
 
   const replyText = String(collab.draft || collab.text || "").trim();
   if (!replyText) {
@@ -94,13 +107,14 @@ export async function replyPageMessagingSupport(input) {
     });
   }
 
-  await setSharedKv({
+  void setSharedKv({
     key: "collab.active_thread",
     value: {
       channel,
       conversation_id: conversation.id,
       agent_key: "ai_support",
       last_reply_preview: replyText.slice(0, 240),
+      fast_path: Boolean(collab.fast_path),
       updated_at: new Date().toISOString(),
     },
     written_by: "ai_support",
@@ -114,6 +128,7 @@ export async function replyPageMessagingSupport(input) {
     channel,
     reply: replyText,
     mode: collab.mode || send?.mode || "live",
+    fast_path: Boolean(collab.fast_path),
     dry_run: dryRun,
     send,
     conversation: saved,

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { sweepUnansweredSocialDms } from "@/lib/agents/social-media-manager";
+import { warmInboundRuntime } from "@/lib/meta/warm-inbound-runtime";
 
 /**
  * Vercel Cron: Social Media Manager unanswered DM sweep (Hobby-safe daily).
  * Path: GET|POST /api/cron/social-dm-sweep
  * Replies open Instagram / Messenger / Facebook / LinkedIn DMs so none stay unanswered.
  * Inbound simulate + manual sweep API still reply immediately between cron runs.
+ * Also soft-warms WhatsApp Support inbound modules to cut cold-start latency.
  */
 export async function GET(request) {
   return handle(request);
@@ -30,6 +32,7 @@ async function handle(request) {
   }
 
   try {
+    const warm = await warmInboundRuntime().catch(() => null);
     const result = await sweepUnansweredSocialDms({
       dry_run: dryRun,
       limit: Number.isFinite(limit) ? limit : 20,
@@ -40,6 +43,7 @@ async function handle(request) {
         worker: "social_dm_sweep",
         agent_key: "social_media_manager",
         ...result,
+        warm,
         time: new Date().toISOString(),
       },
       { status: 200 },

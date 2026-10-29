@@ -1,10 +1,17 @@
 /**
  * AI Support — WhatsApp inbound auto-reply.
  * Meta webhook → inbox conversation → Support draft → Cloud API text send.
+ *
+ * Latency: simple greetings use a deterministic fast path (no Anthropic);
+ * other inbound drafts use latency_mode "fast" (one LLM, reviews deferred).
  */
 
 import { runTeamCollaboration } from "./team-orchestrator";
 import { setSharedKv } from "./shared-memory";
+import {
+  draftFastSupportReply,
+  isSimpleSupportGreeting,
+} from "./support-fast-path";
 import {
   appendOutboundReply,
   findConversationByExternal,
@@ -39,25 +46,40 @@ export async function replyWhatsAppSupport(input) {
     };
   }
 
-  const collab = await runTeamCollaboration({
-    agent_key: "ai_support",
-    purpose: "draft_reply",
-    message: inbound,
-    dry_run: dryRun,
-    context: {
-      channel: "whatsapp",
-      conversation_id: conversation.id,
-      subject: conversation.subject,
-      contact_id: conversation.contact_id,
-      customer_message: inbound,
-      external_user_id: conversation.external_user_id,
-      customer_name:
-        typeof conversation.metadata?.contact_name === "string"
-          ? conversation.metadata.contact_name
-          : undefined,
-    },
-    collaborators: ["quality_control", "compliance"],
-  });
+  const customerName =
+    typeof conversation.metadata?.contact_name === "string"
+      ? conversation.metadata.contact_name
+      : undefined;
+
+  /** @type {Record<string, unknown>} */
+  let collab;
+  if (isSimpleSupportGreeting(inbound)) {
+    collab = draftFastSupportReply({
+      message: inbound,
+      customerName,
+    });
+  } else {
+    collab = await runTeamCollaboration({
+      agent_key: "ai_support",
+      purpose: "draft_reply",
+      message: inbound,
+      dry_run: dryRun,
+      latency_mode: "fast",
+      max_tokens: 400,
+      context: {
+        channel: "whatsapp",
+        conversation_id: conversation.id,
+        subject: conversation.subject,
+        contact_id: conversation.contact_id,
+        customer_message: inbound,
+        external_user_id: conversation.external_user_id,
+        customer_name: customerName,
+        latency_mode: "fast",
+      },
+      // Reviews deferred off the webhook→Graph critical path.
+      collaborators: [],
+    });
+  }
 
   const replyText = String(collab.draft || collab.text || "").trim();
   if (!replyText) {
@@ -94,13 +116,14 @@ export async function replyWhatsAppSupport(input) {
     });
   }
 
-  await setSharedKv({
+  void setSharedKv({
     key: "collab.active_thread",
     value: {
       channel: "whatsapp",
       conversation_id: conversation.id,
       agent_key: "ai_support",
       last_reply_preview: replyText.slice(0, 240),
+      fast_path: Boolean(collab.fast_path),
       updated_at: new Date().toISOString(),
     },
     written_by: "ai_support",
@@ -114,6 +137,8 @@ export async function replyWhatsAppSupport(input) {
     channel: "whatsapp",
     reply: replyText,
     mode: collab.mode || send?.mode || "live",
+    fast_path: Boolean(collab.fast_path),
+    latency_ms: collab.latency_ms ?? null,
     dry_run: dryRun,
     send,
     conversation: saved,
@@ -182,17 +207,16 @@ export async function handleInboundWhatsApp(input) {
     },
   });
 
-  if (externalUserId) {
-    await rememberInboundWhatsAppPeer({
-      phone: externalUserId.startsWith("+")
-        ? externalUserId
-        : `+${externalUserId}`,
-      name: input.contact_name || null,
-      wa_id: externalUserId.replace(/^\+/, ""),
-    }).catch(() => null);
-  }
-
   if (input.auto_reply === false) {
+    if (externalUserId) {
+      void rememberInboundWhatsAppPeer({
+        phone: externalUserId.startsWith("+")
+          ? externalUserId
+          : `+${externalUserId}`,
+        name: input.contact_name || null,
+        wa_id: externalUserId.replace(/^\+/, ""),
+      }).catch(() => null);
+    }
     return { ok: true, conversation, replied: false, queued: true };
   }
 
@@ -206,10 +230,21 @@ export async function handleInboundWhatsApp(input) {
     };
   }
 
+  // Draft + Graph send first; CRM peer remember runs after (non-blocking).
   const reply = await replyWhatsAppSupport({
     conversation,
     dry_run: input.dry_run === true,
   });
+
+  if (externalUserId) {
+    void rememberInboundWhatsAppPeer({
+      phone: externalUserId.startsWith("+")
+        ? externalUserId
+        : `+${externalUserId}`,
+      name: input.contact_name || null,
+      wa_id: externalUserId.replace(/^\+/, ""),
+    }).catch(() => null);
+  }
 
   return {
     ok: Boolean(reply.ok),

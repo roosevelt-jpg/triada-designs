@@ -1,6 +1,7 @@
 import { timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ingestMetaWebhook } from "@/lib/meta/webhook-ingest";
+import { warmInboundRuntime } from "@/lib/meta/warm-inbound-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,6 +84,8 @@ export async function GET(request) {
     challenge &&
     matchesAnyVerifyToken(token, allowed)
   ) {
+    // Soft-warm Support inbound modules when Meta verifies (cheap cold-start cut).
+    void warmInboundRuntime().catch(() => null);
     return new NextResponse(challenge, {
       status: 200,
       headers: { "Content-Type": "text/plain; charset=utf-8" },
@@ -128,6 +131,7 @@ export async function POST(request) {
       replied: result.replied || 0,
       messages: result.messages || [],
       automations: result.automations || [],
+      latency_ms: result.latency_ms ?? null,
     },
     { status: 200 },
   );

@@ -6,6 +6,10 @@
 import { runTeamCollaboration } from "./team-orchestrator";
 import { setSharedKv } from "./shared-memory";
 import {
+  draftFastSupportReply,
+  isSimpleSupportGreeting,
+} from "./support-fast-path";
+import {
   SUPPORT_TEXT_CHANNELS,
   appendOutboundReply,
   findConversationByExternal,
@@ -40,22 +44,44 @@ export async function replySupportChannel(input) {
     };
   }
 
-  const collab = await runTeamCollaboration({
-    agent_key: "ai_support",
-    purpose: "draft_reply",
-    message: inbound,
-    dry_run: dryRun,
-    context: {
-      channel,
-      conversation_id: conversation.id,
-      subject: conversation.subject,
-      contact_id: conversation.contact_id,
-      customer_message: inbound,
-      external_user_id: conversation.external_user_id,
-      support_text_channel: true,
-    },
-    collaborators: ["quality_control", "compliance"],
-  });
+  const metaPreview =
+    conversation.metadata && typeof conversation.metadata === "object"
+      ? /** @type {Record<string, unknown>} */ (conversation.metadata)
+      : {};
+  const customerName =
+    typeof metaPreview.contact_name === "string"
+      ? metaPreview.contact_name
+      : undefined;
+
+  /** @type {Record<string, unknown>} */
+  let collab;
+  if (isSimpleSupportGreeting(inbound)) {
+    collab = draftFastSupportReply({
+      message: inbound,
+      customerName,
+    });
+  } else {
+    collab = await runTeamCollaboration({
+      agent_key: "ai_support",
+      purpose: "draft_reply",
+      message: inbound,
+      dry_run: dryRun,
+      latency_mode: "fast",
+      max_tokens: 400,
+      context: {
+        channel,
+        conversation_id: conversation.id,
+        subject: conversation.subject,
+        contact_id: conversation.contact_id,
+        customer_message: inbound,
+        external_user_id: conversation.external_user_id,
+        support_text_channel: true,
+        customer_name: customerName,
+        latency_mode: "fast",
+      },
+      collaborators: [],
+    });
+  }
 
   const replyText = String(collab.draft || collab.text || "").trim();
   if (!replyText) {
@@ -74,10 +100,7 @@ export async function replySupportChannel(input) {
   let saved = null;
 
   if (!dryRun) {
-    const meta =
-      conversation.metadata && typeof conversation.metadata === "object"
-        ? /** @type {Record<string, unknown>} */ (conversation.metadata)
-        : {};
+    const meta = metaPreview;
     send = await sendSupportChannelText({
       channel,
       body: replyText,
@@ -85,8 +108,7 @@ export async function replySupportChannel(input) {
       subject: conversation.subject
         ? `Re: ${String(conversation.subject)}`
         : undefined,
-      customer_name:
-        typeof meta.contact_name === "string" ? meta.contact_name : undefined,
+      customer_name: customerName,
       metadata: meta,
     });
     saved = await appendOutboundReply(String(conversation.id), {
@@ -101,13 +123,14 @@ export async function replySupportChannel(input) {
     });
   }
 
-  await setSharedKv({
+  void setSharedKv({
     key: "collab.active_thread",
     value: {
       channel,
       conversation_id: conversation.id,
       agent_key: "ai_support",
       last_reply_preview: replyText.slice(0, 240),
+      fast_path: Boolean(collab.fast_path),
       updated_at: new Date().toISOString(),
     },
     written_by: "ai_support",
@@ -123,6 +146,7 @@ export async function replySupportChannel(input) {
     channel,
     reply: replyText,
     mode: collab.mode || send?.mode || "live",
+    fast_path: Boolean(collab.fast_path),
     dry_run: dryRun,
     send,
     conversation: saved,
