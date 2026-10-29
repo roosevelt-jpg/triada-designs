@@ -8,16 +8,16 @@
   /* Brand gold for primary control labels on black surfaces */
   --color-brand-gold: #c7ae8a;
   --color-brand-sand: #e8ded0;
-  --color-brand-ivory: #faf8f4;
+  --color-brand-ivory: #f7f4ef;
   --color-white: #ffffff;
-  --color-stone: #f0eeea;
-  --color-muted: #77716a;
-  --color-border: #e4ded6;
-  --color-border-strong: #d6cec3;
+  --color-stone: #efebe4;
+  --color-muted: #6f6a63;
+  --color-border: #e2dbd1;
+  --color-border-strong: #cfc5b8;
   --color-black: #0c0b0a;
-  /* Distinct fill so form fields read clearly against white cards */
-  --color-field: #f7f3ec;
-  --color-field-focus: #fffdf9;
+  /* Distinct fill so form fields read clearly against white panels */
+  --color-field: #f3eee6;
+  --color-field-focus: #fffcf7;
 
   --color-success: #237a57;
   --color-warning: #946200;
@@ -28,13 +28,15 @@
   --surface-page: var(--color-brand-ivory);
   --surface-card: var(--color-white);
   --surface-field: var(--color-field);
+  --surface-sidebar: var(--color-white);
+  --surface-header: color-mix(in srgb, var(--color-brand-ivory) 88%, white);
   --text-primary: var(--color-brand-ink);
   --text-secondary: var(--color-muted);
   --border-default: var(--color-border);
   --border-strong: var(--color-border-strong);
 
   --font-display: "Cormorant Garamond", Georgia, serif;
-  --font-sans: "DM Sans", Inter, Arial, sans-serif;
+  --font-sans: "DM Sans", "Helvetica Neue", Arial, sans-serif;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -49,18 +51,19 @@
   --space-20: 80px;
   --space-24: 96px;
 
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 18px;
-  --radius-xl: 24px;
+  /* Quieter radii — atelier, not soft SaaS bubbles */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
   --radius-pill: 999px;
 
-  --shadow-card: 0 1px 0 rgb(41 38 34 / 3%), 0 4px 18px rgb(41 38 34 / 5%);
-  --shadow-popover: 0 12px 32px rgb(41 38 34 / 12%);
+  --shadow-card: 0 1px 0 rgb(41 38 34 / 4%);
+  --shadow-popover: 0 8px 28px rgb(41 38 34 / 10%);
 
   --content-max-width: 1280px;
-  --sidebar-width: 256px;
-  --topbar-height: 68px;
+  --sidebar-width: 248px;
+  --topbar-height: 64px;
 }
 
 @media (prefers-reduced-motion: reduce) {

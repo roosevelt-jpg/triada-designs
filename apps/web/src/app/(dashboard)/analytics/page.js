@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { AiInsightsPanel } from "@/components/dashboard/AiInsightsPanel";
+import { MetricCell } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -31,6 +32,7 @@ export default function AnalyticsPage() {
   }, [load]);
 
   const metrics = data?.metrics || {};
+  const metricEntries = Object.entries(metrics);
 
   return (
     <DashboardShell
@@ -45,24 +47,30 @@ export default function AnalyticsPage() {
       }
     >
       {loading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-28" />
-          <Skeleton className="h-64" />
+        <div className="space-y-5">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-72" />
         </div>
       ) : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && data ? (
-        <div className="space-y-6">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {Object.entries(metrics).map(([key, value]) => (
-              <div key={key} className="surface-card p-4 fade-rise">
-                <p className="text-xs uppercase tracking-wide text-muted">
-                  {key.replaceAll("_", " ")}
-                </p>
-                <p className="mt-2 font-display text-3xl tabular-nums text-ink">{value}</p>
+        <div className="space-y-8">
+          {metricEntries.length ? (
+            <section aria-labelledby="analytics-metrics-heading">
+              <h2 id="analytics-metrics-heading" className="ops-section-kicker mb-3">
+                Metrics
+              </h2>
+              <div className="ops-metric-strip">
+                {metricEntries.map(([key, value]) => (
+                  <MetricCell
+                    key={key}
+                    label={key.replaceAll("_", " ")}
+                    value={value}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </section>
+          ) : null}
 
           <AiInsightsPanel insights={data.ai_insights} />
 

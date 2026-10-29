@@ -20,18 +20,17 @@ import {
 import { cn } from "@/lib/cn";
 
 const CHART_INK = "#292622";
-const CHART_MUTED = "#77716a";
-const CHART_GRID = "#E4DED6";
+const CHART_MUTED = "#6f6a63";
+const CHART_GRID = "#E2DBD1";
 const CHART_BROWN = "#9a7958";
 const CHART_BROWN_DARK = "#70563f";
 const CHART_GOLD = "#c7ae8a";
-const CHART_SAND = "#e8ded0";
 
 const tooltipStyle = {
-  background: "#FAF8F4",
+  background: "#FFFFFF",
   border: `1px solid ${CHART_GRID}`,
-  borderRadius: 10,
-  boxShadow: "0 2px 10px rgb(41 38 34 / 6%)",
+  borderRadius: 6,
+  boxShadow: "0 8px 24px rgb(41 38 34 / 8%)",
   fontSize: 12,
   color: CHART_INK,
 };
@@ -39,27 +38,18 @@ const tooltipStyle = {
 /** @param {{ title: string, summary?: string, children: import("react").ReactNode, className?: string }} props */
 function ChartCard({ title, summary, children, className }) {
   return (
-    <section
-      className={cn(
-        "surface-card relative overflow-hidden p-4 md:p-5",
-        className
-      )}
-    >
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-champagne/70 to-transparent"
-        aria-hidden
-      />
-      <div className="ops-card-header">
+    <section className={cn("surface-card p-4 md:p-5", className)}>
+      <div className="ops-card-header !mb-3 !pb-3">
         <div className="min-w-0">
-          <h3 className="font-display text-[1.25rem] leading-tight tracking-[-0.02em] text-ink">
+          <h3 className="font-display text-[1.2rem] leading-tight tracking-[-0.02em] text-ink">
             {title}
           </h3>
           {summary ? (
-            <p className="mt-1 text-[12.5px] leading-relaxed text-muted">{summary}</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-muted">{summary}</p>
           ) : null}
         </div>
       </div>
-      <div className="h-[220px] w-full sm:h-[240px]">{children}</div>
+      <div className="h-[210px] w-full sm:h-[230px]">{children}</div>
     </section>
   );
 }
@@ -89,41 +79,42 @@ export function AiInsightsPanel({ insights, className }) {
   const days = insights.range_days || 14;
 
   return (
-    <div className={cn("space-y-4", className)}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-            AI Insights
-          </p>
-          <h2 className="font-display text-[1.65rem] leading-tight tracking-[-0.02em] text-ink md:text-[1.85rem]">
-            Analytics pulse
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted">
-            {insights.summary ||
-              `Channel mix, volume, response time, and automation mode over the last ${days} days.`}
-          </p>
-        </div>
+    <section className={cn("space-y-5", className)} aria-labelledby="ai-insights-heading">
+      <div className="max-w-2xl">
+        <p className="ops-section-kicker">AI Insights</p>
+        <h2
+          id="ai-insights-heading"
+          className="mt-1.5 font-display text-[1.65rem] leading-tight tracking-[-0.02em] text-ink md:text-[1.85rem]"
+        >
+          Analytics
+        </h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted">
+          {insights.summary ||
+            `Channel mix, volume, response time, and automation mode over the last ${days} days.`}
+        </p>
       </div>
+
+      <div className="ops-divider" role="presentation" />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard
           title="Conversation volume"
           summary={`Inbound vs AI replies · last ${days} days`}
-          className="fade-rise lg:col-span-2"
+          className="lg:col-span-2"
         >
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={volume} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
               <defs>
                 <linearGradient id="triadaInbound" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={CHART_BROWN} stopOpacity={0.35} />
-                  <stop offset="100%" stopColor={CHART_BROWN} stopOpacity={0.02} />
+                  <stop offset="0%" stopColor={CHART_BROWN} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={CHART_BROWN} stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="triadaAi" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={CHART_GOLD} stopOpacity={0.5} />
-                  <stop offset="100%" stopColor={CHART_GOLD} stopOpacity={0.02} />
+                  <stop offset="0%" stopColor={CHART_GOLD} stopOpacity={0.28} />
+                  <stop offset="100%" stopColor={CHART_GOLD} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid stroke={CHART_GRID} strokeDasharray="3 6" vertical={false} />
+              <CartesianGrid stroke={CHART_GRID} strokeDasharray="2 5" vertical={false} />
               <XAxis
                 dataKey="day"
                 tick={{ fill: CHART_MUTED, fontSize: 11 }}
@@ -145,7 +136,7 @@ export function AiInsightsPanel({ insights, className }) {
                 name="Inbound"
                 stroke={CHART_BROWN}
                 fill="url(#triadaInbound)"
-                strokeWidth={2}
+                strokeWidth={1.75}
               />
               <Area
                 type="monotone"
@@ -153,14 +144,14 @@ export function AiInsightsPanel({ insights, className }) {
                 name="AI replies"
                 stroke={CHART_GOLD}
                 fill="url(#triadaAi)"
-                strokeWidth={2}
+                strokeWidth={1.75}
               />
               <Line
                 type="monotone"
                 dataKey="human_handoffs"
                 name="Human handoffs"
                 stroke={CHART_BROWN_DARK}
-                strokeWidth={1.75}
+                strokeWidth={1.5}
                 dot={false}
               />
             </AreaChart>
@@ -170,11 +161,10 @@ export function AiInsightsPanel({ insights, className }) {
         <ChartCard
           title="By channel"
           summary="Conversation share across sales channels"
-          className="fade-rise-delay"
         >
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={channels} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-              <CartesianGrid stroke={CHART_GRID} strokeDasharray="3 6" vertical={false} />
+              <CartesianGrid stroke={CHART_GRID} strokeDasharray="2 5" vertical={false} />
               <XAxis
                 dataKey="channel"
                 tick={{ fill: CHART_MUTED, fontSize: 11 }}
@@ -188,7 +178,7 @@ export function AiInsightsPanel({ insights, className }) {
                 allowDecimals={false}
               />
               <Tooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="conversations" name="Conversations" radius={[6, 6, 0, 0]}>
+              <Bar dataKey="conversations" name="Conversations" radius={[3, 3, 0, 0]}>
                 {channels.map((entry) => (
                   <Cell key={entry.channel} fill={entry.color || CHART_BROWN} />
                 ))}
@@ -200,7 +190,6 @@ export function AiInsightsPanel({ insights, className }) {
         <ChartCard
           title="Automation mix"
           summary="AI mode vs human takeover vs open queue"
-          className="fade-rise-delay"
         >
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -210,10 +199,10 @@ export function AiInsightsPanel({ insights, className }) {
                 nameKey="name"
                 cx="50%"
                 cy="50%"
-                innerRadius={52}
-                outerRadius={78}
-                paddingAngle={3}
-                stroke="#FAF8F4"
+                innerRadius={48}
+                outerRadius={74}
+                paddingAngle={2}
+                stroke="#FFFFFF"
                 strokeWidth={2}
               >
                 {mix.map((entry) => (
@@ -229,11 +218,10 @@ export function AiInsightsPanel({ insights, className }) {
         <ChartCard
           title="AI response time"
           summary="Histogram of first AI reply latency"
-          className="fade-rise"
         >
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={histogram} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-              <CartesianGrid stroke={CHART_GRID} strokeDasharray="3 6" vertical={false} />
+              <CartesianGrid stroke={CHART_GRID} strokeDasharray="2 5" vertical={false} />
               <XAxis
                 dataKey="bucket"
                 tick={{ fill: CHART_MUTED, fontSize: 11 }}
@@ -247,7 +235,7 @@ export function AiInsightsPanel({ insights, className }) {
                 allowDecimals={false}
               />
               <Tooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="count" name="Replies" fill={CHART_BROWN_DARK} radius={[6, 6, 0, 0]} />
+              <Bar dataKey="count" name="Replies" fill={CHART_BROWN_DARK} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -255,11 +243,10 @@ export function AiInsightsPanel({ insights, className }) {
         <ChartCard
           title="Lead progression"
           summary="Contacts through qualified pipeline"
-          className="fade-rise"
         >
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={funnel} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-              <CartesianGrid stroke={CHART_GRID} strokeDasharray="3 6" vertical={false} />
+              <CartesianGrid stroke={CHART_GRID} strokeDasharray="2 5" vertical={false} />
               <XAxis
                 dataKey="stage"
                 tick={{ fill: CHART_MUTED, fontSize: 11 }}
@@ -278,30 +265,14 @@ export function AiInsightsPanel({ insights, className }) {
                 dataKey="value"
                 name="Count"
                 stroke={CHART_BROWN}
-                strokeWidth={2.25}
-                dot={{ r: 4, fill: CHART_GOLD, stroke: CHART_BROWN_DARK, strokeWidth: 1.5 }}
+                strokeWidth={2}
+                dot={{ r: 3.5, fill: "#FFFFFF", stroke: CHART_BROWN, strokeWidth: 1.5 }}
                 activeDot={{ r: 5 }}
               />
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
       </div>
-
-      {/* Accessible color key */}
-      <div className="flex flex-wrap gap-3 text-[11px] text-muted" aria-hidden>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: CHART_BROWN }} /> Brown
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: CHART_BROWN_DARK }} /> Deep brown
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: CHART_GOLD }} /> Gold
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: CHART_SAND }} /> Sand
-        </span>
-      </div>
-    </div>
+    </section>
   );
 }

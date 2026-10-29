@@ -75,21 +75,14 @@ export function DashboardShell({ children, title, description, actions }) {
 
   return (
     <div className="ops-atmosphere relative min-h-screen text-ink">
-      <div
-        className="pointer-events-none absolute inset-0 -z-10 opacity-70 soft-pan"
-        aria-hidden
-      >
-        <div className="ops-atmosphere-glow" />
-      </div>
-
       <div className="relative mx-auto flex min-h-screen max-w-[1680px]">
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-line/80 bg-white/92 backdrop-blur-md transition-transform duration-200 lg:static lg:translate-x-0",
+            "fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-line bg-white transition-transform duration-200 lg:static lg:translate-x-0",
             open ? "translate-x-0" : "-translate-x-full"
           )}
         >
-          <div className="flex h-[68px] items-center justify-between gap-2 border-b border-line px-4">
+          <div className="flex h-16 items-center justify-between gap-2 border-b border-line px-4">
             <Link
               href="/overview"
               className="inline-flex min-w-0 items-center gap-2"
@@ -99,7 +92,7 @@ export function DashboardShell({ children, title, description, actions }) {
             </Link>
             <button
               type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-line bg-white text-muted transition-colors duration-150 hover:bg-stone lg:hidden"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-line bg-white text-muted transition-colors duration-150 hover:bg-stone lg:hidden"
               onClick={() => setOpen(false)}
               aria-label="Close navigation"
             >
@@ -107,11 +100,11 @@ export function DashboardShell({ children, title, description, actions }) {
             </button>
           </div>
 
-          <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4" aria-label="Dashboard">
+          <nav className="flex-1 space-y-5 overflow-y-auto px-2.5 py-5" aria-label="Dashboard">
             {navSections.map((section) => (
               <div key={section.label}>
                 <p className="nav-category-band">{section.label}</p>
-                <ul className="mt-1.5 space-y-0.5">
+                <ul className="mt-1 space-y-0.5">
                   {section.items.map((item) => {
                     const active =
                       pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -121,10 +114,10 @@ export function DashboardShell({ children, title, description, actions }) {
                           href={item.href}
                           onClick={() => setOpen(false)}
                           className={cn(
-                            "block rounded-md px-2.5 py-2 text-[13.5px] transition-colors duration-150",
+                            "block rounded-sm border-l-2 px-2.5 py-1.5 text-[13px] transition-colors duration-150",
                             active
-                              ? "bg-sand font-medium text-brown-dark shadow-[inset_0_0_0_1px_rgba(154,121,88,0.18)]"
-                              : "font-normal text-ink/80 hover:bg-ivory hover:text-ink"
+                              ? "border-brown bg-sand/70 font-medium text-ink"
+                              : "border-transparent font-normal text-ink/75 hover:bg-stone/60 hover:text-ink"
                           )}
                         >
                           {item.label}
@@ -137,7 +130,7 @@ export function DashboardShell({ children, title, description, actions }) {
             ))}
           </nav>
 
-          <div className="border-t border-line px-4 py-3">
+          <div className="border-t border-line px-4 py-3.5">
             <p className="truncate text-sm font-medium text-ink">
               {user?.user?.name || "…"}
             </p>
@@ -148,31 +141,32 @@ export function DashboardShell({ children, title, description, actions }) {
         {open ? (
           <button
             type="button"
-            className="fixed inset-0 z-30 bg-ink/25 lg:hidden"
+            className="fixed inset-0 z-30 bg-ink/20 lg:hidden"
             aria-label="Close overlay"
             onClick={() => setOpen(false)}
           />
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-20 flex h-[68px] items-center justify-between gap-3 border-b border-line/80 bg-ivory/85 px-4 backdrop-blur-md md:px-6">
+          <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-line bg-[var(--surface-header)] px-4 md:px-7">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-line bg-white transition-colors duration-150 hover:bg-stone lg:hidden"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-sm border border-line bg-white transition-colors duration-150 hover:bg-stone lg:hidden"
                 onClick={() => setOpen(true)}
                 aria-label="Open navigation"
               >
                 <Menu size={18} />
               </button>
-              <div className="hidden min-w-[220px] max-w-md flex-1 items-center gap-2 rounded-md border border-line bg-white/90 px-3 py-2 text-sm text-muted md:flex">
-                <Search size={15} className="shrink-0 text-champagne" aria-hidden />
+              <div className="hidden min-w-[240px] max-w-md flex-1 items-center gap-2 rounded-sm border border-line bg-white px-3 py-2 text-sm text-muted md:flex">
+                <Search size={14} className="shrink-0 text-brown" aria-hidden />
                 <span className="truncate">Search contacts, conversations, content</span>
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
               <WorkspaceClock />
               <NotificationBell />
+              <div className="hidden h-8 w-px bg-line sm:block" aria-hidden />
               <div className="hidden text-right md:block">
                 <p className="text-sm font-medium leading-tight">
                   {user?.user?.name || "Loading…"}
@@ -185,15 +179,15 @@ export function DashboardShell({ children, title, description, actions }) {
             </div>
           </header>
 
-          <main className="flex-1 px-4 py-5 md:px-6 md:py-6">
-            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <main className="flex-1 px-4 py-6 md:px-7 md:py-8">
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0 fade-rise">
-                <div className="mb-2 h-px w-16 bg-gradient-to-r from-champagne via-brown to-transparent animate-pulse-soft" />
-                <h1 className="font-display text-[1.85rem] leading-tight tracking-[-0.02em] text-ink md:text-[2.15rem]">
+                <span className="ops-rule-accent mb-3" aria-hidden />
+                <h1 className="font-display text-[2rem] leading-[1.15] tracking-[-0.025em] text-ink md:text-[2.35rem]">
                   {title}
                 </h1>
                 {description ? (
-                  <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted">
+                  <p className="mt-2 max-w-xl text-[0.9375rem] leading-relaxed text-muted">
                     {description}
                   </p>
                 ) : null}
@@ -202,7 +196,7 @@ export function DashboardShell({ children, title, description, actions }) {
                 <div className="ops-actions shrink-0 fade-rise-delay">{actions}</div>
               ) : null}
             </div>
-            <div className="ops-divider mb-5" role="presentation" />
+            <div className="ops-divider mb-6" role="presentation" />
             {children}
           </main>
         </div>

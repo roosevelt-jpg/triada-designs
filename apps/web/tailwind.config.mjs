@@ -30,22 +30,12 @@ export default {
       },
       keyframes: {
         "fade-rise": {
-          from: { opacity: "0", transform: "translateY(12px)" },
+          from: { opacity: "0", transform: "translateY(6px)" },
           to: { opacity: "1", transform: "translateY(0)" },
-        },
-        "gold-sheen": {
-          "0%, 100%": { backgroundPosition: "0% 50%" },
-          "50%": { backgroundPosition: "100% 50%" },
-        },
-        "pulse-soft": {
-          "0%, 100%": { opacity: "0.45" },
-          "50%": { opacity: "0.85" },
         },
       },
       animation: {
-        "fade-rise": "fade-rise 320ms ease both",
-        "gold-sheen": "gold-sheen 8s ease-in-out infinite",
-        "pulse-soft": "pulse-soft 3.6s ease-in-out infinite",
+        "fade-rise": "fade-rise 260ms ease both",
       },
       fontFamily: {
         display: ["var(--font-display)"],
