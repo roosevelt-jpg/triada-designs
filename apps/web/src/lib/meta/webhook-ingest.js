@@ -247,6 +247,7 @@ async function processInboundMessages(payload) {
           reason: handled.reason || handled.reply?.reason || null,
           send_mode: handled.reply?.send?.mode || null,
           send_ok: handled.reply?.send?.ok ?? null,
+          send_error: handled.reply?.send?.error || handled.reply?.error || null,
           conversation_id: handled.conversation?.id || null,
         });
         if (handled.replied) replied += 1;
