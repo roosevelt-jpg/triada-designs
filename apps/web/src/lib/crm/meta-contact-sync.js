@@ -81,6 +81,25 @@ async function resolveSyncMode() {
 }
 
 /**
+ * Remember one inbound WhatsApp peer (webhook / Support auto-reply).
+ * @param {{ phone?: string | null, name?: string | null, wa_id?: string | null }} peer
+ */
+export async function rememberInboundWhatsAppPeer(peer) {
+  const phone = String(peer?.phone || peer?.wa_id || "").trim();
+  if (!phone) return;
+  const digits = phone.replace(/\D+/g, "");
+  if (!digits) return;
+  await rememberPeers([
+    {
+      phone_e164: phone.startsWith("+") ? phone : `+${digits}`,
+      phone_digits: digits,
+      name: peer?.name || null,
+      wa_id: peer?.wa_id ? String(peer.wa_id).replace(/\D+/g, "") : digits,
+    },
+  ]);
+}
+
+/**
  * Persist discovered WA peers (digits) for subsequent syncs.
  * @param {Array<{ phone_e164: string | null, phone_digits: string | null, name?: string | null, wa_id?: string | null }>} peers
  */

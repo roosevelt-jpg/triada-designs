@@ -92,6 +92,7 @@ import {
   handleInboundSocialDm,
   sweepUnansweredSocialDms,
 } from "@/lib/agents/social-media-manager";
+import { handleInboundWhatsApp } from "@/lib/agents/support-whatsapp";
 import { collectLiveDashboardMetrics } from "@/lib/api/dashboard-metrics";
 import { syncWhatsAppContactsToCrm } from "@/lib/crm/meta-contact-sync";
 import { mapContactUploadRows } from "@/lib/crm/parse-contacts-file";
@@ -1300,6 +1301,74 @@ export async function dispatchV1(method, segments, request, body) {
         verify_token_hint: "triada-meta-verify-2026",
       });
     }
+    if (path === "integrations/meta/simulate-inbound") {
+      const channel =
+        body && typeof body === "object" && body.channel
+          ? String(body.channel).toLowerCase()
+          : "whatsapp";
+      const inboundBody =
+        body && typeof body === "object" && body.body
+          ? String(body.body)
+          : "Hi";
+      if (channel === "whatsapp") {
+        const from =
+          body && typeof body === "object" && body.from
+            ? String(body.from).replace(/\D+/g, "")
+            : "15551234567";
+        const handled = await handleInboundWhatsApp({
+          body: inboundBody,
+          external_user_id: from,
+          external_conversation_id: `sim-meta-wa:${from}`,
+          provider_message_id: `sim-meta-${Date.now().toString(36)}`,
+          contact_name:
+            body && typeof body === "object" && body.contact_name
+              ? String(body.contact_name)
+              : "Meta simulator",
+          auto_reply: body?.auto_reply !== false,
+          dry_run: body?.dry_run === true,
+        });
+        return jsonOk({
+          ok: true,
+          mode: "next_dual_run",
+          channel: "whatsapp",
+          agent_key: "ai_support",
+          conversation: handled.conversation,
+          replied: handled.replied,
+          reply: handled.reply || null,
+          messages: [
+            {
+              conversation: handled.conversation,
+              body: inboundBody,
+            },
+          ],
+          verify_token_hint: "triada-meta-verify-2026",
+        });
+      }
+      if (SOCIAL_DM_CHANNELS.includes(channel)) {
+        const handled = await handleInboundSocialDm({
+          channel,
+          body: inboundBody,
+          auto_reply: body?.auto_reply !== false,
+          dry_run: body?.dry_run === true,
+        });
+        return jsonOk({
+          ok: true,
+          mode: "next_dual_run",
+          channel,
+          agent_key: "social_media_manager",
+          conversation: handled.conversation,
+          replied: handled.replied,
+          reply: handled.reply || null,
+          messages: [
+            {
+              conversation: handled.conversation,
+              body: inboundBody,
+            },
+          ],
+          verify_token_hint: "triada-meta-verify-2026",
+        });
+      }
+    }
     return jsonOk({
       ok: true,
       mode: "next_dual_run",
@@ -1604,6 +1673,41 @@ export async function dispatchV1(method, segments, request, body) {
           mode: "next_dual_run",
           agent_key: "social_media_manager",
           ai: { intent: "social_dm", agent: "social_media_manager" },
+          conversation: handled.conversation,
+          replied: handled.replied,
+          reply: handled.reply || null,
+          messages: [
+            {
+              conversation: handled.conversation,
+              body: inboundBody,
+            },
+          ],
+          channels: buildSalesChannelsStatus({ meta }).channels,
+        });
+      }
+      if (channel === "whatsapp") {
+        const from =
+          body && typeof body === "object" && body.from
+            ? String(body.from).replace(/\D+/g, "")
+            : "15551234567";
+        const handled = await handleInboundWhatsApp({
+          body: inboundBody,
+          external_user_id: from,
+          external_conversation_id: `sim-wa:${from}`,
+          provider_message_id: `sim-wa-${Date.now().toString(36)}`,
+          contact_name:
+            body && typeof body === "object" && body.contact_name
+              ? String(body.contact_name)
+              : "Simulator",
+          auto_reply: body?.auto_reply !== false,
+          dry_run: body?.dry_run === true,
+        });
+        return jsonOk({
+          ok: true,
+          mode: "next_dual_run",
+          agent_key: "ai_support",
+          channel: "whatsapp",
+          ai: { intent: "jewellery_inquiry", agent: "ai_support" },
           conversation: handled.conversation,
           replied: handled.replied,
           reply: handled.reply || null,

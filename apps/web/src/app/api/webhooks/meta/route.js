@@ -4,6 +4,8 @@ import { ingestMetaWebhook } from "@/lib/meta/webhook-ingest";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Allow Support draft + Graph send inside the webhook request. */
+export const maxDuration = 60;
 
 /**
  * Meta webhook Callback URL (Vercel / Next — not rewritten to Laravel):
@@ -91,7 +93,8 @@ export async function GET(request) {
 }
 
 /**
- * POST — inbound Meta events (ingest stub → Supabase or local mock).
+ * POST — inbound Meta events → store → inbox → Support / SMM auto-reply.
+ * WhatsApp Cloud API messages are answered by AI Support via Graph text send.
  */
 export async function POST(request) {
   const rawBody = await request.text();
@@ -109,7 +112,8 @@ export async function POST(request) {
   });
 
   // Signature verification (X-Hub-Signature-256) lands with full control-plane port.
-  // Slice 1 accepts and stores so Meta delivery can be proven end-to-end.
+  // Always 200 after accept so Meta does not poison-retry on AI/Graph failures;
+  // processing result is returned for ops visibility.
   const result = await ingestMetaWebhook({ payload, rawBody, headers });
 
   return NextResponse.json(
@@ -120,6 +124,10 @@ export async function POST(request) {
       provider_event_id: result.provider_event_id,
       message: result.message,
       warning: result.warning,
+      channel: result.channel || null,
+      replied: result.replied || 0,
+      messages: result.messages || [],
+      automations: result.automations || [],
     },
     { status: 200 },
   );
