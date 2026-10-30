@@ -11,6 +11,7 @@ import {
   normalizeEmailInbound,
   normalizeTikTokInbound,
   normalizeWebchatInbound,
+  normalizeLinkedInInbound,
 } from "@/lib/channels/normalize-inbound.js";
 import { handleInboundSupportChannel } from "@/lib/agents/support-channel.js";
 import { SUPPORT_TEXT_CHANNELS } from "@/lib/crm/conversations-store.js";
@@ -69,6 +70,25 @@ if (wcNorm.length !== 1 || wcNorm[0].channel !== "webchat") {
   throw new Error(`webchat normalize failed: ${JSON.stringify(wcNorm)}`);
 }
 console.log("ok webchat normalize", wcNorm[0].external_user_id);
+
+const liNorm = normalizeLinkedInInbound({
+  eventType: "MESSAGE_RECEIVED",
+  actor: "urn:li:person:li_smoke_user",
+  message: {
+    id: `li-norm-${Date.now()}`,
+    body: { text: "Hi" },
+    from: "urn:li:person:li_smoke_user",
+  },
+  simulated: true,
+});
+if (
+  liNorm.length !== 1 ||
+  liNorm[0].channel !== "linkedin" ||
+  liNorm[0].external_user_id !== "li_smoke_user"
+) {
+  throw new Error(`linkedin normalize failed: ${JSON.stringify(liNorm)}`);
+}
+console.log("ok linkedin normalize", liNorm[0].external_user_id);
 
 /** @type {Array<{ channel: string, input: Record<string, unknown> }>} */
 const cases = [

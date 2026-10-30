@@ -1,7 +1,38 @@
 /**
- * Normalize Telegram / email / TikTok / webchat inbound payloads
+ * Normalize Telegram / email / TikTok / webchat / LinkedIn inbound payloads
  * into the same shape Support handlers expect.
  */
+
+/**
+ * Strip LinkedIn person URN → bare member id.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function linkedInPersonId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const match = raw.match(/urn:li:person:([^,\s/]+)/i);
+  if (match) return match[1];
+  return raw.replace(/^urn:li:person:/i, "").trim();
+}
+
+/**
+ * Pull plain text from LinkedIn message body shapes.
+ * @param {unknown} message
+ * @returns {string}
+ */
+function linkedInMessageText(message) {
+  if (!message || typeof message !== "object") return "";
+  const msg = /** @type {Record<string, unknown>} */ (message);
+  const body = msg.body;
+  if (typeof body === "string") return body.trim();
+  if (body && typeof body === "object") {
+    const nested = /** @type {Record<string, unknown>} */ (body);
+    const text = nested.text || nested.content || nested.message;
+    if (typeof text === "string") return text.trim();
+  }
+  return String(msg.text || msg.content || msg.message || "").trim();
+}
 
 /**
  * @typedef {{
@@ -129,6 +160,103 @@ export function normalizeTikTokInbound(payload) {
       metadata: { raw_keys: Object.keys(payload || {}) },
     },
   ];
+}
+
+/**
+ * LinkedIn Messaging inbound → normalized messages.
+ * Accepts simulator flats, single events, and `{ events|elements|notifications }` batches.
+ * @param {Record<string, unknown>} payload
+ * @returns {NormalizedChannelMessage[]}
+ */
+export function normalizeLinkedInInbound(payload) {
+  if (!payload || typeof payload !== "object") return [];
+
+  /** @type {Array<Record<string, unknown>>} */
+  const events = [];
+  const batch = payload.events || payload.elements || payload.notifications;
+  if (Array.isArray(batch) && batch.length) {
+    for (const item of batch) {
+      if (item && typeof item === "object") {
+        events.push(/** @type {Record<string, unknown>} */ (item));
+      }
+    }
+  } else if (payload.event && typeof payload.event === "object") {
+    events.push(/** @type {Record<string, unknown>} */ (payload.event));
+  } else {
+    events.push(payload);
+  }
+
+  /** @type {NormalizedChannelMessage[]} */
+  const out = [];
+  for (const event of events) {
+    const message =
+      event.message && typeof event.message === "object"
+        ? /** @type {Record<string, unknown>} */ (event.message)
+        : event;
+    const simulated = Boolean(event.simulated || payload.simulated);
+    const text =
+      linkedInMessageText(message) ||
+      String(event.text || event.body || payload.text || payload.body || "").trim();
+    if (!text && !simulated) continue;
+
+    const fromRaw =
+      event.from_user_id ||
+      event.from ||
+      event.actor ||
+      event.sender ||
+      message.from ||
+      message.sender ||
+      payload.from_user_id ||
+      payload.from ||
+      "linkedin-user";
+    const userId =
+      linkedInPersonId(
+        typeof fromRaw === "object" && fromRaw
+          ? /** @type {Record<string, unknown>} */ (fromRaw).id ||
+              /** @type {Record<string, unknown>} */ (fromRaw).urn ||
+              fromRaw
+          : fromRaw,
+      ) || "linkedin-user";
+
+    const eventId = String(
+      event.message_id ||
+        message.id ||
+        event.id ||
+        event.event_id ||
+        payload.message_id ||
+        payload.id ||
+        `li-${Date.now()}`,
+    );
+    const contactName =
+      String(
+        event.contact_name ||
+          payload.contact_name ||
+          (typeof fromRaw === "object" && fromRaw
+            ? /** @type {Record<string, unknown>} */ (fromRaw).name ||
+              /** @type {Record<string, unknown>} */ (fromRaw).firstName ||
+              ""
+            : "") ||
+          "",
+      ).trim() || null;
+
+    out.push({
+      channel: "linkedin",
+      body: text || "LinkedIn inbound event",
+      external_user_id: userId,
+      external_conversation_id: `linkedin:${userId}`,
+      provider_message_id: eventId,
+      contact_name: contactName,
+      metadata: {
+        contact_name: contactName,
+        person_urn: `urn:li:person:${userId}`,
+        event_type: String(event.eventType || event.type || payload.type || "MESSAGE"),
+        simulated,
+        raw_keys: Object.keys(event || {}),
+      },
+    });
+  }
+
+  return out;
 }
 
 /**

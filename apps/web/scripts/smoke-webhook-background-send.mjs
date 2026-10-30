@@ -135,6 +135,25 @@ console.log("ok TG background_send", {
   send_pending: tg.reply?.send_pending,
 });
 
+const li = await handleInboundSupportChannel({
+  channel: "linkedin",
+  body: "Hi",
+  external_user_id: "li_bg_user",
+  external_conversation_id: `linkedin:bg:${stamp}`,
+  provider_message_id: `li-bg-${stamp}`,
+  contact_name: "LI BG",
+  metadata: { person_urn: "urn:li:person:li_bg_user" },
+  auto_reply: true,
+  background_send: true,
+});
+if (!li.replied || !li.reply?.send_pending) {
+  throw new Error(`LinkedIn background_send failed: ${JSON.stringify(li)}`);
+}
+console.log("ok LinkedIn background_send", {
+  fast_path: li.reply?.fast_path,
+  send_pending: li.reply?.send_pending,
+});
+
 const wc = await handleInboundSupportChannel({
   channel: "webchat",
   body: "Hi",

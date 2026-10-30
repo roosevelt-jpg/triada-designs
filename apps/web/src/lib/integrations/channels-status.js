@@ -85,7 +85,14 @@ function capabilities(channel) {
     case "tiktok":
       return ["posts.publish", "templates", "webhooks"];
     case "linkedin":
-      return ["posts.publish", "templates", "messaging"];
+      return [
+        "posts.publish",
+        "templates",
+        "messaging",
+        "messages.send",
+        "messages.receive",
+        "webhooks",
+      ];
     default:
       return ["messages.send", "messages.receive"];
   }

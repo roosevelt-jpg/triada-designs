@@ -123,16 +123,19 @@ WHATSAPP_ACCESS_TOKEN=
 
 Status stays **disconnected** / **awaiting_credentials** until live tokens. Never claim healthy without that. See `/cursor/stores/self/docs/product-channel-publish.md`.
 
-## Telegram / TikTok / Email / Webchat
+## Telegram / TikTok / Email / Webchat / LinkedIn
 
-**Services:** `App\Services\Messaging\Channels\*`
+**Services:** Next.js `/api/webhooks/*` (preferred) + legacy `App\Services\Messaging\Channels\*`
 
 | Channel | Webhook | Admin |
 |---|---|---|
 | Telegram | `POST /api/webhooks/telegram` | `/integrations/channels` |
 | TikTok | `POST /api/webhooks/tiktok` | `/integrations/channels` |
 | Email | `POST /api/webhooks/email` | `/integrations/channels` |
+| LinkedIn | `POST /api/webhooks/linkedin` (+ GET challenge echo) | `/integrations/channels` |
 | Webchat | Public `POST /api/v1/webchat/messages` + embed `/widget/chat.js` | token ensure on channels page |
+
+LinkedIn Messaging: early-200 accept → background AI Support auto-reply → Unified Inbox trails. Optional `LINKEDIN_WEBHOOK_SECRET` (headers `x-linkedin-webhook-secret` / `x-channel-webhook-secret`). Live outbound needs `LINKEDIN_ACCESS_TOKEN` (or `LINKEDIN_API_KEY`); otherwise `local_sim`.
 
 Local inbound simulator: `POST /api/v1/integrations/channels/simulate-inbound`.
 

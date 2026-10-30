@@ -126,7 +126,8 @@ export default function ConversationDetailPage() {
                         : conversation.channel === "instagram"
                           ? "brand"
                           : conversation.channel === "facebook" ||
-                              conversation.channel === "telegram"
+                              conversation.channel === "telegram" ||
+                              conversation.channel === "linkedin"
                             ? "info"
                             : "neutral"
                     }

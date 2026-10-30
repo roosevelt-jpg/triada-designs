@@ -16,6 +16,7 @@ import {
   normalizeEmailInbound,
   normalizeTikTokInbound,
   normalizeWebchatInbound,
+  normalizeLinkedInInbound,
 } from "@/lib/channels/normalize-inbound";
 
 /**
@@ -45,6 +46,11 @@ export async function warmInboundRuntime() {
   normalizeEmailInbound({ from: "warm@triada.local", body: "Hi" });
   normalizeTikTokInbound({ text: "Hi", simulated: true });
   normalizeWebchatInbound({ body: "Hi", visitor_id: "warm" });
+  normalizeLinkedInInbound({
+    text: "Hi",
+    from: "urn:li:person:warm",
+    simulated: true,
+  });
   warmed.push("normalize-inbound-channels");
   channelsWarmed.push("telegram", "email", "tiktok", "webchat", "linkedin");
 

@@ -738,7 +738,7 @@ class TriadaWorkspaceSeeder extends Seeder
                     'status' => $status,
                     'capabilities' => match ($provider) {
                         'tiktok' => ['posts.publish', 'templates', 'webhooks'],
-                        'linkedin' => ['posts.publish', 'templates', 'messaging'],
+                        'linkedin' => ['posts.publish', 'templates', 'messaging', 'messages.send', 'messages.receive', 'webhooks'],
                         'email' => ['messages.send', 'messages.receive', 'templates'],
                         default => ['messages.send', 'messages.receive'],
                     },
