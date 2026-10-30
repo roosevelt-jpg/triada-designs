@@ -133,7 +133,24 @@ async function resolvePageContext(pageAccessToken, preferredIgUserId = "") {
       }
     }
   } catch {
-    // Keep me-derived page id when accounts fails
+    // Page access tokens cannot call /me/accounts (field does not exist).
+    // Keep me-derived page id and resolve IG from the Page node below.
+  }
+
+  // Page tokens: IG Professional link lives on the Page node, not /me/accounts.
+  if (!ctx.igUserId && ctx.pageId) {
+    try {
+      const page = await graphGet(pageAccessToken, ctx.pageId, {
+        fields: "instagram_business_account{id,username}",
+      });
+      const ig = page?.instagram_business_account || {};
+      if (ig?.id) {
+        ctx.igUserId = String(ig.id);
+        ctx.igUsername = ig.username ? String(ig.username) : ctx.igUsername;
+      }
+    } catch {
+      // Leave ig unset; preferredIgUserId / env may still apply.
+    }
   }
 
   if (!ctx.igUserId && preferredIgUserId) {
