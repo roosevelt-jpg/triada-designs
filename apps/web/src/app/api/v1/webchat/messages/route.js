@@ -10,6 +10,9 @@ export const maxDuration = 60;
  * Public website widget inbound (no admin session).
  *   POST /api/v1/webchat/messages
  * Body: { token, body, visitor_id?, name?, email? }
+ *
+ * Draft stays on the request so the widget gets suggested_reply.
+ * Provider outbound send runs via background_send (after response).
  */
 export async function POST(request) {
   let body = null;
@@ -50,6 +53,8 @@ export async function POST(request) {
     contact_name: normalized.contact_name,
     metadata: normalized.metadata,
     auto_reply: true,
+    // Provider send (local_sim / live) after HTTP response — draft stays sync.
+    background_send: true,
   });
 
   return NextResponse.json({
@@ -62,6 +67,7 @@ export async function POST(request) {
     agent_key: "ai_support",
     mode: handled.reply?.send?.mode || handled.reply?.mode || "local_sim",
     send_ok: handled.reply?.send?.ok ?? null,
+    send_pending: Boolean(handled.reply?.send_pending),
     fast_path: Boolean(handled.reply?.fast_path),
     draft_latency_ms: handled.reply?.latency_ms ?? null,
   });

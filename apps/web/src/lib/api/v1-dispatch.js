@@ -140,6 +140,7 @@ import {
   saveHumanHandoffSettings,
 } from "@/lib/agents/human-handoff-settings";
 import { normalizeWebchatInbound } from "@/lib/channels/normalize-inbound";
+import { mapParallel } from "@/lib/runtime/parallel-map";
 import { collectLiveDashboardMetrics } from "@/lib/api/dashboard-metrics";
 import { syncWhatsAppContactsToCrm } from "@/lib/crm/meta-contact-sync";
 import { mapContactUploadRows } from "@/lib/crm/parse-contacts-file";
@@ -2132,6 +2133,7 @@ export async function dispatchV1(method, segments, request, body) {
       contact_name: normalized.contact_name,
       metadata: normalized.metadata,
       auto_reply: true,
+      background_send: true,
     });
 
     return jsonOk({
@@ -2144,6 +2146,9 @@ export async function dispatchV1(method, segments, request, body) {
       agent_key: "ai_support",
       mode: handled.reply?.send?.mode || handled.reply?.mode || "local_sim",
       send_ok: handled.reply?.send?.ok ?? null,
+      send_pending: Boolean(handled.reply?.send_pending),
+      fast_path: Boolean(handled.reply?.fast_path),
+      draft_latency_ms: handled.reply?.latency_ms ?? null,
     });
   }
 
@@ -2513,39 +2518,61 @@ export async function dispatchV1(method, segments, request, body) {
       media_type: promo.media.media_type || undefined,
     };
 
-    const results = [];
-    for (const contact of recipients) {
-      if (contact.marketing_opt_out && input.purpose !== "transactional") {
-        results.push({
-          contact_id: contact.id,
-          to: contact.phone_normalized,
-          ok: false,
-          error: "marketing_opt_out",
-        });
-        continue;
-      }
-      const to =
-        contact.phone_normalized ||
-        toWhatsAppRecipient(contact.phone_e164 || contact.phone);
-      if (!to) {
-        results.push({
-          contact_id: contact.id,
-          to: null,
-          ok: false,
-          error: "invalid_phone",
-        });
-        continue;
-      }
+    const results = await mapParallel(
+      recipients,
+      async (contact) => {
+        if (contact.marketing_opt_out && input.purpose !== "transactional") {
+          return {
+            contact_id: contact.id,
+            to: contact.phone_normalized,
+            ok: false,
+            error: "marketing_opt_out",
+          };
+        }
+        const to =
+          contact.phone_normalized ||
+          toWhatsAppRecipient(contact.phone_e164 || contact.phone);
+        if (!to) {
+          return {
+            contact_id: contact.id,
+            to: null,
+            ok: false,
+            error: "invalid_phone",
+          };
+        }
 
-      if (wantsSession) {
-        const send = await sendWhatsAppMediaMessage({
+        if (wantsSession) {
+          const send = await sendWhatsAppMediaMessage({
+            to,
+            caption: promo.body,
+            ...mediaFields,
+            media_type: mediaFields.media_type || "image",
+          });
+          return {
+            contact_id: contact.id,
+            name: contact.name,
+            to,
+            phone_e164: contact.phone_e164,
+            ok: send.ok,
+            mode: send.mode,
+            provider_message_id: send.provider_message_id,
+            media_id: send.media_id || null,
+            media_type: send.media_type || mediaFields.media_type || null,
+            send_mode: "session",
+            promo_url: promo.promo_url,
+            error: send.error,
+          };
+        }
+
+        const components = buildPromoComponentsForContact(promo, contact, input);
+        const send = await sendWhatsAppTemplateMessage({
           to,
-          caption: promo.body,
+          template_name: templateName,
+          language: input.language ? String(input.language) : "en",
+          components,
           ...mediaFields,
-          media_type: mediaFields.media_type || "image",
         });
-        // Session text-only fallback when no media: still deliver promo body as caption on image path fails — use media with caption when media present
-        results.push({
+        return {
           contact_id: contact.id,
           name: contact.name,
           to,
@@ -2555,36 +2582,13 @@ export async function dispatchV1(method, segments, request, body) {
           provider_message_id: send.provider_message_id,
           media_id: send.media_id || null,
           media_type: send.media_type || mediaFields.media_type || null,
-          send_mode: "session",
+          send_mode: "template",
           promo_url: promo.promo_url,
           error: send.error,
-        });
-        continue;
-      }
-
-      const components = buildPromoComponentsForContact(promo, contact, input);
-      const send = await sendWhatsAppTemplateMessage({
-        to,
-        template_name: templateName,
-        language: input.language ? String(input.language) : "en",
-        components,
-        ...mediaFields,
-      });
-      results.push({
-        contact_id: contact.id,
-        name: contact.name,
-        to,
-        phone_e164: contact.phone_e164,
-        ok: send.ok,
-        mode: send.mode,
-        provider_message_id: send.provider_message_id,
-        media_id: send.media_id || null,
-        media_type: send.media_type || mediaFields.media_type || null,
-        send_mode: "template",
-        promo_url: promo.promo_url,
-        error: send.error,
-      });
-    }
+        };
+      },
+      { concurrency: 8 },
+    );
 
     return jsonOk({
       ok: results.every((r) => r.ok),
@@ -2606,6 +2610,7 @@ export async function dispatchV1(method, segments, request, body) {
       attempted: results.length,
       sent: results.filter((r) => r.ok).length,
       failed: results.filter((r) => !r.ok).length,
+      parallel: true,
       results,
       source: "next_dual_run",
     });

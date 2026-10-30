@@ -16,17 +16,20 @@ import {
   ingestInboundDm,
 } from "@/lib/crm/conversations-store";
 import { sendSupportChannelText } from "@/lib/integrations/support-channel-send";
+import { deliverOutbound } from "@/lib/runtime/background-outbound";
 
 /**
  * Draft + send a Support reply for one Support text-channel conversation.
  * @param {{
  *   conversation: Record<string, unknown>,
  *   dry_run?: boolean,
+ *   background_send?: boolean,
  * }} input
  */
 export async function replySupportChannel(input) {
   const conversation = input.conversation || {};
   const dryRun = input.dry_run === true;
+  const backgroundSend = input.background_send === true;
   const channel = String(conversation.channel || "webchat").toLowerCase();
   const inbound = String(
     conversation.last_inbound_body ||
@@ -60,36 +63,47 @@ export async function replySupportChannel(input) {
     let send = null;
     /** @type {Record<string, unknown> | null} */
     let saved = null;
+    let sendPending = false;
     if (!dryRun) {
-      send = await sendSupportChannelText({
-        channel,
-        body: replyText,
-        external_user_id: String(conversation.external_user_id || "").trim(),
-        subject: conversation.subject
-          ? `Re: ${String(conversation.subject)}`
-          : undefined,
-        customer_name: customerName,
-        metadata: metaPreview,
+      const delivered = await deliverOutbound({
+        background: backgroundSend,
+        send: () =>
+          sendSupportChannelText({
+            channel,
+            body: replyText,
+            external_user_id: String(conversation.external_user_id || "").trim(),
+            subject: conversation.subject
+              ? `Re: ${String(conversation.subject)}`
+              : undefined,
+            customer_name: customerName,
+            metadata: metaPreview,
+          }),
+        afterSend: async (result) => {
+          const appended = await appendOutboundReply(String(conversation.id), {
+            body: replyText,
+            agent_key: "ai_support",
+            provider_message_id: result?.provider_message_id
+              ? String(result.provider_message_id)
+              : null,
+            send_mode: result?.mode || null,
+            send_ok: Boolean(result?.ok),
+            send_error: result?.error || null,
+          });
+          await finalizeHumanHandoff({
+            conversation_id: String(conversation.id),
+            channel,
+            inbound,
+            reply: replyText,
+            agent_key: "ai_support",
+            whatsapp_number: handoff.whatsapp_number,
+            call_number: handoff.call_number,
+          });
+          return appended;
+        },
       });
-      saved = await appendOutboundReply(String(conversation.id), {
-        body: replyText,
-        agent_key: "ai_support",
-        provider_message_id: send?.provider_message_id
-          ? String(send.provider_message_id)
-          : null,
-        send_mode: send?.mode || null,
-        send_ok: Boolean(send?.ok),
-        send_error: send?.error || null,
-      });
-      await finalizeHumanHandoff({
-        conversation_id: String(conversation.id),
-        channel,
-        inbound,
-        reply: replyText,
-        agent_key: "ai_support",
-        whatsapp_number: handoff.whatsapp_number,
-        call_number: handoff.call_number,
-      });
+      send = delivered.send;
+      saved = /** @type {Record<string, unknown> | null} */ (delivered.saved);
+      sendPending = delivered.send_pending;
     }
     return {
       ok: true,
@@ -103,6 +117,7 @@ export async function replySupportChannel(input) {
       latency_ms: null,
       dry_run: dryRun,
       send,
+      send_pending: sendPending,
       conversation: saved,
       send_ok: send ? Boolean(send.ok) : true,
       send_error: send && !send.ok ? send.error : null,
@@ -134,29 +149,38 @@ export async function replySupportChannel(input) {
   let send = null;
   /** @type {Record<string, unknown> | null} */
   let saved = null;
+  let sendPending = false;
 
   if (!dryRun) {
     const meta = metaPreview;
-    send = await sendSupportChannelText({
-      channel,
-      body: replyText,
-      external_user_id: String(conversation.external_user_id || "").trim(),
-      subject: conversation.subject
-        ? `Re: ${String(conversation.subject)}`
-        : undefined,
-      customer_name: customerName,
-      metadata: meta,
+    const delivered = await deliverOutbound({
+      background: backgroundSend,
+      send: () =>
+        sendSupportChannelText({
+          channel,
+          body: replyText,
+          external_user_id: String(conversation.external_user_id || "").trim(),
+          subject: conversation.subject
+            ? `Re: ${String(conversation.subject)}`
+            : undefined,
+          customer_name: customerName,
+          metadata: meta,
+        }),
+      afterSend: (result) =>
+        appendOutboundReply(String(conversation.id), {
+          body: replyText,
+          agent_key: "ai_support",
+          provider_message_id: result?.provider_message_id
+            ? String(result.provider_message_id)
+            : null,
+          send_mode: result?.mode || null,
+          send_ok: Boolean(result?.ok),
+          send_error: result?.error || null,
+        }),
     });
-    saved = await appendOutboundReply(String(conversation.id), {
-      body: replyText,
-      agent_key: "ai_support",
-      provider_message_id: send?.provider_message_id
-        ? String(send.provider_message_id)
-        : null,
-      send_mode: send?.mode || null,
-      send_ok: Boolean(send?.ok),
-      send_error: send?.error || null,
-    });
+    send = delivered.send;
+    saved = /** @type {Record<string, unknown> | null} */ (delivered.saved);
+    sendPending = delivered.send_pending;
   }
 
   void setSharedKv({
@@ -174,8 +198,8 @@ export async function replySupportChannel(input) {
   }).catch(() => null);
 
   return {
-    // Pipeline succeeded when a reply was drafted (+ appended). Provider
-    // delivery is reported separately via send_ok / send_error.
+    // Pipeline succeeded when a reply was drafted. Provider delivery may be
+    // pending when background_send is set (reported via send_pending).
     ok: true,
     skipped: false,
     conversation_id: conversation.id,
@@ -186,6 +210,7 @@ export async function replySupportChannel(input) {
     latency_ms: collab.latency_ms ?? null,
     dry_run: dryRun,
     send,
+    send_pending: sendPending,
     conversation: saved,
     reviews: collab.reviews || [],
     error: send && !send.ok ? send.error : null,
@@ -206,6 +231,7 @@ export async function replySupportChannel(input) {
  *   metadata?: Record<string, unknown>,
  *   auto_reply?: boolean,
  *   dry_run?: boolean,
+ *   background_send?: boolean,
  * }} input
  */
 export async function handleInboundSupportChannel(input) {
@@ -286,6 +312,7 @@ export async function handleInboundSupportChannel(input) {
   const reply = await replySupportChannel({
     conversation,
     dry_run: input.dry_run === true,
+    background_send: input.background_send === true,
   });
 
   return {

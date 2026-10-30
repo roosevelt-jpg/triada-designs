@@ -16,17 +16,20 @@ import {
   ingestInboundDm,
 } from "@/lib/crm/conversations-store";
 import { sendPageMessagingText } from "@/lib/integrations/meta-page-text";
+import { deliverOutbound } from "@/lib/runtime/background-outbound";
 
 /**
  * Draft + send a Support reply for one Page Messaging conversation.
  * @param {{
  *   conversation: Record<string, unknown>,
  *   dry_run?: boolean,
+ *   background_send?: boolean,
  * }} input
  */
 export async function replyPageMessagingSupport(input) {
   const conversation = input.conversation || {};
   const dryRun = input.dry_run === true;
+  const backgroundSend = input.background_send === true;
   const channel = String(conversation.channel || "messenger").toLowerCase();
   const inbound = String(
     conversation.last_inbound_body ||
@@ -51,33 +54,46 @@ export async function replyPageMessagingSupport(input) {
     let send = null;
     /** @type {Record<string, unknown> | null} */
     let saved = null;
+    let sendPending = false;
     if (!dryRun) {
       const recipientId = String(conversation.external_user_id || "").trim();
-      send = await sendPageMessagingText({
-        channel,
-        recipient_id: recipientId,
-        body: replyText,
-        page_or_account_id: String(conversation.page_or_account_id || "").trim(),
+      const delivered = await deliverOutbound({
+        background: backgroundSend,
+        send: () =>
+          sendPageMessagingText({
+            channel,
+            recipient_id: recipientId,
+            body: replyText,
+            page_or_account_id: String(
+              conversation.page_or_account_id || "",
+            ).trim(),
+          }),
+        afterSend: async (result) => {
+          const appended = await appendOutboundReply(String(conversation.id), {
+            body: replyText,
+            agent_key: "ai_support",
+            provider_message_id: result?.provider_message_id
+              ? String(result.provider_message_id)
+              : null,
+            send_mode: result?.mode || null,
+            send_ok: Boolean(result?.ok),
+            send_error: result?.error || null,
+          });
+          await finalizeHumanHandoff({
+            conversation_id: String(conversation.id),
+            channel,
+            inbound,
+            reply: replyText,
+            agent_key: "ai_support",
+            whatsapp_number: handoff.whatsapp_number,
+            call_number: handoff.call_number,
+          });
+          return appended;
+        },
       });
-      saved = await appendOutboundReply(String(conversation.id), {
-        body: replyText,
-        agent_key: "ai_support",
-        provider_message_id: send?.provider_message_id
-          ? String(send.provider_message_id)
-          : null,
-        send_mode: send?.mode || null,
-        send_ok: Boolean(send?.ok),
-        send_error: send?.error || null,
-      });
-      await finalizeHumanHandoff({
-        conversation_id: String(conversation.id),
-        channel,
-        inbound,
-        reply: replyText,
-        agent_key: "ai_support",
-        whatsapp_number: handoff.whatsapp_number,
-        call_number: handoff.call_number,
-      });
+      send = delivered.send;
+      saved = /** @type {Record<string, unknown> | null} */ (delivered.saved);
+      sendPending = delivered.send_pending;
     }
     return {
       ok: Boolean(send ? send.ok : true),
@@ -91,6 +107,7 @@ export async function replyPageMessagingSupport(input) {
       latency_ms: null,
       dry_run: dryRun,
       send,
+      send_pending: sendPending,
       conversation: saved,
       reviews: [],
       error: send && !send.ok ? send.error : null,
@@ -129,25 +146,36 @@ export async function replyPageMessagingSupport(input) {
   let send = null;
   /** @type {Record<string, unknown> | null} */
   let saved = null;
+  let sendPending = false;
 
   if (!dryRun) {
     const recipientId = String(conversation.external_user_id || "").trim();
-    send = await sendPageMessagingText({
-      channel,
-      recipient_id: recipientId,
-      body: replyText,
-      page_or_account_id: String(conversation.page_or_account_id || "").trim(),
+    const delivered = await deliverOutbound({
+      background: backgroundSend,
+      send: () =>
+        sendPageMessagingText({
+          channel,
+          recipient_id: recipientId,
+          body: replyText,
+          page_or_account_id: String(
+            conversation.page_or_account_id || "",
+          ).trim(),
+        }),
+      afterSend: (result) =>
+        appendOutboundReply(String(conversation.id), {
+          body: replyText,
+          agent_key: "ai_support",
+          provider_message_id: result?.provider_message_id
+            ? String(result.provider_message_id)
+            : null,
+          send_mode: result?.mode || null,
+          send_ok: Boolean(result?.ok),
+          send_error: result?.error || null,
+        }),
     });
-    saved = await appendOutboundReply(String(conversation.id), {
-      body: replyText,
-      agent_key: "ai_support",
-      provider_message_id: send?.provider_message_id
-        ? String(send.provider_message_id)
-        : null,
-      send_mode: send?.mode || null,
-      send_ok: Boolean(send?.ok),
-      send_error: send?.error || null,
-    });
+    send = delivered.send;
+    saved = /** @type {Record<string, unknown> | null} */ (delivered.saved);
+    sendPending = delivered.send_pending;
   }
 
   void setSharedKv({
@@ -175,6 +203,7 @@ export async function replyPageMessagingSupport(input) {
     latency_ms: collab.latency_ms ?? null,
     dry_run: dryRun,
     send,
+    send_pending: sendPending,
     conversation: saved,
     reviews: collab.reviews || [],
     error: send && !send.ok ? send.error : null,
@@ -194,6 +223,7 @@ export async function replyPageMessagingSupport(input) {
  *   metadata?: Record<string, unknown>,
  *   auto_reply?: boolean,
  *   dry_run?: boolean,
+ *   background_send?: boolean,
  * }} input
  */
 export async function handleInboundPageMessaging(input) {
@@ -267,6 +297,7 @@ export async function handleInboundPageMessaging(input) {
   const reply = await replyPageMessagingSupport({
     conversation,
     dry_run: input.dry_run === true,
+    background_send: input.background_send === true,
   });
 
   return {

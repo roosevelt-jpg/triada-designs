@@ -38,6 +38,7 @@ import {
   patchQuoteInspirationHistory,
   saveQuoteInspirationSettings,
 } from "./quote-inspiration-store.js";
+import { mapParallel } from "@/lib/runtime/parallel-map";
 
 /**
  * @param {string} text
@@ -406,66 +407,66 @@ export async function broadcastQuoteInspiration(input = {}) {
   const templateName = String(
     input.template_name || settings.template_name || "triada_inspiration_share",
   ).trim();
-  const results = [];
+  const results = await mapParallel(
+    recipients,
+    async (contact) => {
+      if (contact.marketing_opt_out) {
+        return {
+          contact_id: contact.id,
+          to: contact.phone_normalized,
+          ok: false,
+          error: "marketing_opt_out",
+        };
+      }
+      const to =
+        contact.phone_normalized ||
+        toWhatsAppRecipient(contact.phone_e164 || contact.phone);
+      if (!to) {
+        return {
+          contact_id: contact.id,
+          to: null,
+          ok: false,
+          error: "invalid_phone",
+        };
+      }
 
-  for (const contact of recipients) {
-    if (contact.marketing_opt_out) {
-      results.push({
-        contact_id: contact.id,
-        to: contact.phone_normalized,
-        ok: false,
-        error: "marketing_opt_out",
-      });
-      continue;
-    }
-    const to =
-      contact.phone_normalized ||
-      toWhatsAppRecipient(contact.phone_e164 || contact.phone);
-    if (!to) {
-      results.push({
-        contact_id: contact.id,
-        to: null,
-        ok: false,
-        error: "invalid_phone",
-      });
-      continue;
-    }
-
-    const mediaPayload = {
-      media_id: mediaId,
-      media_link: mediaLink,
-      media_type: "image",
-      caption,
-    };
-
-    // Prefer template + HEADER media (broadcast-safe); fall back to session media.
-    let send = await sendWhatsAppTemplateMessage({
-      to,
-      template_name: templateName,
-      language: settings.language || "en",
-      components: [],
-      ...extractWhatsAppMediaInput(mediaPayload),
-    });
-
-    if (!send.ok && (mediaId || mediaLink)) {
-      send = await sendWhatsAppMediaMessage({
-        to,
-        ...extractWhatsAppMediaInput(mediaPayload),
+      const mediaPayload = {
+        media_id: mediaId,
+        media_link: mediaLink,
+        media_type: "image",
         caption,
-      });
-    }
+      };
 
-    results.push({
-      contact_id: contact.id,
-      name: contact.name,
-      to,
-      ok: send.ok,
-      mode: send.mode,
-      provider_message_id: send.provider_message_id,
-      media_id: send.media_id || mediaId,
-      error: send.error,
-    });
-  }
+      // Prefer template + HEADER media (broadcast-safe); fall back to session media.
+      let send = await sendWhatsAppTemplateMessage({
+        to,
+        template_name: templateName,
+        language: settings.language || "en",
+        components: [],
+        ...extractWhatsAppMediaInput(mediaPayload),
+      });
+
+      if (!send.ok && (mediaId || mediaLink)) {
+        send = await sendWhatsAppMediaMessage({
+          to,
+          ...extractWhatsAppMediaInput(mediaPayload),
+          caption,
+        });
+      }
+
+      return {
+        contact_id: contact.id,
+        name: contact.name,
+        to,
+        ok: send.ok,
+        mode: send.mode,
+        provider_message_id: send.provider_message_id,
+        media_id: send.media_id || mediaId,
+        error: send.error,
+      };
+    },
+    { concurrency: 8 },
+  );
 
   const sent = results.filter((r) => r.ok).length;
   const broadcast = {

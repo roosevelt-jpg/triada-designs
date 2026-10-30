@@ -10,8 +10,12 @@ import {
   SOCIAL_DM_CHANNELS,
   SUPPORT_PAGE_MESSAGING_CHANNELS,
 } from "@/lib/crm/conversations-store";
+import { mapParallel } from "@/lib/runtime/parallel-map";
 
 const TABLE = "meta_webhook_events";
+
+/** Default concurrency for multi-message Meta payloads. */
+const INBOUND_PARALLEL = 6;
 
 /**
  * @param {unknown} payload
@@ -135,20 +139,29 @@ async function storeWebhookEvent(input) {
  * Store + inbound processing run in parallel so Graph send is not blocked on
  * webhook row insert latency.
  *
+ * HTTP route handlers should call this via `runAfterResponse` so Meta gets an
+ * early 200 before draft/Graph work. Direct callers (smoke) still await fully.
+ *
  * WhatsApp → AI Support (draft + Cloud API text send).
  * Instagram / Messenger / Facebook → AI Support (draft + Page Graph send).
  * Other social (e.g. LinkedIn sim) → Social Media Manager inbox reply.
  *
- * @param {{ payload: unknown, rawBody: string, headers?: Record<string, string | null | undefined> }} input
+ * @param {{
+ *   payload: unknown,
+ *   rawBody: string,
+ *   headers?: Record<string, string | null | undefined>,
+ *   background_send?: boolean,
+ * }} input
  */
 export async function ingestMetaWebhook(input) {
   const { payload, rawBody } = input;
   const started = Date.now();
+  const backgroundSend = input.background_send === true;
 
   // Critical path: process inbound (draft + Graph) in parallel with store.
   const [stored, processed] = await Promise.all([
     storeWebhookEvent({ payload, rawBody }),
-    processInboundMessages(payload),
+    processInboundMessages(payload, { background_send: backgroundSend }),
   ]);
 
   // Status update is non-blocking — never delay Meta 200 / customer send.
@@ -184,9 +197,164 @@ export async function ingestMetaWebhook(input) {
 
 /**
  * @param {unknown} payload
+ * @param {{ background_send?: boolean }} [opts]
  */
-async function processInboundMessages(payload) {
+async function processInboundMessages(payload, opts = {}) {
   const normalized = normalizeMetaInboundMessages(payload);
+  const backgroundSend = opts.background_send === true;
+
+  const outcomes = await mapParallel(
+    normalized,
+    async (item) => {
+      try {
+        if (item.channel === "whatsapp") {
+          const handled = await handleInboundWhatsApp({
+            body: item.body || "Hi",
+            external_user_id: item.external_user_id,
+            external_conversation_id: item.external_conversation_id,
+            provider_message_id: item.provider_message_id,
+            contact_name:
+              typeof item.metadata?.contact_name === "string"
+                ? item.metadata.contact_name
+                : null,
+            page_or_account_id: item.page_or_account_id,
+            message_type: item.message_type,
+            metadata: item.metadata,
+            auto_reply: true,
+            dry_run: false,
+            background_send: backgroundSend,
+          });
+          return {
+            channel: item.channel,
+            message: {
+              channel: "whatsapp",
+              provider_message_id: item.provider_message_id,
+              conversation_id: handled.conversation?.id || null,
+              deduplicated: Boolean(handled.deduplicated),
+              body: item.body,
+            },
+            automation: {
+              agent_key: "ai_support",
+              replied: Boolean(handled.replied),
+              skipped: Boolean(handled.skipped),
+              reason: handled.reason || handled.reply?.reason || null,
+              send_mode: handled.reply?.send?.mode || null,
+              send_ok: handled.reply?.send?.ok ?? null,
+              send_pending: Boolean(handled.reply?.send_pending),
+              fast_path: Boolean(handled.reply?.fast_path),
+              draft_latency_ms: handled.reply?.latency_ms ?? null,
+              conversation_id: handled.conversation?.id || null,
+            },
+            replied: Boolean(handled.replied),
+            failed: handled.ok === false,
+          };
+        }
+
+        if (SUPPORT_PAGE_MESSAGING_CHANNELS.includes(item.channel)) {
+          const handled = await handleInboundPageMessaging({
+            channel: item.channel,
+            body: item.body || "Hi",
+            external_user_id: item.external_user_id,
+            external_conversation_id: item.external_conversation_id,
+            provider_message_id: item.provider_message_id,
+            page_or_account_id: item.page_or_account_id,
+            message_type: item.message_type,
+            metadata: item.metadata,
+            auto_reply: true,
+            dry_run: false,
+            background_send: backgroundSend,
+          });
+          return {
+            channel: item.channel,
+            message: {
+              channel: item.channel,
+              provider_message_id: item.provider_message_id,
+              conversation_id: handled.conversation?.id || null,
+              deduplicated: Boolean(handled.deduplicated),
+              body: item.body,
+            },
+            automation: {
+              agent_key: "ai_support",
+              channel: item.channel,
+              replied: Boolean(handled.replied),
+              skipped: Boolean(handled.skipped),
+              reason: handled.reason || handled.reply?.reason || null,
+              send_mode: handled.reply?.send?.mode || null,
+              send_ok: handled.reply?.send?.ok ?? null,
+              send_error:
+                handled.reply?.send?.error || handled.reply?.error || null,
+              send_pending: Boolean(handled.reply?.send_pending),
+              fast_path: Boolean(handled.reply?.fast_path),
+              draft_latency_ms: handled.reply?.latency_ms ?? null,
+              conversation_id: handled.conversation?.id || null,
+            },
+            replied: Boolean(handled.replied),
+            failed: handled.ok === false,
+          };
+        }
+
+        if (SOCIAL_DM_CHANNELS.includes(item.channel)) {
+          const handled = await handleInboundSocialDm({
+            channel: item.channel,
+            body: item.body || "Hi",
+            subject: item.body || `${item.channel} DM`,
+            conversation_id: undefined,
+            auto_reply: true,
+            dry_run: false,
+          });
+          return {
+            channel: item.channel,
+            message: {
+              channel: item.channel,
+              provider_message_id: item.provider_message_id,
+              conversation_id: handled.conversation?.id || null,
+              body: item.body,
+            },
+            automation: {
+              agent_key: "social_media_manager",
+              replied: Boolean(handled.replied),
+              conversation_id: handled.conversation?.id || null,
+            },
+            replied: Boolean(handled.replied),
+            failed: false,
+          };
+        }
+
+        return {
+          channel: item.channel,
+          message: {
+            channel: item.channel,
+            provider_message_id: item.provider_message_id,
+            ignored: true,
+            reason: "unsupported_channel",
+          },
+          automation: null,
+          replied: false,
+          failed: false,
+        };
+      } catch (error) {
+        console.error("[meta-webhook] inbound processing failed", {
+          channel: item.channel,
+          provider_message_id: item.provider_message_id,
+          error: String(error?.message || error),
+        });
+        return {
+          channel: item.channel,
+          message: null,
+          automation: {
+            ok: false,
+            channel: item.channel,
+            provider_message_id: item.provider_message_id,
+            error: String(error?.message || error),
+          },
+          replied: false,
+          failed: true,
+        };
+      }
+    },
+    { concurrency: INBOUND_PARALLEL },
+  );
+
   /** @type {Array<Record<string, unknown>>} */
   const messages = [];
   /** @type {Array<Record<string, unknown>>} */
@@ -195,130 +363,12 @@ async function processInboundMessages(payload) {
   let failed = 0;
   let channel = null;
 
-  for (const item of normalized) {
-    channel = item.channel;
-    try {
-      if (item.channel === "whatsapp") {
-        const handled = await handleInboundWhatsApp({
-          body: item.body || "Hi",
-          external_user_id: item.external_user_id,
-          external_conversation_id: item.external_conversation_id,
-          provider_message_id: item.provider_message_id,
-          contact_name:
-            typeof item.metadata?.contact_name === "string"
-              ? item.metadata.contact_name
-              : null,
-          page_or_account_id: item.page_or_account_id,
-          message_type: item.message_type,
-          metadata: item.metadata,
-          auto_reply: true,
-          dry_run: false,
-        });
-        messages.push({
-          channel: "whatsapp",
-          provider_message_id: item.provider_message_id,
-          conversation_id: handled.conversation?.id || null,
-          deduplicated: Boolean(handled.deduplicated),
-          body: item.body,
-        });
-        automations.push({
-          agent_key: "ai_support",
-          replied: Boolean(handled.replied),
-          skipped: Boolean(handled.skipped),
-          reason: handled.reason || handled.reply?.reason || null,
-          send_mode: handled.reply?.send?.mode || null,
-          send_ok: handled.reply?.send?.ok ?? null,
-          fast_path: Boolean(handled.reply?.fast_path),
-          draft_latency_ms: handled.reply?.latency_ms ?? null,
-          conversation_id: handled.conversation?.id || null,
-        });
-        if (handled.replied) replied += 1;
-        if (handled.ok === false) failed += 1;
-        continue;
-      }
-
-      if (SUPPORT_PAGE_MESSAGING_CHANNELS.includes(item.channel)) {
-        const handled = await handleInboundPageMessaging({
-          channel: item.channel,
-          body: item.body || "Hi",
-          external_user_id: item.external_user_id,
-          external_conversation_id: item.external_conversation_id,
-          provider_message_id: item.provider_message_id,
-          page_or_account_id: item.page_or_account_id,
-          message_type: item.message_type,
-          metadata: item.metadata,
-          auto_reply: true,
-          dry_run: false,
-        });
-        messages.push({
-          channel: item.channel,
-          provider_message_id: item.provider_message_id,
-          conversation_id: handled.conversation?.id || null,
-          deduplicated: Boolean(handled.deduplicated),
-          body: item.body,
-        });
-        automations.push({
-          agent_key: "ai_support",
-          channel: item.channel,
-          replied: Boolean(handled.replied),
-          skipped: Boolean(handled.skipped),
-          reason: handled.reason || handled.reply?.reason || null,
-          send_mode: handled.reply?.send?.mode || null,
-          send_ok: handled.reply?.send?.ok ?? null,
-          send_error: handled.reply?.send?.error || handled.reply?.error || null,
-          fast_path: Boolean(handled.reply?.fast_path),
-          draft_latency_ms: handled.reply?.latency_ms ?? null,
-          conversation_id: handled.conversation?.id || null,
-        });
-        if (handled.replied) replied += 1;
-        if (handled.ok === false) failed += 1;
-        continue;
-      }
-
-      if (SOCIAL_DM_CHANNELS.includes(item.channel)) {
-        const handled = await handleInboundSocialDm({
-          channel: item.channel,
-          body: item.body || "Hi",
-          subject: item.body || `${item.channel} DM`,
-          conversation_id: undefined,
-          auto_reply: true,
-          dry_run: false,
-        });
-        messages.push({
-          channel: item.channel,
-          provider_message_id: item.provider_message_id,
-          conversation_id: handled.conversation?.id || null,
-          body: item.body,
-        });
-        automations.push({
-          agent_key: "social_media_manager",
-          replied: Boolean(handled.replied),
-          conversation_id: handled.conversation?.id || null,
-        });
-        if (handled.replied) replied += 1;
-        continue;
-      }
-
-      messages.push({
-        channel: item.channel,
-        provider_message_id: item.provider_message_id,
-        ignored: true,
-        reason: "unsupported_channel",
-      });
-    } catch (error) {
-      failed += 1;
-      console.error("[meta-webhook] inbound processing failed", {
-        channel: item.channel,
-        provider_message_id: item.provider_message_id,
-        error: String(error?.message || error),
-      });
-      automations.push({
-        ok: false,
-        channel: item.channel,
-        provider_message_id: item.provider_message_id,
-        error: String(error?.message || error),
-      });
-    }
+  for (const outcome of outcomes) {
+    if (outcome.channel) channel = outcome.channel;
+    if (outcome.message) messages.push(outcome.message);
+    if (outcome.automation) automations.push(outcome.automation);
+    if (outcome.replied) replied += 1;
+    if (outcome.failed) failed += 1;
   }
 
   if (normalized.length) {
@@ -327,6 +377,7 @@ async function processInboundMessages(payload) {
       channel,
       replied,
       failed,
+      parallel: true,
     });
   }
 

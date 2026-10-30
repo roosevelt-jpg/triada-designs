@@ -2,10 +2,11 @@ import { timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ingestMetaWebhook } from "@/lib/meta/webhook-ingest";
 import { warmInboundRuntime } from "@/lib/meta/warm-inbound-runtime";
+import { runAfterResponse } from "@/lib/runtime/after-response";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-/** Allow Support draft + Graph send inside the webhook request. */
+/** Keep isolate alive for background draft + Graph send after early 200. */
 export const maxDuration = 60;
 
 /**
@@ -96,8 +97,9 @@ export async function GET(request) {
 }
 
 /**
- * POST — inbound Meta events → store → inbox → Support auto-reply (+ Graph send).
+ * POST — early 200, then background store → inbox → Support auto-reply (+ Graph).
  * WhatsApp Cloud + Instagram Messaging + Facebook Messenger → AI Support.
+ * Never awaits outbound provider sends on the webhook critical path.
  */
 export async function POST(request) {
   const rawBody = await request.text();
@@ -115,23 +117,22 @@ export async function POST(request) {
   });
 
   // Signature verification (X-Hub-Signature-256) lands with full control-plane port.
-  // Always 200 after accept so Meta does not poison-retry on AI/Graph failures;
-  // processing result is returned for ops visibility.
-  const result = await ingestMetaWebhook({ payload, rawBody, headers });
+  // Always 200 after accept so Meta does not poison-retry on AI/Graph failures.
+  runAfterResponse(async () => {
+    await ingestMetaWebhook({
+      payload,
+      rawBody,
+      headers,
+      background_send: false,
+    });
+  });
 
   return NextResponse.json(
     {
-      ok: result.ok,
-      storage: result.storage,
-      id: result.id,
-      provider_event_id: result.provider_event_id,
-      message: result.message,
-      warning: result.warning,
-      channel: result.channel || null,
-      replied: result.replied || 0,
-      messages: result.messages || [],
-      automations: result.automations || [],
-      latency_ms: result.latency_ms ?? null,
+      ok: true,
+      accepted: true,
+      background: true,
+      message: "Accepted — processing inbound in background.",
     },
     { status: 200 },
   );

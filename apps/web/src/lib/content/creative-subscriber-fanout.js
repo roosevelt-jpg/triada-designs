@@ -26,8 +26,10 @@ import {
 import { listJewelleryOpsRecords } from "@/lib/jewellery-ops/store";
 import { absolutePublicMediaUrl } from "@/lib/integrations/whatsapp-campaign-promo";
 import { absoluteAppUrl, PRODUCTION_APP_URL } from "@/lib/public-app-url";
+import { mapParallel } from "@/lib/runtime/parallel-map";
 
 const FANOUT_RECIPIENT_CAP = 200;
+const FANOUT_CONCURRENCY = 8;
 
 /**
  * @param {string | null | undefined} url
@@ -463,109 +465,114 @@ export async function fanOutCreativeToSubscribers(input) {
     };
   }
 
-  /** @type {object[]} */
-  const emailResults = [];
-  /** @type {object[]} */
-  const waResults = [];
-  /** @type {object[]} */
-  const tgResults = [];
-
-  for (const row of emails) {
-    const wrapped = wrapEmailMessage({
-      subject: emailBodies.subject,
-      bodyHtml: emailBodies.bodyHtml,
-      bodyText: emailBodies.bodyText,
-      customerName: row.name || undefined,
-      greetingKind: "default",
-    });
-    const sent = await sendResendEmail({
-      to: row.email,
-      subject: wrapped.subject,
-      html: wrapped.html,
-      text: wrapped.text,
-      tags: [{ name: "kind", value: "creative_subscriber_fanout" }],
-    });
-    emailResults.push({
-      contact_id: row.contact_id,
-      to: row.email,
-      ok: Boolean(sent.ok),
-      mode: sent.mode,
-      error: sent.error || null,
-      provider_message_id: sent.id || null,
-    });
-  }
-
   const waMedia = await prepareWhatsAppMedia(media);
-  for (const row of whatsapps) {
-    let send;
-    if (waMedia.media_id || waMedia.media_link || waMedia.media_base64) {
-      send = await sendWhatsAppMediaMessage({
-        to: row.to,
-        ...extractWhatsAppMediaInput({
-          media_id: waMedia.media_id,
-          media_link: waMedia.media_link,
-          media_base64: waMedia.media_base64,
-          media_type: waMedia.media_type,
-          caption,
-        }),
-        caption,
-      });
-    } else {
-      send = await sendWhatsAppTextMessage({ to: row.to, body: caption });
-    }
-    waResults.push({
-      contact_id: row.contact_id,
-      to: row.to,
-      ok: Boolean(send.ok),
-      mode: send.mode,
-      error: send.error || null,
-      provider_message_id: send.provider_message_id || null,
-      media_id: send.media_id || waMedia.media_id || null,
-    });
-  }
 
-  for (const row of telegrams) {
-    let send;
-    const primaryUrl = media.videoUrl || media.imageUrl;
-    const useVideo = Boolean(media.videoUrl);
-    if (primaryUrl && (isHttpUrl(primaryUrl) || isDataUrl(primaryUrl))) {
-      const payload = {
-        chat_id: row.chat_id,
-        caption,
-        media_url: isHttpUrl(primaryUrl) ? primaryUrl : null,
-        media_base64: isDataUrl(primaryUrl) ? primaryUrl : null,
-        mime_type: useVideo ? media.videoMime : media.imageMime,
-        filename: useVideo
-          ? `triada-${content.id}.mp4`
-          : `triada-${content.id}.jpg`,
-      };
-      send = useVideo
-        ? await sendTelegramVideo(payload)
-        : await sendTelegramPhoto(payload);
-      // If media send fails, fall back to branded text + links.
-      if (!send.ok) {
-        send = await sendTelegramTextMessage({
-          chat_id: row.chat_id,
-          body: caption,
+  const [emailResults, waResults, tgResults] = await Promise.all([
+    mapParallel(
+      emails,
+      async (row) => {
+        const wrapped = wrapEmailMessage({
+          subject: emailBodies.subject,
+          bodyHtml: emailBodies.bodyHtml,
+          bodyText: emailBodies.bodyText,
+          customerName: row.name || undefined,
+          greetingKind: "default",
         });
-      }
-    } else {
-      send = await sendTelegramTextMessage({
-        chat_id: row.chat_id,
-        body: caption,
-      });
-    }
-    tgResults.push({
-      chat_id: row.chat_id,
-      contact_id: row.contact_id || null,
-      source: row.source,
-      ok: Boolean(send.ok),
-      mode: send.mode,
-      kind: send.kind || "text",
-      error: send.error || null,
-      provider_message_id: send.provider_message_id || null,
-    });
-  }
+        const sent = await sendResendEmail({
+          to: row.email,
+          subject: wrapped.subject,
+          html: wrapped.html,
+          text: wrapped.text,
+          tags: [{ name: "kind", value: "creative_subscriber_fanout" }],
+        });
+        return {
+          contact_id: row.contact_id,
+          to: row.email,
+          ok: Boolean(sent.ok),
+          mode: sent.mode,
+          error: sent.error || null,
+          provider_message_id: sent.id || null,
+        };
+      },
+      { concurrency: FANOUT_CONCURRENCY },
+    ),
+    mapParallel(
+      whatsapps,
+      async (row) => {
+        let send;
+        if (waMedia.media_id || waMedia.media_link || waMedia.media_base64) {
+          send = await sendWhatsAppMediaMessage({
+            to: row.to,
+            ...extractWhatsAppMediaInput({
+              media_id: waMedia.media_id,
+              media_link: waMedia.media_link,
+              media_base64: waMedia.media_base64,
+              media_type: waMedia.media_type,
+              caption,
+            }),
+            caption,
+          });
+        } else {
+          send = await sendWhatsAppTextMessage({ to: row.to, body: caption });
+        }
+        return {
+          contact_id: row.contact_id,
+          to: row.to,
+          ok: Boolean(send.ok),
+          mode: send.mode,
+          error: send.error || null,
+          provider_message_id: send.provider_message_id || null,
+          media_id: send.media_id || waMedia.media_id || null,
+        };
+      },
+      { concurrency: FANOUT_CONCURRENCY },
+    ),
+    mapParallel(
+      telegrams,
+      async (row) => {
+        let send;
+        const primaryUrl = media.videoUrl || media.imageUrl;
+        const useVideo = Boolean(media.videoUrl);
+        if (primaryUrl && (isHttpUrl(primaryUrl) || isDataUrl(primaryUrl))) {
+          const payload = {
+            chat_id: row.chat_id,
+            caption,
+            media_url: isHttpUrl(primaryUrl) ? primaryUrl : null,
+            media_base64: isDataUrl(primaryUrl) ? primaryUrl : null,
+            mime_type: useVideo ? media.videoMime : media.imageMime,
+            filename: useVideo
+              ? `triada-${content.id}.mp4`
+              : `triada-${content.id}.jpg`,
+          };
+          send = useVideo
+            ? await sendTelegramVideo(payload)
+            : await sendTelegramPhoto(payload);
+          if (!send.ok) {
+            send = await sendTelegramTextMessage({
+              chat_id: row.chat_id,
+              body: caption,
+            });
+          }
+        } else {
+          send = await sendTelegramTextMessage({
+            chat_id: row.chat_id,
+            body: caption,
+          });
+        }
+        return {
+          chat_id: row.chat_id,
+          contact_id: row.contact_id || null,
+          source: row.source,
+          ok: Boolean(send.ok),
+          mode: send.mode,
+          kind: send.kind || "text",
+          error: send.error || null,
+          provider_message_id: send.provider_message_id || null,
+        };
+      },
+      { concurrency: FANOUT_CONCURRENCY },
+    ),
+  ]);
 
   const all = [...emailResults, ...waResults, ...tgResults];
   const sent = all.filter((r) => r.ok).length;

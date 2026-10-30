@@ -21,6 +21,7 @@ import {
 import { upsertContacts } from "@/lib/crm/contacts-store";
 import { sendWhatsAppTextMessage } from "@/lib/integrations/whatsapp-cloud-text";
 import { rememberInboundWhatsAppPeer } from "@/lib/crm/meta-contact-sync";
+import { deliverOutbound } from "@/lib/runtime/background-outbound";
 
 /**
  * Upsert CRM contact + link conversation.contact_id (off the Graph hot path).
@@ -71,11 +72,13 @@ async function linkWhatsAppContact(input) {
  * @param {{
  *   conversation: Record<string, unknown>,
  *   dry_run?: boolean,
+ *   background_send?: boolean,
  * }} input
  */
 export async function replyWhatsAppSupport(input) {
   const conversation = input.conversation || {};
   const dryRun = input.dry_run === true;
+  const backgroundSend = input.background_send === true;
   const inbound = String(
     conversation.last_inbound_body ||
       conversation.subject ||
@@ -99,32 +102,42 @@ export async function replyWhatsAppSupport(input) {
     let send = null;
     /** @type {Record<string, unknown> | null} */
     let saved = null;
+    let sendPending = false;
     if (!dryRun) {
       const to = String(
         conversation.external_user_id ||
           conversation.metadata?.wa_id ||
           "",
       ).trim();
-      send = await sendWhatsAppTextMessage({ to, body: replyText });
-      saved = await appendOutboundReply(String(conversation.id), {
-        body: replyText,
-        agent_key: "ai_support",
-        provider_message_id: send?.provider_message_id
-          ? String(send.provider_message_id)
-          : null,
-        send_mode: send?.mode || null,
-        send_ok: Boolean(send?.ok),
-        send_error: send?.error || null,
+      const delivered = await deliverOutbound({
+        background: backgroundSend,
+        send: () => sendWhatsAppTextMessage({ to, body: replyText }),
+        afterSend: async (result) => {
+          const appended = await appendOutboundReply(String(conversation.id), {
+            body: replyText,
+            agent_key: "ai_support",
+            provider_message_id: result?.provider_message_id
+              ? String(result.provider_message_id)
+              : null,
+            send_mode: result?.mode || null,
+            send_ok: Boolean(result?.ok),
+            send_error: result?.error || null,
+          });
+          await finalizeHumanHandoff({
+            conversation_id: String(conversation.id),
+            channel: "whatsapp",
+            inbound,
+            reply: replyText,
+            agent_key: "ai_support",
+            whatsapp_number: handoff.whatsapp_number,
+            call_number: handoff.call_number,
+          });
+          return appended;
+        },
       });
-      await finalizeHumanHandoff({
-        conversation_id: String(conversation.id),
-        channel: "whatsapp",
-        inbound,
-        reply: replyText,
-        agent_key: "ai_support",
-        whatsapp_number: handoff.whatsapp_number,
-        call_number: handoff.call_number,
-      });
+      send = delivered.send;
+      saved = /** @type {Record<string, unknown> | null} */ (delivered.saved);
+      sendPending = delivered.send_pending;
     }
     return {
       ok: Boolean(send ? send.ok : true),
@@ -138,6 +151,7 @@ export async function replyWhatsAppSupport(input) {
       latency_ms: null,
       dry_run: dryRun,
       send,
+      send_pending: sendPending,
       conversation: saved,
       reviews: [],
       error: send && !send.ok ? send.error : null,
@@ -172,6 +186,7 @@ export async function replyWhatsAppSupport(input) {
   let send = null;
   /** @type {Record<string, unknown> | null} */
   let saved = null;
+  let sendPending = false;
 
   if (!dryRun) {
     const to = String(
@@ -179,17 +194,24 @@ export async function replyWhatsAppSupport(input) {
         conversation.metadata?.wa_id ||
         "",
     ).trim();
-    send = await sendWhatsAppTextMessage({ to, body: replyText });
-    saved = await appendOutboundReply(String(conversation.id), {
-      body: replyText,
-      agent_key: "ai_support",
-      provider_message_id: send?.provider_message_id
-        ? String(send.provider_message_id)
-        : null,
-      send_mode: send?.mode || null,
-      send_ok: Boolean(send?.ok),
-      send_error: send?.error || null,
+    const delivered = await deliverOutbound({
+      background: backgroundSend,
+      send: () => sendWhatsAppTextMessage({ to, body: replyText }),
+      afterSend: (result) =>
+        appendOutboundReply(String(conversation.id), {
+          body: replyText,
+          agent_key: "ai_support",
+          provider_message_id: result?.provider_message_id
+            ? String(result.provider_message_id)
+            : null,
+          send_mode: result?.mode || null,
+          send_ok: Boolean(result?.ok),
+          send_error: result?.error || null,
+        }),
     });
+    send = delivered.send;
+    saved = /** @type {Record<string, unknown> | null} */ (delivered.saved);
+    sendPending = delivered.send_pending;
   }
 
   void setSharedKv({
@@ -217,6 +239,7 @@ export async function replyWhatsAppSupport(input) {
     latency_ms: collab.latency_ms ?? null,
     dry_run: dryRun,
     send,
+    send_pending: sendPending,
     conversation: saved,
     reviews: collab.reviews || [],
     error: send && !send.ok ? send.error : null,
@@ -236,6 +259,7 @@ export async function replyWhatsAppSupport(input) {
  *   metadata?: Record<string, unknown>,
  *   auto_reply?: boolean,
  *   dry_run?: boolean,
+ *   background_send?: boolean,
  * }} input
  */
 export async function handleInboundWhatsApp(input) {
@@ -309,10 +333,11 @@ export async function handleInboundWhatsApp(input) {
     };
   }
 
-  // Draft + Graph send first; CRM contact link runs after (non-blocking).
+  // Draft first; Graph send may run after HTTP 200 when background_send.
   const reply = await replyWhatsAppSupport({
     conversation,
     dry_run: input.dry_run === true,
+    background_send: input.background_send === true,
   });
 
   scheduleContactLink();
