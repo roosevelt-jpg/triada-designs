@@ -9,18 +9,19 @@
   --color-brand-champagne: #c7ae8a;
   /* Brighter gold for labels on black primary controls */
   --color-brand-gold: #d4b896;
-  --color-brand-sand: #e5d9c8;
-  /* Mineral parchment — not flat cream landing-page ivory */
-  --color-brand-ivory: #f3efe8;
+  /* Warm-grey sand for pressed / active chrome */
+  --color-brand-sand: #d6d3cd;
+  /* Shell grey — retuned from parchment ivory */
+  --color-brand-ivory: #e9e8e6;
   --color-white: #ffffff;
-  --color-stone: #ebe6df;
-  --color-muted: #6a655e;
-  --color-border: #ddd5c9;
-  --color-border-strong: #c8bdae;
+  --color-stone: #dcdbd8;
+  --color-muted: #656460;
+  --color-border: #cfcfcb;
+  --color-border-strong: #b5b4b0;
   --color-black: #0a0908;
   /* Field fill reads clearly against white panels */
-  --color-field: #f0ebe3;
-  --color-field-focus: #fffcf8;
+  --color-field: #e2e1de;
+  --color-field-focus: #f6f6f5;
 
   --color-success: #237a57;
   --color-warning: #8f5e00;
@@ -31,8 +32,9 @@
   --surface-page: var(--color-brand-ivory);
   --surface-card: var(--color-white);
   --surface-field: var(--color-field);
-  --surface-sidebar: #fbfaf7;
-  --surface-header: color-mix(in srgb, var(--color-brand-ivory) 72%, white);
+  /* Deeper grey than the main content plane */
+  --surface-sidebar: #c6c5c2;
+  --surface-header: color-mix(in srgb, var(--color-brand-ivory) 55%, white);
   --text-primary: var(--color-brand-ink);
   --text-secondary: var(--color-muted);
   --border-default: var(--color-border);
@@ -68,12 +70,12 @@
   --sidebar-width: 240px;
   --topbar-height: 60px;
 
-  /* Atmosphere — soft wash + linen, never glow blobs */
+  /* Atmosphere — soft grey wash + linen, never glow blobs */
   --atmosphere-wash: linear-gradient(
     168deg,
-    #f7f4ef 0%,
+    #f0efed 0%,
     var(--color-brand-ivory) 42%,
-    #ebe4d8 100%
+    #dcdbd8 100%
   );
   --atmosphere-linen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72' viewBox='0 0 72 72'%3E%3Cg fill='none' stroke='%231c1916' stroke-opacity='0.045' stroke-width='0.6'%3E%3Cpath d='M0 36h72M36 0v72'/%3E%3C/g%3E%3C/svg%3E");
 }

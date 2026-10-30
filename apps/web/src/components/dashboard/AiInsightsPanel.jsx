@@ -21,7 +21,7 @@ import { cn } from "@/lib/cn";
 
 const CHART_INK = "#1c1916";
 const CHART_MUTED = "#6a655e";
-const CHART_GRID = "#ddd5c9";
+const CHART_GRID = "#cfcfcb";
 const CHART_BROWN = "#8f7354";
 const CHART_BROWN_DARK = "#5e4a35";
 const CHART_GOLD = "#d4b896";
