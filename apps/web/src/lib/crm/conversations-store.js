@@ -454,10 +454,20 @@ export async function listUnansweredSocialDms(opts = {}) {
 export async function patchConversation(id, patch) {
   const existing = await getConversation(id);
   if (!existing) return null;
+  const patchMeta =
+    patch &&
+    typeof patch === "object" &&
+    patch.metadata &&
+    typeof patch.metadata === "object"
+      ? /** @type {Record<string, unknown>} */ (patch.metadata)
+      : null;
   const next = shapeRecord({
     ...existing,
     ...patch,
     id: existing.id,
+    metadata: patchMeta
+      ? { ...(existing.metadata || {}), ...patchMeta }
+      : existing.metadata,
     updated_at: nowIso(),
   });
   const saved = await persistOne(next);

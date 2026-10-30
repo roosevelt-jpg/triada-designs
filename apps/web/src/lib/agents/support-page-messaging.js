@@ -15,6 +15,7 @@ import {
   findConversationByExternal,
   ingestInboundDm,
 } from "@/lib/crm/conversations-store";
+import { linkInboundContact } from "@/lib/crm/link-inbound-contact";
 import { sendPageMessagingText } from "@/lib/integrations/meta-page-text";
 import { deliverOutbound } from "@/lib/runtime/background-outbound";
 
@@ -264,14 +265,21 @@ export async function handleInboundPageMessaging(input) {
     };
   }
 
+  const contactName =
+    typeof input.metadata?.contact_name === "string"
+      ? input.metadata.contact_name
+      : null;
+
   const conversation = await ingestInboundDm({
     channel,
     body: input.body,
     subject: input.body || `${channel} message`,
     conversation_id: existing?.id || undefined,
+    contact_id: existing?.contact_id || undefined,
     external_user_id: externalUserId,
     external_conversation_id: externalConversationId,
     provider_message_id: input.provider_message_id,
+    contact_name: contactName,
     page_or_account_id: input.page_or_account_id,
     agent_key: "ai_support",
     metadata: {
@@ -280,11 +288,27 @@ export async function handleInboundPageMessaging(input) {
     },
   });
 
+  const scheduleContactLink = () => {
+    void linkInboundContact({
+      conversationId: conversation?.id,
+      channel,
+      body: input.body,
+      externalUserId,
+      contactName,
+      metadata: {
+        ...(input.metadata || {}),
+        contact_name: contactName,
+      },
+    }).catch(() => null);
+  };
+
   if (input.auto_reply === false) {
+    scheduleContactLink();
     return { ok: true, conversation, replied: false, queued: true };
   }
 
   if (conversation.automation_mode === "human") {
+    scheduleContactLink();
     return {
       ok: true,
       conversation,
@@ -299,6 +323,8 @@ export async function handleInboundPageMessaging(input) {
     dry_run: input.dry_run === true,
     background_send: input.background_send === true,
   });
+
+  scheduleContactLink();
 
   return {
     ok: Boolean(reply.ok),

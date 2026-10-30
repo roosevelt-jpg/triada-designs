@@ -53,11 +53,41 @@ export function shapeConversationForInbox(conversation, contact = null) {
     lastMessageAt = outboundAt || inboundAt;
   }
 
+  const channel = String(c.channel || "");
   const contactName =
     (contact && typeof contact.name === "string" && contact.name.trim()) ||
     (typeof meta.contact_name === "string" && meta.contact_name.trim()) ||
     (typeof c.external_user_id === "string" && c.external_user_id.trim()) ||
     null;
+
+  const contactEmail =
+    (contact && contact.email) ||
+    (typeof meta.email === "string" ? meta.email : null) ||
+    null;
+
+  const contactPhone =
+    (contact && (contact.phone || contact.phone_e164)) ||
+    (typeof meta.phone === "string" ? meta.phone : null) ||
+    (channel === "whatsapp" && c.external_user_id
+      ? String(c.external_user_id).startsWith("+")
+        ? String(c.external_user_id)
+        : `+${c.external_user_id}`
+      : null);
+
+  const avatarUrl =
+    (contact &&
+      (contact.avatar_url ||
+        (contact.metadata &&
+          typeof contact.metadata === "object" &&
+          /** @type {Record<string, unknown>} */ (contact.metadata).avatar_url))) ||
+    meta.avatar_url ||
+    meta.profile_pic ||
+    meta.picture ||
+    null;
+  const picture =
+    typeof avatarUrl === "string" && /^https?:\/\//i.test(avatarUrl.trim())
+      ? avatarUrl.trim()
+      : null;
 
   const messages = Array.isArray(c.messages)
     ? c.messages.map(shapeMessageForInbox).filter(Boolean)
@@ -66,7 +96,7 @@ export function shapeConversationForInbox(conversation, contact = null) {
   return {
     id: String(c.id || ""),
     workspace_id: c.workspace_id || "triada-ops",
-    channel: String(c.channel || ""),
+    channel,
     status: String(c.status || "open"),
     automation_mode: String(c.automation_mode || "ai"),
     subject: String(c.subject || ""),
@@ -94,11 +124,10 @@ export function shapeConversationForInbox(conversation, contact = null) {
     contact: {
       id: (contact && contact.id) || c.contact_id || null,
       name: contactName || "Unknown contact",
-      email: (contact && contact.email) || null,
-      phone:
-        (contact && (contact.phone || contact.phone_e164)) ||
-        c.external_user_id ||
-        null,
+      email: contactEmail,
+      phone: contactPhone,
+      picture,
+      avatar_url: picture,
       preferred_language:
         (contact && contact.preferred_language) || "en",
     },

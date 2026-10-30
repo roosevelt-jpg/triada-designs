@@ -16,56 +16,10 @@ import {
   appendOutboundReply,
   findConversationByExternal,
   ingestInboundDm,
-  patchConversation,
 } from "@/lib/crm/conversations-store";
-import { upsertContacts } from "@/lib/crm/contacts-store";
 import { sendWhatsAppTextMessage } from "@/lib/integrations/whatsapp-cloud-text";
-import { rememberInboundWhatsAppPeer } from "@/lib/crm/meta-contact-sync";
 import { deliverOutbound } from "@/lib/runtime/background-outbound";
-
-/**
- * Upsert CRM contact + link conversation.contact_id (off the Graph hot path).
- * Inbox still shows metadata.contact_name immediately.
- * @param {{
- *   conversationId?: string | null,
- *   externalUserId: string,
- *   contactName?: string | null,
- * }} input
- */
-async function linkWhatsAppContact(input) {
-  const waId = String(input.externalUserId || "")
-    .replace(/^\+/, "")
-    .trim();
-  if (!waId) return;
-  const phone = `+${waId}`;
-  try {
-    const result = await upsertContacts([
-      {
-        name: input.contactName || null,
-        phone,
-        source: "whatsapp_inbound",
-        metadata: { wa_id: waId },
-      },
-    ]);
-    const contactId = result.upserted?.[0]?.id || null;
-    if (contactId && input.conversationId) {
-      await patchConversation(String(input.conversationId), {
-        contact_id: contactId,
-      });
-    }
-  } catch {
-    /* non-blocking */
-  }
-  try {
-    await rememberInboundWhatsAppPeer({
-      phone,
-      name: input.contactName || null,
-      wa_id: waId,
-    });
-  } catch {
-    /* non-blocking */
-  }
-}
+import { linkInboundContact } from "@/lib/crm/link-inbound-contact";
 
 /**
  * Draft + send a Support reply for one WhatsApp conversation.
@@ -309,11 +263,18 @@ export async function handleInboundWhatsApp(input) {
   });
 
   const scheduleContactLink = () => {
-    if (!externalUserId) return;
-    void linkWhatsAppContact({
+    if (!externalUserId && !input.contact_name && !input.body) return;
+    void linkInboundContact({
       conversationId: conversation?.id,
+      channel: "whatsapp",
+      body: input.body,
       externalUserId,
       contactName: input.contact_name || null,
+      metadata: {
+        ...(input.metadata || {}),
+        wa_id: externalUserId,
+        contact_name: input.contact_name || null,
+      },
     }).catch(() => null);
   };
 

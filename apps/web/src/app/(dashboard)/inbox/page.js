@@ -13,6 +13,7 @@ import { formatDateTime } from "@/lib/formatters";
 const CHANNEL_FILTERS = [
   { value: "", label: "All channels" },
   { value: "webchat", label: "Webchat" },
+  { value: "email", label: "Email" },
   { value: "facebook", label: "Facebook" },
   { value: "instagram", label: "Instagram" },
   { value: "whatsapp", label: "WhatsApp" },
@@ -28,6 +29,7 @@ function channelTone(channel) {
   if (channel === "telegram") return "info";
   if (channel === "linkedin") return "info";
   if (channel === "tiktok") return "brand";
+  if (channel === "email") return "neutral";
   return "neutral";
 }
 

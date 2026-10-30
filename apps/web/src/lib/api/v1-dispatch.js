@@ -120,7 +120,6 @@ import {
   SOCIAL_DM_CHANNELS,
   SUPPORT_PAGE_MESSAGING_CHANNELS,
   SUPPORT_TEXT_CHANNELS,
-  appendOutboundReply,
   conversationsStorageMode,
   getConversation,
   listConversations,
@@ -128,6 +127,7 @@ import {
   patchConversation,
 } from "@/lib/crm/conversations-store";
 import { shapeConversationForInbox } from "@/lib/crm/inbox-shape";
+import { sendHumanInboxReply } from "@/lib/crm/send-human-inbox-reply";
 import {
   handleInboundSocialDm,
   sweepUnansweredSocialDms,
@@ -2687,16 +2687,31 @@ export async function dispatchV1(method, segments, request, body) {
         ...shaped,
       });
     }
-    // messages — human/outbound note
+    // messages — admin/human live channel reply + inbox trail
     const text =
       body && typeof body === "object" && body.body
         ? String(body.body)
         : "";
     if (!text) return jsonErr("Message body required.", 422);
-    const saved = await appendOutboundReply(id, {
+    const delivered = await sendHumanInboxReply({
+      conversationId: id,
       body: text,
-      agent_key: "human",
     });
+    if (delivered.error === "not_found") {
+      return jsonErr("Conversation not found.", 404);
+    }
+    if (delivered.error === "body_required") {
+      return jsonErr("Message body required.", 422);
+    }
+    if (!delivered.ok) {
+      return jsonErr(
+        delivered.error === "unsupported_channel"
+          ? "Channel does not support live replies."
+          : delivered.error || "Failed to deliver reply.",
+        422,
+      );
+    }
+    const saved = delivered.conversation;
     if (!saved) return jsonErr("Conversation not found.", 404);
     const contactMap = await buildContactMapForConversations([saved]);
     const shaped = shapeConversationForInbox(
@@ -2707,6 +2722,8 @@ export async function dispatchV1(method, segments, request, body) {
     );
     return jsonOk({
       ok: true,
+      send_ok: true,
+      send_mode: delivered.send?.mode || null,
       ...shaped,
       messages: shaped.messages || [],
     });

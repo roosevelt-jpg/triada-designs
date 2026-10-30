@@ -32,10 +32,29 @@ const LOCAL_FILE = path.join(LOCAL_DIR, "crm-contacts.json");
  *   source: string,
  *   marketing_opt_out: boolean,
  *   metadata: Record<string, unknown>,
+ *   avatar_url: string | null,
  *   created_at: string,
  *   updated_at: string,
  * }} ContactRecord
  */
+
+/**
+ * @param {Record<string, unknown>} metadata
+ * @returns {string | null}
+ */
+function avatarFromMetadata(metadata) {
+  if (!metadata || typeof metadata !== "object") return null;
+  const raw =
+    metadata.avatar_url ||
+    metadata.profile_pic ||
+    metadata.picture ||
+    metadata.photo_url ||
+    metadata.profile_picture_url ||
+    null;
+  if (typeof raw !== "string") return null;
+  const url = raw.trim();
+  return /^https?:\/\//i.test(url) ? url : null;
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -74,6 +93,16 @@ export function shapeContact(input = {}) {
     typeof input.phone_valid === "boolean" ? input.phone_valid : normalized.ok;
   const marketing_opt_out = Boolean(input.marketing_opt_out);
 
+  const metadata =
+    input.metadata && typeof input.metadata === "object"
+      ? /** @type {Record<string, unknown>} */ (input.metadata)
+      : {};
+  const avatar_url =
+    (typeof input.avatar_url === "string" &&
+    /^https?:\/\//i.test(input.avatar_url.trim())
+      ? input.avatar_url.trim()
+      : null) || avatarFromMetadata(metadata);
+
   return {
     id: String(input.id || newId()),
     workspace_id: String(input.workspace_id || WORKSPACE_ID),
@@ -89,13 +118,63 @@ export function shapeContact(input = {}) {
     lifecycle_status: String(input.lifecycle_status || "lead"),
     source: String(input.source || "manual"),
     marketing_opt_out,
-    metadata:
-      input.metadata && typeof input.metadata === "object"
-        ? /** @type {Record<string, unknown>} */ (input.metadata)
-        : {},
+    metadata: avatar_url
+      ? { ...metadata, avatar_url }
+      : metadata,
+    avatar_url,
     created_at: String(input.created_at || nowIso()),
     updated_at: String(input.updated_at || nowIso()),
   };
+}
+
+/**
+ * Find an existing contact by phone_normalized or email_normalized.
+ * @param {{ phone_normalized?: string | null, email_normalized?: string | null }} keys
+ * @returns {Promise<ContactRecord | null>}
+ */
+async function findContactByIdentity(keys) {
+  const phoneKey = String(keys.phone_normalized || "").trim();
+  const emailKey = String(keys.email_normalized || "").trim().toLowerCase();
+  if (!phoneKey && !emailKey) return null;
+
+  if (hasSupabaseAdminCredentials()) {
+    const supabase = createAdminSupabaseClient();
+    if (supabase) {
+      if (phoneKey) {
+        const { data, error } = await supabase
+          .from(TABLE)
+          .select("*")
+          .eq("workspace_id", WORKSPACE_ID)
+          .eq("phone_normalized", phoneKey)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!error && data) return shapeContact(data);
+      }
+      if (emailKey) {
+        const { data, error } = await supabase
+          .from(TABLE)
+          .select("*")
+          .eq("workspace_id", WORKSPACE_ID)
+          .eq("email_normalized", emailKey)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!error && data) return shapeContact(data);
+      }
+    }
+  }
+
+  const rows = await readLocal();
+  if (phoneKey) {
+    const hit = rows.find((c) => c.phone_normalized === phoneKey);
+    if (hit) return hit;
+  }
+  if (emailKey) {
+    const hit = rows.find((c) => c.email_normalized === emailKey);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /** @returns {Promise<ContactRecord[]>} */
@@ -203,14 +282,56 @@ export async function getContact(id) {
  * @returns {Promise<{ mode: string, upserted: ContactRecord[], created: number, updated: number }>}
  */
 export async function upsertContacts(inputs) {
-  const incoming = (inputs || []).map((row) =>
-    shapeContact({ ...row, updated_at: nowIso() }),
-  );
+  /** @type {ContactRecord[]} */
+  const resolved = [];
+  let created = 0;
+  let updated = 0;
+
+  for (const raw of inputs || []) {
+    const shaped = shapeContact({ ...raw, updated_at: nowIso() });
+    let existing = await findContactByIdentity({
+      phone_normalized: shaped.phone_normalized,
+      email_normalized: shaped.email_normalized,
+    });
+    // Explicit id (e.g. stable channel peer) wins when identity keys are empty.
+    if (!existing && raw && raw.id) {
+      existing = await getContact(String(raw.id));
+    }
+    if (existing) {
+      const mergedMeta = {
+        ...(existing.metadata || {}),
+        ...(shaped.metadata || {}),
+      };
+      resolved.push(
+        shapeContact({
+          ...existing,
+          ...shaped,
+          id: existing.id,
+          name: shaped.name || existing.name,
+          email: shaped.email || existing.email,
+          phone: shaped.phone || existing.phone,
+          phone_e164: shaped.phone_e164 || existing.phone_e164,
+          phone_normalized: shaped.phone_normalized || existing.phone_normalized,
+          phone_valid: shaped.phone_valid || existing.phone_valid,
+          preferred_language:
+            shaped.preferred_language || existing.preferred_language,
+          metadata: mergedMeta,
+          avatar_url: shaped.avatar_url || existing.avatar_url,
+          created_at: existing.created_at,
+          updated_at: nowIso(),
+        }),
+      );
+      updated += 1;
+    } else {
+      resolved.push(shapeContact({ ...shaped, id: shaped.id || newId() }));
+      created += 1;
+    }
+  }
 
   if (hasSupabaseAdminCredentials()) {
     const supabase = createAdminSupabaseClient();
     if (supabase) {
-      const payload = incoming.map((c) => ({
+      const payload = resolved.map((c) => ({
         id: c.id,
         workspace_id: c.workspace_id,
         name: c.name,
@@ -239,67 +360,26 @@ export async function upsertContacts(inputs) {
         return {
           mode: "supabase",
           upserted: data.map((row) => shapeContact(row)),
-          created: data.length,
-          updated: 0,
+          created,
+          updated,
         };
       }
       // Fall through to local if table missing / RLS
     }
   }
 
-  const existing = await readLocal();
-  let created = 0;
-  let updated = 0;
-  const byPhone = new Map(
-    existing
-      .filter((c) => c.phone_normalized)
-      .map((c) => [c.phone_normalized, c]),
-  );
-  const byEmail = new Map(
-    existing
-      .filter((c) => c.email_normalized)
-      .map((c) => [c.email_normalized, c]),
-  );
-  const byId = new Map(existing.map((c) => [c.id, c]));
-
-  for (const row of incoming) {
-    let match =
-      (row.phone_normalized && byPhone.get(row.phone_normalized)) ||
-      (row.email_normalized && byEmail.get(row.email_normalized)) ||
-      byId.get(row.id);
-
-    if (match) {
-      const merged = shapeContact({
-        ...match,
-        ...row,
-        id: match.id,
-        created_at: match.created_at,
-        updated_at: nowIso(),
-      });
-      byId.set(match.id, merged);
-      if (merged.phone_normalized) byPhone.set(merged.phone_normalized, merged);
-      if (merged.email_normalized) byEmail.set(merged.email_normalized, merged);
-      updated += 1;
-    } else {
-      const createdRow = shapeContact({ ...row, id: row.id || newId() });
-      byId.set(createdRow.id, createdRow);
-      if (createdRow.phone_normalized) byPhone.set(createdRow.phone_normalized, createdRow);
-      if (createdRow.email_normalized) byEmail.set(createdRow.email_normalized, createdRow);
-      created += 1;
-    }
+  const existingRows = await readLocal();
+  const byId = new Map(existingRows.map((c) => [c.id, c]));
+  for (const row of resolved) {
+    byId.set(row.id, row);
   }
-
   const next = Array.from(byId.values()).sort((a, b) =>
     String(b.updated_at).localeCompare(String(a.updated_at)),
   );
   await writeLocal(next);
   return {
     mode: "local_mock",
-    upserted: incoming.map((row) => {
-      const phoneHit = row.phone_normalized && byPhone.get(row.phone_normalized);
-      const emailHit = row.email_normalized && byEmail.get(row.email_normalized);
-      return phoneHit || emailHit || byId.get(row.id) || row;
-    }),
+    upserted: resolved,
     created,
     updated,
   };

@@ -15,6 +15,7 @@ import {
   findConversationByExternal,
   ingestInboundDm,
 } from "@/lib/crm/conversations-store";
+import { linkInboundContact } from "@/lib/crm/link-inbound-contact";
 import { sendSupportChannelText } from "@/lib/integrations/support-channel-send";
 import { deliverOutbound } from "@/lib/runtime/background-outbound";
 
@@ -282,6 +283,7 @@ export async function handleInboundSupportChannel(input) {
     body: input.body,
     subject,
     conversation_id: existing?.id || undefined,
+    contact_id: existing?.contact_id || undefined,
     external_user_id: externalUserId,
     external_conversation_id: externalConversationId,
     provider_message_id: input.provider_message_id,
@@ -295,11 +297,27 @@ export async function handleInboundSupportChannel(input) {
     },
   });
 
+  const scheduleContactLink = () => {
+    void linkInboundContact({
+      conversationId: conversation?.id,
+      channel,
+      body: input.body,
+      externalUserId,
+      contactName: input.contact_name || null,
+      metadata: {
+        ...(input.metadata || {}),
+        contact_name: input.contact_name || null,
+      },
+    }).catch(() => null);
+  };
+
   if (input.auto_reply === false) {
+    scheduleContactLink();
     return { ok: true, conversation, replied: false, queued: true };
   }
 
   if (conversation.automation_mode === "human") {
+    scheduleContactLink();
     return {
       ok: true,
       conversation,
@@ -314,6 +332,8 @@ export async function handleInboundSupportChannel(input) {
     dry_run: input.dry_run === true,
     background_send: input.background_send === true,
   });
+
+  scheduleContactLink();
 
   return {
     ok: Boolean(reply.ok),
