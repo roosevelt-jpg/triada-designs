@@ -13,6 +13,7 @@ import { DEFAULT_CURRENCY } from "@/lib/locale/preferred-currency";
  *   size: string | null,
  *   collection: string | null,
  *   compare_at_price: number | null,
+ *   inventory_quantity: number | null,
  *   photo_url: string | null,
  *   barcode: string | null,
  * }} ProductSpecs */
@@ -59,6 +60,7 @@ export function extractProductSpecs(product = {}) {
     size: pickString("size", "ring_size"),
     collection: pickString("collection"),
     compare_at_price: pickNumber("compare_at_price"),
+    inventory_quantity: pickNumber("inventory_quantity", "qty", "stock"),
     photo_url: pickString("photo_url", "image_url"),
     barcode: pickString("barcode", "gtin"),
   };
@@ -114,6 +116,7 @@ export function mergeSpecsIntoMetadata(metadata = {}, specsInput = {}) {
   assignString("size", specsInput.size);
   assignString("collection", specsInput.collection);
   assignNumber("compare_at_price", specsInput.compare_at_price);
+  assignNumber("inventory_quantity", specsInput.inventory_quantity);
   assignString("photo_url", specsInput.photo_url);
   assignString("barcode", specsInput.barcode);
 

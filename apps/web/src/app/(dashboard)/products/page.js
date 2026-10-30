@@ -30,6 +30,7 @@ const EMPTY_FORM = {
   stone: "",
   size: "",
   barcode: "",
+  inventory_quantity: "",
   availability_status: "in_stock_snapshot",
   approved_claims: "",
   publish: true,
@@ -122,6 +123,7 @@ export default function ProductsPage() {
       stone: metaString(item, "stone"),
       size: metaString(item, "size"),
       barcode: metaString(item, "barcode"),
+      inventory_quantity: metaNumber(item, "inventory_quantity"),
       availability_status: item.availability_status || "in_stock_snapshot",
       approved_claims: Array.isArray(item.approved_claims)
         ? item.approved_claims.join(", ")
@@ -160,6 +162,8 @@ export default function ProductsPage() {
       stone: form.stone.trim() || null,
       size: form.size.trim() || null,
       barcode: form.barcode.trim() || null,
+      inventory_quantity:
+        form.inventory_quantity === "" ? null : Number(form.inventory_quantity),
       compare_at_price:
         form.compare_at_price === "" ? null : Number(form.compare_at_price),
       photo_url: form.photo_url.trim() || null,
@@ -355,6 +359,16 @@ export default function ProductsPage() {
               value={form.collection}
               onChange={(e) => updateField("collection", e.target.value)}
               placeholder="Salt & Spirit"
+            />
+            <Input
+              label="Inventory qty"
+              name="inventory_quantity"
+              type="number"
+              step="1"
+              min="0"
+              value={form.inventory_quantity}
+              onChange={(e) => updateField("inventory_quantity", e.target.value)}
+              placeholder="On-hand units"
             />
             <Input
               label="Metal"

@@ -86,7 +86,6 @@ import {
 import {
   publishProductById,
   saveAndMaybePublishProduct,
-  syncShopifyCatalogInbound,
 } from "@/lib/commerce/product-channel-publish";
 import {
   deleteProduct,
@@ -105,6 +104,20 @@ import {
   getShopifyStatus,
   saveShopifyCredentials,
 } from "@/lib/integrations/shopify-credentials";
+import {
+  getShopifySyncCapabilities,
+  runShopifyAreaSync,
+  upsertShopifyCustomer,
+  upsertShopifyDiscount,
+  upsertShopifyDraftOrderFromInvoice,
+  upsertShopifyMarketingEvent,
+} from "@/lib/commerce/shopify-full-sync";
+import {
+  deleteDiscount,
+  getDiscount,
+  listDiscounts,
+  upsertDiscount,
+} from "@/lib/commerce/discounts-store";
 import {
   buildPromoComponentsForContact,
   draftWhatsAppCampaignWithBestsellers,
@@ -626,6 +639,83 @@ export async function dispatchV1(method, segments, request, body) {
         metrics,
       }),
     );
+  }
+
+  if (path === "discounts" && m === "GET") {
+    const listed = await listDiscounts();
+    const capabilities = await getShopifySyncCapabilities().catch(() => null);
+    return jsonOk({
+      data: listed.data,
+      mode: listed.mode,
+      shopify: capabilities?.areas?.discounts || null,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "discounts" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const saved = await upsertDiscount(input);
+    if (!saved.ok) return jsonErr(saved.error || "Invalid discount", saved.status || 422);
+    const shopify = await upsertShopifyDiscount(saved.discount);
+    const refreshed = (await getDiscount(saved.discount.id)) || saved.discount;
+    return jsonOk(
+      {
+        ...refreshed,
+        created: saved.created,
+        shopify_auto_synced: shopify.status === "synced",
+        shopify_discount: {
+          status: shopify.status,
+          external_id: shopify.external_id,
+          price_rule_id: shopify.price_rule_id || null,
+          message: shopify.message,
+          mode: shopify.mode,
+        },
+        mode: saved.mode,
+        source: "next_dual_run",
+      },
+      saved.created ? 201 : 200,
+    );
+  }
+
+  if (path.match(/^discounts\/[^/]+$/) && m === "GET") {
+    const discount = await getDiscount(segments[1]);
+    if (!discount) return jsonErr("Discount not found", 404);
+    return jsonOk({ ...discount, source: "next_dual_run" });
+  }
+
+  if (path.match(/^discounts\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
+    const existing = await getDiscount(segments[1]);
+    if (!existing) return jsonErr("Discount not found", 404);
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const saved = await upsertDiscount({ ...existing, ...input, id: existing.id });
+    if (!saved.ok) return jsonErr(saved.error || "Invalid discount", saved.status || 422);
+    const shopify = await upsertShopifyDiscount(saved.discount);
+    const refreshed = (await getDiscount(saved.discount.id)) || saved.discount;
+    return jsonOk({
+      ...refreshed,
+      created: false,
+      shopify_auto_synced: shopify.status === "synced",
+      shopify_discount: {
+        status: shopify.status,
+        external_id: shopify.external_id,
+        price_rule_id: shopify.price_rule_id || null,
+        message: shopify.message,
+        mode: shopify.mode,
+      },
+      mode: saved.mode,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path.match(/^discounts\/[^/]+$/) && m === "DELETE") {
+    await deleteDiscount(segments[1]);
+    return jsonOk({ ok: true, id: segments[1], source: "next_dual_run" });
   }
 
   if (path === "services" && m === "GET") {
@@ -2038,7 +2128,14 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "integrations/shopify/status" && m === "GET") {
-    return jsonOk(await getShopifyStatus());
+    const status = await getShopifyStatus();
+    const capabilities = await getShopifySyncCapabilities().catch(() => null);
+    return jsonOk({
+      ...status,
+      capabilities,
+      sync_areas: capabilities?.areas || null,
+      granted_scopes: capabilities?.scope_csv || status.scope || null,
+    });
   }
 
   if (path === "integrations/shopify" && m === "POST") {
@@ -2127,31 +2224,19 @@ export async function dispatchV1(method, segments, request, body) {
       body && typeof body === "object" && body.sync_type
         ? String(body.sync_type)
         : "products";
-    if (syncType === "orders") {
-      const status = await getShopifyStatus();
-      return jsonOk({
-        ok: true,
-        run: {
-          status: "completed",
-          mode: status.connected ? status.mode : "local_sim",
-          sync_type: "orders",
-          records_upserted: 0,
-          records_failed: 0,
-          summary: {
-            note: status.connected
-              ? "Orders sync reserved — use products sync for catalog publish."
-              : status.summary,
-          },
-        },
-        status,
-      });
-    }
-    const result = await syncShopifyCatalogInbound();
+    const result = await runShopifyAreaSync(syncType);
+    const status = await getShopifyStatus();
     return jsonOk({
-      ok: result.ok,
+      ok: result.ok !== false,
       run: result.run,
-      status: result.status_payload,
+      status: {
+        ...status,
+        ...(result.status_payload || {}),
+        capabilities: result.capabilities || result.status_payload,
+      },
       mode: result.mode,
+      capabilities: result.capabilities || null,
+      payouts: result.payouts || undefined,
       source: "next_dual_run",
     });
   }
@@ -2446,9 +2531,45 @@ export async function dispatchV1(method, segments, request, body) {
         source: input.source || "manual",
       },
     ]);
+    let contact = result.upserted[0] || null;
+    let shopifyCustomer = null;
+    if (contact) {
+      try {
+        shopifyCustomer = await upsertShopifyCustomer(contact);
+        if (shopifyCustomer?.external_id) {
+          const stamped = await upsertContacts([
+            {
+              ...contact,
+              metadata: {
+                ...contact.metadata,
+                shopify_customer_id: shopifyCustomer.external_id,
+                shopify_customer_sync: {
+                  status: shopifyCustomer.status,
+                  synced_at: shopifyCustomer.synced_at,
+                  message: shopifyCustomer.message,
+                  mode: shopifyCustomer.mode,
+                },
+              },
+            },
+          ]);
+          contact = stamped.upserted[0] || contact;
+        }
+      } catch {
+        shopifyCustomer = null;
+      }
+    }
     return jsonOk(
       {
-        ...(result.upserted[0] || {}),
+        ...(contact || {}),
+        shopify_auto_synced: shopifyCustomer?.status === "synced",
+        shopify_customer: shopifyCustomer
+          ? {
+              status: shopifyCustomer.status,
+              external_id: shopifyCustomer.external_id,
+              message: shopifyCustomer.message,
+              mode: shopifyCustomer.mode,
+            }
+          : null,
         mode: result.mode,
         source: "next_dual_run",
       },
@@ -2671,6 +2792,18 @@ export async function dispatchV1(method, segments, request, body) {
       { concurrency: 8 },
     );
 
+    let shopifyGrowth = null;
+    try {
+      shopifyGrowth = await upsertShopifyMarketingEvent({
+        title: templateName || "triada-whatsapp-campaign",
+        description: String(promo.body || "").slice(0, 240),
+        event_type: "ad",
+        started_at: new Date().toISOString(),
+      });
+    } catch {
+      shopifyGrowth = null;
+    }
+
     return jsonOk({
       ok: results.every((r) => r.ok),
       mode: listed.mode,
@@ -2693,6 +2826,14 @@ export async function dispatchV1(method, segments, request, body) {
       failed: results.filter((r) => !r.ok).length,
       parallel: true,
       results,
+      shopify_growth: shopifyGrowth
+        ? {
+            status: shopifyGrowth.status,
+            external_id: shopifyGrowth.external_id,
+            message: shopifyGrowth.message,
+            mode: shopifyGrowth.mode,
+          }
+        : null,
       source: "next_dual_run",
     });
   }
@@ -4341,13 +4482,40 @@ export async function dispatchV1(method, segments, request, body) {
       line_items: lineItems,
       number: input.number || input.invoice_number,
     });
-    const presented = presentInvoiceDoc(saved.doc);
+    let doc = saved.doc;
+    let shopifyFinance = null;
+    try {
+      shopifyFinance = await upsertShopifyDraftOrderFromInvoice(doc);
+      if (shopifyFinance?.external_id) {
+        const stamped = await upsertInvoiceDoc({
+          ...doc,
+          metadata: {
+            ...doc.metadata,
+            shopify_draft_order_id: shopifyFinance.external_id,
+            shopify_finance_sync: shopifyFinance,
+          },
+        });
+        doc = stamped.doc;
+      }
+    } catch {
+      shopifyFinance = null;
+    }
+    const presented = presentInvoiceDoc(doc);
     return jsonOk(
       {
         ok: true,
         invoice: presented,
         document: presented.document,
         branded: true,
+        shopify_auto_synced: shopifyFinance?.status === "synced",
+        shopify_finance: shopifyFinance
+          ? {
+              status: shopifyFinance.status,
+              external_id: shopifyFinance.external_id,
+              message: shopifyFinance.message,
+              mode: shopifyFinance.mode,
+            }
+          : null,
         storage: saved.storage,
       },
       201,
@@ -4400,12 +4568,39 @@ export async function dispatchV1(method, segments, request, body) {
       number: input.number || input.invoice_number || existing.doc.number,
       created_at: existing.doc.created_at,
     });
-    const presented = presentInvoiceDoc(saved.doc);
+    let doc = saved.doc;
+    let shopifyFinance = null;
+    try {
+      shopifyFinance = await upsertShopifyDraftOrderFromInvoice(doc);
+      if (shopifyFinance?.external_id) {
+        const stamped = await upsertInvoiceDoc({
+          ...doc,
+          metadata: {
+            ...doc.metadata,
+            shopify_draft_order_id: shopifyFinance.external_id,
+            shopify_finance_sync: shopifyFinance,
+          },
+        });
+        doc = stamped.doc;
+      }
+    } catch {
+      shopifyFinance = null;
+    }
+    const presented = presentInvoiceDoc(doc);
     return jsonOk({
       ok: true,
       invoice: presented,
       document: presented.document,
       branded: true,
+      shopify_auto_synced: shopifyFinance?.status === "synced",
+      shopify_finance: shopifyFinance
+        ? {
+            status: shopifyFinance.status,
+            external_id: shopifyFinance.external_id,
+            message: shopifyFinance.message,
+            mode: shopifyFinance.mode,
+          }
+        : null,
       storage: saved.storage,
     });
   }

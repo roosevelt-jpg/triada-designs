@@ -193,10 +193,39 @@ export async function pushManufacturerOrder(input) {
     },
   });
 
+  let shopifyTransfer = null;
+  try {
+    const { upsertShopifyInventoryTransfer } = await import(
+      "@/lib/commerce/shopify-full-sync"
+    );
+    shopifyTransfer = await upsertShopifyInventoryTransfer({
+      id: shaped.id,
+      title: `Manufacturer ${externalRef}`,
+      note: `Triada manufacturer job ${externalRef} · ${piece}`,
+      shopify_transfer_id: shaped.payload?.shopify_transfer_id || null,
+      line_items: [],
+    });
+    if (shopifyTransfer?.external_id) {
+      shaped.payload = {
+        ...shaped.payload,
+        shopify_transfer_id: shopifyTransfer.external_id,
+        shopify_transfer_sync: shopifyTransfer,
+      };
+    } else if (shopifyTransfer) {
+      shaped.payload = {
+        ...shaped.payload,
+        shopify_transfer_sync: shopifyTransfer,
+      };
+    }
+  } catch {
+    shopifyTransfer = null;
+  }
+
   const saved = await upsertManufacturerRow(TABLE, shaped);
   return {
     ok: true,
     manufacturer_order: presentManufacturerOrder(saved.row),
+    shopify_transfer: shopifyTransfer,
     cost,
     sell_price: sell,
     profit,

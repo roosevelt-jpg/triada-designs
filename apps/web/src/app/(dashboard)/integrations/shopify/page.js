@@ -11,8 +11,21 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { connectionLabel } from "@/lib/integrations/brand-labels";
 
+const SYNC_AREAS = [
+  { key: "products", label: "Products" },
+  { key: "collections", label: "Collections" },
+  { key: "inventory", label: "Inventory" },
+  { key: "transfers", label: "Transfers / POs" },
+  { key: "customers", label: "Customers" },
+  { key: "growth", label: "Growth" },
+  { key: "discounts", label: "Discounts" },
+  { key: "finance", label: "Finance" },
+];
+
 function tone(status) {
-  if (status === "healthy" || status === "connected") return "success";
+  if (status === "healthy" || status === "connected" || status === "synced") {
+    return "success";
+  }
   if (status === "error") return "danger";
   if (status === "awaiting_credentials") return "warning";
   return "neutral";
@@ -51,8 +64,11 @@ export default function ShopifyIntegrationsPage() {
         body: { sync_type: syncType },
       });
       setStatus(result.status);
+      const note = result.run?.summary?.note || result.run?.summary?.limitation;
       setNotice(
-        `Sync ${result.run?.status || "done"}: ${result.run?.records_upserted ?? 0} records.`,
+        `Sync ${result.run?.status || "done"}: ${result.run?.records_upserted ?? 0} records${
+          note ? ` · ${note}` : ""
+        }.`,
       );
     } catch (err) {
       setError(err.message);
@@ -62,11 +78,12 @@ export default function ShopifyIntegrationsPage() {
   }
 
   const connected = Boolean(
-    status?.connected || status?.status === "connected" || status?.has_access_token
+    status?.connected || status?.status === "connected" || status?.has_access_token,
   );
   const statusLabel =
     status?.status_label ||
     connectionLabel(status?.status, { hasCredentials: connected });
+  const areas = status?.sync_areas || status?.capabilities?.areas || {};
 
   return (
     <DashboardShell
@@ -99,9 +116,7 @@ export default function ShopifyIntegrationsPage() {
                   {status.shop_domain || status.store || "jwtjzw-nu.myshopify.com"}
                 </p>
               </div>
-              <Badge tone={tone(status.status)}>
-                {statusLabel}
-              </Badge>
+              <Badge tone={tone(status.status)}>{statusLabel}</Badge>
             </div>
             <div className="space-y-3 px-5 py-4">
               <p className="text-sm text-muted">
@@ -112,14 +127,52 @@ export default function ShopifyIntegrationsPage() {
               <p className="text-xs text-muted">
                 Products in workspace: {status.product_count ?? 0}
               </p>
-              <div className="pt-1 ops-actions">
-                <Button variant="secondary" disabled={!!busy} onClick={() => syncNow("products")}>
-                  {busy === "sync-products" ? "Syncing…" : "Sync products"}
-                </Button>
-                <Button variant="secondary" disabled={!!busy} onClick={() => syncNow("orders")}>
-                  {busy === "sync-orders" ? "Syncing…" : "Sync orders"}
-                </Button>
-              </div>
+            </div>
+          </section>
+
+          <section className="surface-card overflow-hidden">
+            <div className="border-b border-line px-5 py-4">
+              <h2 className="ops-section-title">Sync areas</h2>
+              <p className="mt-1 text-sm text-muted">
+                Auto-sync on dashboard create/edit when Connected. Areas without granted Admin
+                scopes stay Waiting credentials.
+              </p>
+            </div>
+            <div className="divide-y divide-line">
+              {SYNC_AREAS.map((area) => {
+                const row = areas[area.key] || {};
+                const areaStatus = row.status || (connected ? "awaiting_credentials" : "awaiting_credentials");
+                return (
+                  <div
+                    key={area.key}
+                    className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-ink">{area.label}</p>
+                      <p className="text-xs text-muted">
+                        {row.message ||
+                          (connected
+                            ? "Waiting credentials for this area."
+                            : "Waiting credentials.")}
+                      </p>
+                    </div>
+                    <div className="ops-actions">
+                      <Badge tone={tone(areaStatus)}>
+                        {row.label ||
+                          (areaStatus === "connected" ? "Connected" : "Waiting credentials")}
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={!!busy}
+                        onClick={() => syncNow(area.key)}
+                      >
+                        {busy === `sync-${area.key}` ? "Syncing…" : "Sync"}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
 
@@ -127,9 +180,7 @@ export default function ShopifyIntegrationsPage() {
             <h2 className="ops-section-title">Recent sync runs</h2>
             <div className="mt-3 divide-y divide-line">
               {(status.recent_sync_runs || []).length === 0 ? (
-                <p className="text-sm text-muted">
-                  No sync runs yet.
-                </p>
+                <p className="text-sm text-muted">No sync runs yet.</p>
               ) : (
                 status.recent_sync_runs.map((run) => (
                   <div

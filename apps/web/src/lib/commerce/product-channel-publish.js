@@ -60,8 +60,41 @@ export async function publishProductToChannels(product, opts = {}) {
     };
   }
 
-  const shopify = updated.product.channel_sync.shopify;
-  const wordpress = updated.product.channel_sync.wordpress;
+  let productOut = updated.product;
+  /** @type {{ collection?: import("./products-store.js").ChannelSyncState, inventory?: import("./products-store.js").ChannelSyncState } | null} */
+  let satellites = null;
+  if (wantShopify && syncPatch.shopify) {
+    try {
+      const { syncShopifyProductSatellites } = await import(
+        "./shopify-full-sync.js"
+      );
+      const withShopifyId = {
+        ...productOut,
+        channel_sync: {
+          ...productOut.channel_sync,
+          shopify: syncPatch.shopify,
+        },
+      };
+      satellites = await syncShopifyProductSatellites(withShopifyId);
+      if (satellites?.collection?.external_id) {
+        const stamped = await upsertProduct({
+          ...withShopifyId,
+          metadata: {
+            ...withShopifyId.metadata,
+            shopify_collection_id: satellites.collection.external_id,
+            shopify_collection_sync: satellites.collection,
+            shopify_inventory_sync: satellites.inventory,
+          },
+        });
+        productOut = stamped.product;
+      }
+    } catch {
+      satellites = null;
+    }
+  }
+
+  const shopify = productOut.channel_sync.shopify;
+  const wordpress = productOut.channel_sync.wordpress;
   const anyError =
     (wantShopify && shopify.status === "error") ||
     (wantWordpress && wordpress.status === "error");
@@ -72,10 +105,12 @@ export async function publishProductToChannels(product, opts = {}) {
   return {
     ok: !anyError,
     awaiting_credentials: anyAwaiting,
-    product: updated.product,
+    product: productOut,
     channels: {
       shopify: wantShopify ? shopify : undefined,
       wordpress: wantWordpress ? wordpress : undefined,
+      collection: satellites?.collection,
+      inventory: satellites?.inventory,
     },
     shopify_runtime: await getShopifyRuntime(),
     wordpress_runtime: wordpressRuntime(),
