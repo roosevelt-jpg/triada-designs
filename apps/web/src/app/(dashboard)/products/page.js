@@ -19,9 +19,17 @@ const EMPTY_FORM = {
   sku: "",
   description: "",
   price: "",
+  compare_at_price: "",
   currency: DEFAULT_CURRENCY,
   product_url: "https://triada-designs.com/",
   photo_url: "",
+  category: "Jewellery",
+  collection: "",
+  metal: "",
+  weight_grams: "",
+  stone: "",
+  size: "",
+  barcode: "",
   availability_status: "in_stock_snapshot",
   approved_claims: "",
   publish: true,
@@ -40,6 +48,18 @@ function channelLabel(status) {
   if (status === "pending_publish") return "Pending publish";
   if (status === "error") return "Error";
   return status || "—";
+}
+
+function metaString(item, key) {
+  const meta = item?.metadata && typeof item.metadata === "object" ? item.metadata : {};
+  const specs = meta.specs && typeof meta.specs === "object" ? meta.specs : {};
+  const raw = specs[key] ?? meta[key];
+  return raw != null && String(raw).trim() ? String(raw) : "";
+}
+
+function metaNumber(item, key) {
+  const s = metaString(item, key);
+  return s;
 }
 
 export default function ProductsPage() {
@@ -91,12 +111,17 @@ export default function ProductsPage() {
       sku: item.sku || "",
       description: item.description || "",
       price: item.price != null ? String(item.price) : "",
+      compare_at_price: metaNumber(item, "compare_at_price"),
       currency: item.currency || DEFAULT_CURRENCY,
       product_url: item.product_url || "https://triada-designs.com/",
-      photo_url:
-        (item.metadata && typeof item.metadata === "object" && item.metadata.photo_url
-          ? String(item.metadata.photo_url)
-          : "") || "",
+      photo_url: metaString(item, "photo_url"),
+      category: metaString(item, "category") || "Jewellery",
+      collection: metaString(item, "collection"),
+      metal: metaString(item, "metal"),
+      weight_grams: metaNumber(item, "weight_grams"),
+      stone: metaString(item, "stone"),
+      size: metaString(item, "size"),
+      barcode: metaString(item, "barcode"),
       availability_status: item.availability_status || "in_stock_snapshot",
       approved_claims: Array.isArray(item.approved_claims)
         ? item.approved_claims.join(", ")
@@ -116,6 +141,30 @@ export default function ProductsPage() {
     setBusy("save");
     setError("");
     setNotice("");
+
+    const priorMeta = editingId
+      ? items.find((row) => row.id === editingId)?.metadata || {}
+      : {};
+    const priorSpecs =
+      priorMeta.specs && typeof priorMeta.specs === "object"
+        ? { ...priorMeta.specs }
+        : {};
+
+    const specs = {
+      ...priorSpecs,
+      category: form.category.trim() || "Jewellery",
+      collection: form.collection.trim() || null,
+      metal: form.metal.trim() || null,
+      weight_grams:
+        form.weight_grams === "" ? null : Number(form.weight_grams),
+      stone: form.stone.trim() || null,
+      size: form.size.trim() || null,
+      barcode: form.barcode.trim() || null,
+      compare_at_price:
+        form.compare_at_price === "" ? null : Number(form.compare_at_price),
+      photo_url: form.photo_url.trim() || null,
+    };
+
     const payload = {
       title: form.title.trim(),
       sku: form.sku.trim() || null,
@@ -129,10 +178,10 @@ export default function ProductsPage() {
       publish: Boolean(form.publish),
       channels: ["all"],
       metadata: {
-        ...(editingId
-          ? items.find((row) => row.id === editingId)?.metadata || {}
-          : {}),
-        photo_url: form.photo_url.trim() || null,
+        ...priorMeta,
+        ...specs,
+        specs,
+        photo_url: specs.photo_url,
       },
     };
 
@@ -142,12 +191,19 @@ export default function ProductsPage() {
         method: editingId ? "PUT" : "POST",
         body: payload,
       });
+      const shopifyNote = result.shopify_auto_synced
+        ? "Shopify synced"
+        : result.channels?.shopify?.status === "awaiting_credentials"
+          ? "Shopify waiting credentials"
+          : null;
       setNotice(
-        result.summary
-          ? `${editingId ? "Updated" : "Created"} · ${result.summary}`
-          : editingId
-            ? "Product updated."
-            : "Product created.",
+        [
+          editingId ? "Updated" : "Created",
+          shopifyNote,
+          result.summary || null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
       );
       setShowForm(false);
       setEditingId(null);
@@ -194,9 +250,10 @@ export default function ProductsPage() {
     }
   }
 
+  const shopifyConnected = Boolean(channelStatus.shopify?.connected);
   const shopifyLabel =
     channelStatus.shopify?.status_label ||
-    (channelStatus.shopify?.connected ? "Connected" : "Waiting credentials");
+    (shopifyConnected ? "Connected" : "Waiting credentials");
   const wordpressLabel =
     channelStatus.wordpress?.status_label ||
     (channelStatus.wordpress?.connected ? "Connected" : "Waiting credentials");
@@ -204,7 +261,7 @@ export default function ProductsPage() {
   return (
     <DashboardShell
       title="Products"
-      description="Add, edit, and delete the Triada catalog. Nothing is hardcoded — publish to Shopify and WordPress when Connected."
+      description="Add and edit the Triada catalog. When Shopify is Connected, every save syncs price and specifications."
       actions={
         <Button size="sm" onClick={openCreate}>
           Add product
@@ -212,13 +269,20 @@ export default function ProductsPage() {
       }
     >
       <div className="mb-6 ops-actions">
-        <Badge tone={channelStatus.shopify?.connected ? "success" : "warning"}>
+        <Badge tone={shopifyConnected ? "success" : "warning"}>
           Shopify · {shopifyLabel}
         </Badge>
         <Badge tone={channelStatus.wordpress?.connected ? "success" : "warning"}>
           WordPress · {wordpressLabel}
         </Badge>
       </div>
+
+      {shopifyConnected ? (
+        <p className="mb-4 text-sm text-muted">
+          Shopify syncs on every create and edit — prices, currency, SKU, and
+          specs stay aligned with the store.
+        </p>
+      ) : null}
 
       {notice ? <p className="mb-4 text-sm text-brown-dark">{notice}</p> : null}
       {loading ? <Skeleton className="h-64" /> : null}
@@ -261,6 +325,66 @@ export default function ProductsPage() {
               name="currency"
               value={form.currency}
               onChange={(e) => updateField("currency", e.target.value)}
+            />
+            <Input
+              label="Compare-at price"
+              name="compare_at_price"
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.compare_at_price}
+              onChange={(e) => updateField("compare_at_price", e.target.value)}
+              hint="Optional strikethrough price on Shopify."
+            />
+            <Input
+              label="Barcode"
+              name="barcode"
+              value={form.barcode}
+              onChange={(e) => updateField("barcode", e.target.value)}
+            />
+            <Input
+              label="Category"
+              name="category"
+              value={form.category}
+              onChange={(e) => updateField("category", e.target.value)}
+              placeholder="Rings"
+            />
+            <Input
+              label="Collection"
+              name="collection"
+              value={form.collection}
+              onChange={(e) => updateField("collection", e.target.value)}
+              placeholder="Salt & Spirit"
+            />
+            <Input
+              label="Metal"
+              name="metal"
+              value={form.metal}
+              onChange={(e) => updateField("metal", e.target.value)}
+              placeholder="18K gold"
+            />
+            <Input
+              label="Weight (grams)"
+              name="weight_grams"
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.weight_grams}
+              onChange={(e) => updateField("weight_grams", e.target.value)}
+            />
+            <Input
+              label="Stone"
+              name="stone"
+              value={form.stone}
+              onChange={(e) => updateField("stone", e.target.value)}
+              placeholder="Diamond, emerald…"
+            />
+            <Input
+              label="Size"
+              name="size"
+              value={form.size}
+              onChange={(e) => updateField("size", e.target.value)}
+              placeholder="EU 54 / US 7"
             />
             <Input
               label="Product URL"
@@ -307,19 +431,27 @@ export default function ProductsPage() {
               onChange={(e) => updateField("publish", e.target.checked)}
               className="h-4 w-4 accent-black"
             />
-            Publish &amp; sync to Shopify + WordPress when credentials are present
+            Publish live (active on Shopify
+            {channelStatus.wordpress?.connected ? " + WordPress" : ""}
+            {shopifyConnected
+              ? "; drafts still sync to Shopify as draft)"
+              : ")"}
           </label>
           <div className="ops-actions">
             <Button type="submit" disabled={busy === "save"}>
               {busy === "save"
                 ? "Saving…"
                 : editingId
-                  ? form.publish
-                    ? "Save & publish"
-                    : "Save draft"
-                  : form.publish
-                    ? "Create & publish"
-                    : "Create draft"}
+                  ? shopifyConnected
+                    ? "Save & sync Shopify"
+                    : form.publish
+                      ? "Save & publish"
+                      : "Save draft"
+                  : shopifyConnected
+                    ? "Create & sync Shopify"
+                    : form.publish
+                      ? "Create & publish"
+                      : "Create draft"}
             </Button>
             <Button
               type="button"
@@ -338,7 +470,7 @@ export default function ProductsPage() {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No products yet"
-          description="Add a catalog piece, or sync from Shopify when Connected. The catalog starts empty."
+          description="Add a catalog piece. When Shopify is Connected, saves sync automatically."
         />
       ) : null}
 
@@ -347,6 +479,8 @@ export default function ProductsPage() {
           {items.map((item) => {
             const shopify = item.channel_sync?.shopify;
             const wordpress = item.channel_sync?.wordpress;
+            const metal = metaString(item, "metal");
+            const weight = metaString(item, "weight_grams");
             return (
               <article key={item.id} className="surface-card flex flex-col p-5">
                 <h3 className="font-display text-2xl text-ink">{item.title}</h3>
@@ -354,6 +488,13 @@ export default function ProductsPage() {
                   <p className="mt-1 text-xs uppercase tracking-wide text-muted">{item.sku}</p>
                 ) : null}
                 <p className="mt-2 flex-1 text-sm text-muted">{item.description}</p>
+                {(metal || weight) && (
+                  <p className="mt-2 text-xs text-muted">
+                    {[metal, weight ? `${weight} g` : null]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                )}
                 <div className="mt-4 ops-actions">
                   <Badge tone="brand">
                     {formatCurrency(item.price, item.currency || "USD")}
@@ -379,7 +520,8 @@ export default function ProductsPage() {
                 (shopify?.status === "awaiting_credentials" ||
                   wordpress?.status === "awaiting_credentials" ||
                   shopify?.status === "error" ||
-                  wordpress?.status === "error") ? (
+                  wordpress?.status === "error" ||
+                  shopify?.status === "synced") ? (
                   <p className="mt-2 text-xs text-muted">
                     {[shopify?.message, wordpress?.message]
                       .filter(Boolean)

@@ -9,6 +9,12 @@ import {
   hasWordpressEnv,
   integrationRuntimeMode,
 } from "@/lib/integrations/env-presence";
+import {
+  extractProductSpecs,
+  formatShopifyPrice,
+  productCurrency,
+  specsDisplayRows,
+} from "./product-specs.js";
 
 function wordpressBaseUrl() {
   const raw =
@@ -66,10 +72,22 @@ export function toWordpressPostPayload(product) {
     product.published_status === "published" || product.published_status === "active"
       ? "publish"
       : "draft";
+  const specs = extractProductSpecs(product);
+  const currency = productCurrency(product);
   const priceLine =
     product.price != null
-      ? `<p><strong>Price:</strong> ${escapeHtml(String(product.currency || "AED"))} ${escapeHtml(String(product.price))}</p>`
+      ? `<p><strong>Price:</strong> ${escapeHtml(currency)} ${escapeHtml(formatShopifyPrice(product.price))}</p>`
       : "";
+  const specRows = specsDisplayRows(specs, product)
+    .filter((row) => row.key !== "price" && row.key !== "sku")
+    .map(
+      (row) =>
+        `<tr><th>${escapeHtml(row.label)}</th><td>${escapeHtml(row.value)}</td></tr>`,
+    )
+    .join("");
+  const specsTable = specRows
+    ? `<h3>Specifications</h3><table>${specRows}</table>`
+    : "";
   const claims =
     Array.isArray(product.approved_claims) && product.approved_claims.length
       ? `<ul>${product.approved_claims.map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>`
@@ -81,6 +99,7 @@ export function toWordpressPostPayload(product) {
     product.description ? `<p>${escapeHtml(product.description)}</p>` : "",
     priceLine,
     sku,
+    specsTable,
     claims,
     product.product_url
       ? `<p><a href="${escapeAttr(product.product_url)}">View on Triada Designs</a></p>`
@@ -99,6 +118,11 @@ export function toWordpressPostPayload(product) {
     meta: {
       triada_product_id: product.id,
       triada_sku: product.sku || "",
+      triada_currency: currency,
+      triada_price: product.price != null ? formatShopifyPrice(product.price) : "",
+      triada_metal: specs.metal || "",
+      triada_weight_grams:
+        specs.weight_grams != null ? String(specs.weight_grams) : "",
     },
   };
 }
