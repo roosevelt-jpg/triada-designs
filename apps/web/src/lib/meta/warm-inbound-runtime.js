@@ -7,7 +7,11 @@
 
 import { getAnthropicStatus } from "@/lib/integrations/anthropic-credentials";
 import { resolveWhatsAppCloudCredentials } from "@/lib/integrations/meta-credentials";
-import { hasTelegramEnv } from "@/lib/integrations/env-presence";
+import {
+  hasLinkedInEnv,
+  hasTelegramEnv,
+  hasTikTokEnv,
+} from "@/lib/integrations/env-presence";
 import { listAgents } from "@/lib/agents/agent-store";
 import { isSimpleSupportGreeting } from "@/lib/agents/support-fast-path";
 import { normalizeMetaInboundMessages } from "@/lib/meta/normalize-inbound";
@@ -28,6 +32,8 @@ import {
  *   anthropic: string,
  *   whatsapp_send_ready: boolean,
  *   telegram_send_ready: boolean,
+ *   linkedin_send_ready: boolean,
+ *   tiktok_send_ready: boolean,
  *   agents: number,
  *   latency_ms: number,
  * }>}
@@ -44,7 +50,12 @@ export async function warmInboundRuntime() {
 
   normalizeTelegramInbound({});
   normalizeEmailInbound({ from: "warm@triada.local", body: "Hi" });
-  normalizeTikTokInbound({ text: "Hi", simulated: true });
+  normalizeTikTokInbound({
+    event: "im_receive_msg",
+    user_openid: "warm-tt",
+    content: JSON.stringify({ text: "Hi" }),
+    simulated: true,
+  });
   normalizeWebchatInbound({ body: "Hi", visitor_id: "warm" });
   normalizeLinkedInInbound({
     text: "Hi",
@@ -66,7 +77,9 @@ export async function warmInboundRuntime() {
   ]);
   warmed.push("anthropic-credentials", "whatsapp-credentials", "agents");
   const telegramReady = hasTelegramEnv();
-  warmed.push("telegram-credentials");
+  const linkedinReady = hasLinkedInEnv();
+  const tiktokReady = hasTikTokEnv();
+  warmed.push("telegram-credentials", "linkedin-credentials", "tiktok-credentials");
 
   return {
     ok: true,
@@ -76,6 +89,8 @@ export async function warmInboundRuntime() {
     anthropic: anthropic?.source || (anthropic?.has_credentials ? "keyed" : "missing"),
     whatsapp_send_ready: Boolean(wa?.sendReady),
     telegram_send_ready: telegramReady,
+    linkedin_send_ready: linkedinReady,
+    tiktok_send_ready: tiktokReady,
     agents: Array.isArray(agents?.data) ? agents.data.length : 0,
     latency_ms: Date.now() - started,
   };

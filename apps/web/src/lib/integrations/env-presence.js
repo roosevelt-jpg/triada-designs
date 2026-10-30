@@ -86,6 +86,16 @@ export function hasTelegramEnv() {
   return envPresent("TELEGRAM_BOT_TOKEN");
 }
 
+/** TikTok Business Messaging / Open API token presence. */
+export function hasTikTokEnv() {
+  return envPresentAny("TIKTOK_ACCESS_TOKEN", "TIKTOK_API_KEY");
+}
+
+/** LinkedIn Messaging / Marketing API token presence. */
+export function hasLinkedInEnv() {
+  return envPresentAny("LINKEDIN_ACCESS_TOKEN", "LINKEDIN_API_KEY");
+}
+
 export function hasShopifyEnv() {
   return envPresentAny("SHOPIFY_ACCESS_TOKEN", "SHOPIFY_ADMIN_ACCESS_TOKEN");
 }

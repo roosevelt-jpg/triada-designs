@@ -6,10 +6,12 @@
 
 import { connectionLabel } from "@/lib/integrations/brand-labels";
 import {
+  hasLinkedInEnv,
   hasMetaPageMessagingEnv,
   hasResendEnv,
   hasShopifyEnv,
   hasTelegramEnv,
+  hasTikTokEnv,
   hasWhatsAppMessagingEnv,
   integrationRuntimeMode,
 } from "@/lib/integrations/env-presence";
@@ -83,7 +85,14 @@ function capabilities(channel) {
     case "webchat":
       return ["messages.send", "messages.receive", "widget"];
     case "tiktok":
-      return ["posts.publish", "templates", "webhooks"];
+      return [
+        "posts.publish",
+        "templates",
+        "messaging",
+        "messages.send",
+        "messages.receive",
+        "webhooks",
+      ];
     case "linkedin":
       return [
         "posts.publish",
@@ -96,26 +105,6 @@ function capabilities(channel) {
     default:
       return ["messages.send", "messages.receive"];
   }
-}
-
-/**
- * TikTok / LinkedIn optional host env aliases (presence only).
- * @param {"tiktok"|"linkedin"} channel
- */
-function hasOptionalSocialEnv(channel) {
-  if (channel === "tiktok") {
-    return Boolean(
-      (process.env.TIKTOK_ACCESS_TOKEN || "").trim() ||
-        (process.env.TIKTOK_API_KEY || "").trim(),
-    );
-  }
-  if (channel === "linkedin") {
-    return Boolean(
-      (process.env.LINKEDIN_ACCESS_TOKEN || "").trim() ||
-        (process.env.LINKEDIN_API_KEY || "").trim(),
-    );
-  }
-  return false;
 }
 
 /**
@@ -154,8 +143,8 @@ export function buildSalesChannelsStatus(opts = {}) {
   const shopifyReady = hasShopifyEnv();
   const emailReady = hasResendEnv();
   const telegramReady = hasTelegramEnv();
-  const tiktokReady = hasOptionalSocialEnv("tiktok");
-  const linkedinReady = hasOptionalSocialEnv("linkedin");
+  const tiktokReady = hasTikTokEnv();
+  const linkedinReady = hasLinkedInEnv();
 
   /** @type {Record<string, boolean>} */
   const readyByKey = {

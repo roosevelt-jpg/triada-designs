@@ -123,7 +123,8 @@ export default function ConversationDetailPage() {
                     tone={
                       conversation.channel === "whatsapp"
                         ? "success"
-                        : conversation.channel === "instagram"
+                        : conversation.channel === "instagram" ||
+                            conversation.channel === "tiktok"
                           ? "brand"
                           : conversation.channel === "facebook" ||
                               conversation.channel === "telegram" ||

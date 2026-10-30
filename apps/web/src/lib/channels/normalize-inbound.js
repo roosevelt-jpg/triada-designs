@@ -129,37 +129,182 @@ export function normalizeEmailInbound(payload) {
 }
 
 /**
+ * Pull plain text from TikTok Business Messaging / Business API shapes.
+ * @param {unknown} message
+ * @returns {string}
+ */
+function tikTokMessageText(message) {
+  if (!message) return "";
+  if (typeof message === "string") {
+    const raw = message.trim();
+    if (!raw) return "";
+    if (raw.startsWith("{") || raw.startsWith("[")) {
+      try {
+        return tikTokMessageText(JSON.parse(raw));
+      } catch {
+        return raw;
+      }
+    }
+    return raw;
+  }
+  if (typeof message !== "object") return "";
+  const msg = /** @type {Record<string, unknown>} */ (message);
+  const nested =
+    (msg.text && typeof msg.text === "object"
+      ? /** @type {Record<string, unknown>} */ (msg.text)
+      : null) ||
+    (msg.content && typeof msg.content === "object"
+      ? /** @type {Record<string, unknown>} */ (msg.content)
+      : null);
+  const candidates = [
+    msg.text,
+    msg.body,
+    msg.content,
+    msg.message,
+    msg.caption,
+    nested?.body,
+    nested?.text,
+    nested?.content,
+    nested?.message,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      const parsed = tikTokMessageText(value);
+      if (parsed) return parsed;
+    }
+  }
+  return "";
+}
+
+/**
+ * TikTok open_id / user id from common webhook actor fields.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function tikTokUserId(value) {
+  if (value == null) return "";
+  if (typeof value === "object") {
+    const obj = /** @type {Record<string, unknown>} */ (value);
+    return String(obj.open_id || obj.openId || obj.user_id || obj.id || "").trim();
+  }
+  return String(value).trim();
+}
+
+/**
  * TikTok inbound → normalized messages.
+ * Accepts simulator flats, Business Messaging events, and `{ data|events|messages }` batches.
  * @param {Record<string, unknown>} payload
  * @returns {NormalizedChannelMessage[]}
  */
 export function normalizeTikTokInbound(payload) {
-  const text = String(
-    payload.text ||
-      /** @type {Record<string, unknown>} */ (payload.message || {})?.text ||
-      "",
-  ).trim();
-  const simulated = Boolean(payload.simulated);
-  if (!text && !simulated) return [];
+  if (!payload || typeof payload !== "object") return [];
 
-  const userId = String(
-    payload.from_user_id ||
-      /** @type {Record<string, unknown>} */ (payload.sender || {})?.id ||
-      "tiktok-user",
-  );
-  const eventId = String(payload.event_id || payload.id || `tt-${Date.now()}`);
+  /** @type {Array<Record<string, unknown>>} */
+  const events = [];
+  const batch =
+    payload.events ||
+    payload.messages ||
+    payload.entry ||
+    payload.notifications ||
+    (Array.isArray(payload.data) ? payload.data : null);
+  if (Array.isArray(batch) && batch.length) {
+    for (const item of batch) {
+      if (item && typeof item === "object") {
+        events.push(/** @type {Record<string, unknown>} */ (item));
+      }
+    }
+  } else if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) {
+    events.push(/** @type {Record<string, unknown>} */ (payload.data));
+  } else if (payload.event && typeof payload.event === "object") {
+    events.push(/** @type {Record<string, unknown>} */ (payload.event));
+  } else if (payload.message && typeof payload.message === "object") {
+    events.push(payload);
+  } else {
+    events.push(payload);
+  }
 
-  return [
-    {
+  /** @type {NormalizedChannelMessage[]} */
+  const out = [];
+  for (const event of events) {
+    const message =
+      event.message && typeof event.message === "object"
+        ? /** @type {Record<string, unknown>} */ (event.message)
+        : event.data && typeof event.data === "object" && !Array.isArray(event.data)
+          ? /** @type {Record<string, unknown>} */ (event.data)
+          : event;
+    const simulated = Boolean(event.simulated || payload.simulated);
+    const text =
+      tikTokMessageText(message) ||
+      tikTokMessageText(event.content) ||
+      String(event.text || event.body || payload.text || payload.body || "").trim();
+    if (!text && !simulated) continue;
+
+    const fromRaw =
+      event.from_user_id ||
+      event.user_openid ||
+      event.open_id ||
+      event.from ||
+      event.sender ||
+      event.sender_id ||
+      message.from_user_id ||
+      message.user_openid ||
+      message.open_id ||
+      message.from ||
+      message.sender ||
+      payload.from_user_id ||
+      payload.user_openid ||
+      payload.open_id ||
+      payload.from ||
+      "tiktok-user";
+    const userId = tikTokUserId(fromRaw) || "tiktok-user";
+
+    const eventId = String(
+      event.message_id ||
+        message.message_id ||
+        message.id ||
+        event.id ||
+        event.event_id ||
+        payload.message_id ||
+        payload.event_id ||
+        payload.id ||
+        `tt-${Date.now()}`,
+    );
+    const contactName =
+      String(
+        event.contact_name ||
+          payload.contact_name ||
+          (typeof fromRaw === "object" && fromRaw
+            ? /** @type {Record<string, unknown>} */ (fromRaw).display_name ||
+              /** @type {Record<string, unknown>} */ (fromRaw).nickname ||
+              /** @type {Record<string, unknown>} */ (fromRaw).name ||
+              ""
+            : "") ||
+          "",
+      ).trim() || null;
+
+    out.push({
       channel: "tiktok",
       body: text || "TikTok inbound event",
       external_user_id: userId,
       external_conversation_id: `tiktok:${userId}`,
-      provider_message_id: String(payload.message_id || eventId),
-      contact_name: null,
-      metadata: { raw_keys: Object.keys(payload || {}) },
-    },
-  ];
+      provider_message_id: eventId,
+      contact_name: contactName,
+      metadata: {
+        contact_name: contactName,
+        open_id: userId,
+        event_type: String(
+          event.event || event.event_type || event.type || payload.event || payload.type || "MESSAGE",
+        ),
+        conversation_id: String(
+          event.conversation_id || message.conversation_id || payload.conversation_id || "",
+        ).trim() || null,
+        simulated,
+        raw_keys: Object.keys(event || {}),
+      },
+    });
+  }
+
+  return out;
 }
 
 /**

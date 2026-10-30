@@ -9,8 +9,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * TikTok inbound webhook:
+ * TikTok Business Messaging inbound webhook:
  *   https://dashboard.triada-designs.com/api/webhooks/tiktok
+ *
+ * Early-200 + background Support auto-reply (same pattern as Telegram / LinkedIn).
  */
 
 /**
@@ -23,10 +25,26 @@ function secretOk(request) {
   if (!expected) return true;
   const provided = String(
     request.headers.get("x-tiktok-webhook-secret") ||
+      request.headers.get("x-tt-signature") ||
       request.headers.get("x-channel-webhook-secret") ||
       "",
   ).trim();
   return provided === expected;
+}
+
+/**
+ * TikTok / partner webhook challenge (echo challenge when present).
+ * @param {URL} url
+ */
+function challengeResponse(url) {
+  const challenge =
+    url.searchParams.get("challenge") ||
+    url.searchParams.get("challenge_code") ||
+    url.searchParams.get("challengeCode") ||
+    url.searchParams.get("hub.challenge") ||
+    "";
+  if (!challenge) return null;
+  return NextResponse.json({ challenge, challengeCode: challenge });
 }
 
 /**
@@ -70,6 +88,17 @@ async function processTikTokInbound(normalized) {
     replied: outcomes.filter((o) => o.replied).length,
     automations: outcomes.map((o) => o.automation),
   };
+}
+
+export async function GET(request) {
+  const url = new URL(request.url);
+  const challenge = challengeResponse(url);
+  if (challenge) return challenge;
+  return NextResponse.json({
+    ok: true,
+    channel: "tiktok",
+    webhook: "/api/webhooks/tiktok",
+  });
 }
 
 export async function POST(request) {

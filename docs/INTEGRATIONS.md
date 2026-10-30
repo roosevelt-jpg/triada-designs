@@ -130,12 +130,14 @@ Status stays **disconnected** / **awaiting_credentials** until live tokens. Neve
 | Channel | Webhook | Admin |
 |---|---|---|
 | Telegram | `POST /api/webhooks/telegram` | `/integrations/channels` |
-| TikTok | `POST /api/webhooks/tiktok` | `/integrations/channels` |
+| TikTok | `POST /api/webhooks/tiktok` (+ GET challenge echo) | `/integrations/channels` |
 | Email | `POST /api/webhooks/email` | `/integrations/channels` |
 | LinkedIn | `POST /api/webhooks/linkedin` (+ GET challenge echo) | `/integrations/channels` |
 | Webchat | Public `POST /api/v1/webchat/messages` + embed `/widget/chat.js` | token ensure on channels page |
 
 LinkedIn Messaging: early-200 accept → background AI Support auto-reply → Unified Inbox trails. Optional `LINKEDIN_WEBHOOK_SECRET` (headers `x-linkedin-webhook-secret` / `x-channel-webhook-secret`). Live outbound needs `LINKEDIN_ACCESS_TOKEN` (or `LINKEDIN_API_KEY`); otherwise `local_sim`.
+
+TikTok Messaging: early-200 accept → background AI Support auto-reply → Unified Inbox trails. Optional `TIKTOK_WEBHOOK_SECRET` (headers `x-tiktok-webhook-secret` / `x-tt-signature` / `x-channel-webhook-secret`). Live outbound needs `TIKTOK_ACCESS_TOKEN` (or `TIKTOK_API_KEY`); optional `TIKTOK_OPEN_ID` / `TIKTOK_BUSINESS_ID`; otherwise `local_sim`.
 
 Local inbound simulator: `POST /api/v1/integrations/channels/simulate-inbound`.
 

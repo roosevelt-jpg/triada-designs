@@ -154,6 +154,25 @@ console.log("ok LinkedIn background_send", {
   send_pending: li.reply?.send_pending,
 });
 
+const tt = await handleInboundSupportChannel({
+  channel: "tiktok",
+  body: "Hi",
+  external_user_id: "tt_bg_user",
+  external_conversation_id: `tiktok:bg:${stamp}`,
+  provider_message_id: `tt-bg-${stamp}`,
+  contact_name: "TT BG",
+  metadata: { open_id: "tt_bg_user" },
+  auto_reply: true,
+  background_send: true,
+});
+if (!tt.replied || !tt.reply?.send_pending) {
+  throw new Error(`TikTok background_send failed: ${JSON.stringify(tt)}`);
+}
+console.log("ok TikTok background_send", {
+  fast_path: tt.reply?.fast_path,
+  send_pending: tt.reply?.send_pending,
+});
+
 const wc = await handleInboundSupportChannel({
   channel: "webchat",
   body: "Hi",

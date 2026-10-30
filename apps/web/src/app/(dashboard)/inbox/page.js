@@ -18,6 +18,7 @@ const CHANNEL_FILTERS = [
   { value: "whatsapp", label: "WhatsApp" },
   { value: "telegram", label: "Telegram" },
   { value: "linkedin", label: "LinkedIn" },
+  { value: "tiktok", label: "TikTok" },
 ];
 
 function channelTone(channel) {
@@ -26,6 +27,7 @@ function channelTone(channel) {
   if (channel === "whatsapp") return "success";
   if (channel === "telegram") return "info";
   if (channel === "linkedin") return "info";
+  if (channel === "tiktok") return "brand";
   return "neutral";
 }
 
@@ -56,7 +58,7 @@ export default function InboxPage() {
   return (
     <DashboardShell
       title="Unified inbox"
-      description="Conversations across webchat, Meta, Telegram, and LinkedIn. Human takeover suppresses automatic replies."
+      description="Conversations across webchat, Meta, Telegram, LinkedIn, and TikTok. Human takeover suppresses automatic replies."
     >
       <div className="mb-4 ops-actions" role="toolbar" aria-label="Channel filters">
         {CHANNEL_FILTERS.map((filter) => (

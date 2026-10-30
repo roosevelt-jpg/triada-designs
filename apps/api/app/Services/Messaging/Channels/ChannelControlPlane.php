@@ -308,7 +308,7 @@ class ChannelControlPlane
     {
         return match ($channel) {
             'telegram' => ['messages.send', 'messages.receive', 'webhooks', 'templates'],
-            'tiktok' => ['posts.publish', 'templates', 'webhooks'],
+            'tiktok' => ['posts.publish', 'templates', 'messaging', 'messages.send', 'messages.receive', 'webhooks'],
             'linkedin' => ['posts.publish', 'templates', 'messaging', 'messages.send', 'messages.receive', 'webhooks'],
             'email' => ['messages.send', 'messages.receive', 'templates'],
             'webchat' => ['messages.send', 'messages.receive', 'widget'],

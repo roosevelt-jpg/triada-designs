@@ -4,8 +4,10 @@
  */
 
 import {
+  hasLinkedInEnv,
   hasResendEnv,
   hasTelegramEnv,
+  hasTikTokEnv,
   integrationRuntimeMode,
 } from "@/lib/integrations/env-presence";
 import { sendTelegramTextMessage } from "@/lib/integrations/telegram-bot-text";
@@ -23,20 +25,6 @@ function isLive(ready) {
   const forceLocal =
     (process.env.INTEGRATION_MODE || "").trim().toLowerCase() === "local";
   return !forceLocal && ready && integrationRuntimeMode(ready) === "live";
-}
-
-function hasLinkedInEnv() {
-  return Boolean(
-    (process.env.LINKEDIN_ACCESS_TOKEN || "").trim() ||
-      (process.env.LINKEDIN_API_KEY || "").trim(),
-  );
-}
-
-function hasTikTokEnv() {
-  return Boolean(
-    (process.env.TIKTOK_ACCESS_TOKEN || "").trim() ||
-      (process.env.TIKTOK_API_KEY || "").trim(),
-  );
 }
 
 /**
@@ -281,8 +269,8 @@ export async function sendTikTokTextMessage(input) {
   ).trim();
   const ready = hasTikTokEnv() && Boolean(token);
 
-  // TikTok Business Messaging is partner-gated; keep a durable local_sim path
-  // and a best-effort live POST when a token is present.
+  // Live when TIKTOK_ACCESS_TOKEN (or TIKTOK_API_KEY) is present — same gate as LinkedIn.
+  // Partner-gated Business Messaging may still reject at the API; do not fall back to local_sim.
   if (!isLive(ready)) {
     return {
       ok: true,
@@ -294,7 +282,12 @@ export async function sendTikTokTextMessage(input) {
     };
   }
 
-  const openId = String(process.env.TIKTOK_OPEN_ID || "").trim();
+  const openId = String(
+    process.env.TIKTOK_OPEN_ID ||
+      process.env.TIKTOK_BUSINESS_ID ||
+      process.env.TIKTOK_BUSINESS_ACCOUNT_ID ||
+      "",
+  ).trim();
   const response = await fetch(
     "https://business-api.tiktok.com/open_api/v1.3/business/message/send/",
     {
@@ -305,8 +298,9 @@ export async function sendTikTokTextMessage(input) {
         Accept: "application/json",
       },
       body: JSON.stringify({
-        business_id: openId || undefined,
+        ...(openId ? { business_id: openId } : {}),
         recipient_id: recipientId,
+        receiver_id: recipientId,
         message_type: "TEXT",
         text: { body: body.slice(0, 2000) },
       }),
@@ -409,8 +403,4 @@ export async function sendSupportChannelText(input) {
   }
 }
 
-export {
-  hasTelegramEnv,
-  hasLinkedInEnv,
-  hasTikTokEnv,
-};
+export { hasTelegramEnv, hasLinkedInEnv, hasTikTokEnv };

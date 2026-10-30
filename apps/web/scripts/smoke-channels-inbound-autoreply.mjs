@@ -50,13 +50,17 @@ if (emailNorm.length !== 1 || emailNorm[0].channel !== "email") {
 console.log("ok email normalize", emailNorm[0].external_user_id);
 
 const ttNorm = normalizeTikTokInbound({
+  event: "im_receive_msg",
   event_id: `tt-smoke-${Date.now()}`,
-  from_user_id: "tt_user_1",
-  text: "Hi",
+  user_openid: "tt_user_1",
+  content: JSON.stringify({ text: "Hi" }),
   simulated: true,
 });
 if (ttNorm.length !== 1 || ttNorm[0].channel !== "tiktok") {
   throw new Error(`tiktok normalize failed: ${JSON.stringify(ttNorm)}`);
+}
+if (ttNorm[0].external_user_id !== "tt_user_1" || ttNorm[0].body !== "Hi") {
+  throw new Error(`tiktok normalize fields: ${JSON.stringify(ttNorm[0])}`);
 }
 console.log("ok tiktok normalize", ttNorm[0].external_user_id);
 
