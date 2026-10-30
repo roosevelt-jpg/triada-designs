@@ -265,7 +265,7 @@ export default function ProductsPage() {
   return (
     <DashboardShell
       title="Products"
-      description="Add and edit the Triada catalog. When Shopify is Connected, every save syncs price and specifications."
+      description="Curate the Triada jewellery catalog. Connected Shopify stores receive price and specification updates on every save."
       actions={
         <Button size="sm" onClick={openCreate}>
           Add product

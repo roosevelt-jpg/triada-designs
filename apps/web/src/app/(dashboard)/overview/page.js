@@ -48,7 +48,11 @@ export default function OverviewPage() {
   return (
     <DashboardShell
       title="Overview"
-      description={today ? `Workspace pulse · ${today}` : "Workspace pulse"}
+      description={
+        today
+          ? `Atelier workspace · ${today}`
+          : "Atelier workspace — conversations, leads, and content that need you"
+      }
       actions={
         <>
           <Link href="/inbox">
@@ -56,7 +60,7 @@ export default function OverviewPage() {
           </Link>
           <Link href="/analytics">
             <Button size="sm" variant="secondary">
-              Full analytics
+              Analytics
             </Button>
           </Link>
         </>
@@ -77,31 +81,27 @@ export default function OverviewPage() {
       {error ? <ErrorState message={error} onRetry={load} /> : null}
 
       {!loading && !error && data ? (
-        <div className="space-y-8">
+        <div className="space-y-9">
           <section aria-labelledby="overview-primary-metrics">
-            <div className="mb-3 flex items-baseline justify-between gap-3">
+            <div className="mb-3">
               <h2 id="overview-primary-metrics" className="ops-section-kicker">
-                Attention
+                Needs attention
               </h2>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <StatCard
-                className="fade-rise"
                 label="Open conversations"
                 value={Number(data.metrics?.open_conversations) || 0}
               />
               <StatCard
-                className="fade-rise"
                 label="Unanswered"
                 value={Number(data.metrics?.unanswered_conversations) || 0}
               />
               <StatCard
-                className="fade-rise"
                 label="Qualified leads"
                 value={Number(data.metrics?.qualified_leads) || 0}
               />
               <StatCard
-                className="fade-rise"
                 label="Awaiting approval"
                 value={Number(data.metrics?.content_awaiting_approval) || 0}
               />
@@ -114,9 +114,9 @@ export default function OverviewPage() {
                 Workspace
               </h2>
             </div>
-            <div className="ops-metric-strip fade-rise-delay">
+            <div className="ops-metric-strip">
               <MetricCell
-                label="AI-mode"
+                label="Handled by AI"
                 value={Number(data.metrics?.ai_handled_conversations) || 0}
               />
               <MetricCell
@@ -134,7 +134,9 @@ export default function OverviewPage() {
             </div>
           </section>
 
-          <AiInsightsPanel insights={insights} />
+          <div className="ops-reveal-late">
+            <AiInsightsPanel insights={insights} />
+          </div>
         </div>
       ) : null}
     </DashboardShell>

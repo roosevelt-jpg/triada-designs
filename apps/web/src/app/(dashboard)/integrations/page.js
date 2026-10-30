@@ -121,11 +121,11 @@ export default function IntegrationsPage() {
   return (
     <DashboardShell
       title="Integrations"
-      description="Channel and provider status. Connected or Waiting credentials."
+      description="Connection status for messaging, commerce, and AI providers — Connected or Waiting credentials."
       actions={
         <div className="ops-actions">
           <Link href="/integrations/meta">
-            <Button size="sm">Meta hub</Button>
+            <Button size="sm">Meta</Button>
           </Link>
           <Link href="/integrations/shopify">
             <Button size="sm" variant="secondary">
@@ -134,12 +134,7 @@ export default function IntegrationsPage() {
           </Link>
           <Link href="/integrations/channels">
             <Button size="sm" variant="secondary">
-              Sales channels
-            </Button>
-          </Link>
-          <Link href="/templates">
-            <Button size="sm" variant="secondary">
-              Templates
+              Channels
             </Button>
           </Link>
         </div>

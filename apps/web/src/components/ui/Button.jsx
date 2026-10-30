@@ -17,7 +17,7 @@ export function Button({
 }) {
   const variants = {
     primary:
-      "bg-black text-gold hover:bg-ink disabled:bg-stone disabled:text-muted",
+      "bg-black text-gold hover:bg-ink active:bg-black disabled:bg-stone disabled:text-muted",
     secondary:
       "bg-white text-ink border border-line-strong hover:bg-stone disabled:opacity-60",
     ghost: "bg-transparent text-ink hover:bg-sand/60 disabled:opacity-60",
@@ -33,7 +33,7 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-sm font-medium transition-colors duration-150",
+        "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-sm font-medium tracking-[0.01em] transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.98]",
         variants[variant],
         sizes[size],
         className

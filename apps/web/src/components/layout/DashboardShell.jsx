@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Menu, Search, LogOut, X } from "lucide-react";
+import { Menu, LogOut, X } from "lucide-react";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { apiFetch, getStoredToken, setStoredToken } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
@@ -78,11 +78,11 @@ export function DashboardShell({ children, title, description, actions }) {
       <div className="relative mx-auto flex min-h-screen max-w-[1680px]">
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-line bg-white transition-transform duration-200 lg:static lg:translate-x-0",
+            "fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col border-r border-line bg-[var(--surface-sidebar)] transition-transform duration-200 lg:static lg:translate-x-0",
             open ? "translate-x-0" : "-translate-x-full"
           )}
         >
-          <div className="flex h-16 items-center justify-between gap-2 border-b border-line px-4">
+          <div className="flex h-[60px] items-center justify-between gap-2 border-b border-line px-4">
             <Link
               href="/overview"
               className="inline-flex min-w-0 items-center gap-2"
@@ -100,7 +100,7 @@ export function DashboardShell({ children, title, description, actions }) {
             </button>
           </div>
 
-          <nav className="flex-1 space-y-5 overflow-y-auto px-2.5 py-5" aria-label="Dashboard">
+          <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-4" aria-label="Dashboard">
             {navSections.map((section) => (
               <div key={section.label}>
                 <p className="nav-category-band">{section.label}</p>
@@ -114,10 +114,10 @@ export function DashboardShell({ children, title, description, actions }) {
                           href={item.href}
                           onClick={() => setOpen(false)}
                           className={cn(
-                            "block rounded-sm border-l-2 px-2.5 py-1.5 text-[13px] transition-colors duration-150",
+                            "block rounded-sm border-l-2 px-2.5 py-[7px] text-[13px] leading-snug transition-[background-color,color,border-color] duration-150",
                             active
-                              ? "border-brown bg-sand/70 font-medium text-ink"
-                              : "border-transparent font-normal text-ink/75 hover:bg-stone/60 hover:text-ink"
+                              ? "border-brown bg-sand/80 font-medium text-ink"
+                              : "border-transparent font-normal text-ink/70 hover:bg-stone/70 hover:text-ink"
                           )}
                         >
                           {item.label}
@@ -148,7 +148,7 @@ export function DashboardShell({ children, title, description, actions }) {
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-line bg-[var(--surface-header)] px-4 md:px-7">
+          <header className="sticky top-0 z-20 flex h-[60px] items-center justify-between gap-3 border-b border-line bg-[var(--surface-header)] px-4 md:px-7">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
@@ -158,9 +158,11 @@ export function DashboardShell({ children, title, description, actions }) {
               >
                 <Menu size={18} />
               </button>
-              <div className="hidden min-w-[240px] max-w-md flex-1 items-center gap-2 rounded-sm border border-line bg-white px-3 py-2 text-sm text-muted md:flex">
-                <Search size={14} className="shrink-0 text-brown" aria-hidden />
-                <span className="truncate">Search contacts, conversations, content</span>
+              <div className="hidden min-w-0 md:block">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-brown-dark">
+                  Triada Designs
+                </p>
+                <p className="truncate text-sm text-muted">Operations</p>
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
@@ -180,10 +182,10 @@ export function DashboardShell({ children, title, description, actions }) {
           </header>
 
           <main className="flex-1 px-4 py-6 md:px-7 md:py-8">
-            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0 fade-rise">
                 <span className="ops-rule-accent mb-3" aria-hidden />
-                <h1 className="font-display text-[2rem] leading-[1.15] tracking-[-0.025em] text-ink md:text-[2.35rem]">
+                <h1 className="font-display text-[2rem] leading-[1.12] tracking-[-0.028em] text-ink md:text-[2.4rem]">
                   {title}
                 </h1>
                 {description ? (
@@ -197,7 +199,7 @@ export function DashboardShell({ children, title, description, actions }) {
               ) : null}
             </div>
             <div className="ops-divider mb-6" role="presentation" />
-            {children}
+            <div className="ops-reveal">{children}</div>
           </main>
         </div>
       </div>

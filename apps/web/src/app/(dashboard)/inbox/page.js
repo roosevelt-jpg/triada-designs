@@ -60,7 +60,7 @@ export default function InboxPage() {
   return (
     <DashboardShell
       title="Unified inbox"
-      description="Conversations across webchat, Meta, Telegram, LinkedIn, and TikTok. Human takeover suppresses automatic replies."
+      description="Every customer thread in one place — webchat, Meta, Telegram, LinkedIn, and TikTok. Take over any conversation to pause automatic replies."
     >
       <div className="mb-4 ops-actions" role="toolbar" aria-label="Channel filters">
         {CHANNEL_FILTERS.map((filter) => (
@@ -87,7 +87,7 @@ export default function InboxPage() {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No conversations yet"
-          description="Simulate an inbound from Integrations, or wait for a connected channel message."
+          description="Inbound messages from connected channels appear here as soon as customers write in."
         />
       ) : null}
       {!loading && !error && items.length > 0 ? (

@@ -74,10 +74,12 @@
 
   .ops-rule-accent {
     display: block;
-    width: 2.5rem;
-    height: 1px;
+    width: 2.75rem;
+    height: 1.5px;
     border: 0;
     background: var(--color-brand-champagne);
+    transform-origin: left center;
+    animation: rule-draw 420ms ease both;
   }
 
   .ops-field {
@@ -103,7 +105,7 @@
     outline: none;
     border-color: var(--color-brand-brown);
     background: var(--color-field-focus);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-brand-champagne) 32%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-brand-champagne) 28%, transparent);
   }
 
   .ops-field:disabled {
@@ -140,18 +142,25 @@
     padding-inline: clamp(1rem, 3vw, 2rem);
   }
 
-  /* Quiet page field — no radial glow layers */
+  /*
+   * Atmosphere: mineral parchment wash + fine linen crosshatch.
+   * Intentionally not radial glow / glass / purple wash.
+   */
   .ops-atmosphere {
-    background: var(--surface-page);
+    background-color: var(--surface-page);
+    background-image: var(--atmosphere-linen), var(--atmosphere-wash);
+    background-size: 72px 72px, auto;
+    background-repeat: repeat, no-repeat;
+    background-attachment: fixed, scroll;
   }
 
   /* Section labels: typography only, no gold wash bands */
   .nav-category-band {
     margin: 0;
-    padding: 0.15rem 0.65rem 0.35rem;
+    padding: 0.2rem 0.7rem 0.4rem;
     font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--color-brand-brown-dark);
     border: 0;
@@ -161,7 +170,7 @@
 
   .nav-category-band + ul {
     border-top: 1px solid var(--border-default);
-    padding-top: 0.35rem;
+    padding-top: 0.4rem;
   }
 
   .ops-section-title {
@@ -176,7 +185,7 @@
   .ops-section-kicker {
     font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--color-brand-brown-dark);
   }
@@ -223,22 +232,65 @@
     background: var(--surface-card);
   }
 
+  /* Attention KPI — left metal rule, not floating SaaS tile */
+  .ops-stat {
+    position: relative;
+    padding-left: 1.15rem;
+  }
+
+  .ops-stat::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.35rem;
+    bottom: 0.35rem;
+    width: 1.5px;
+    background: var(--color-brand-champagne);
+  }
+
   .workflow-canvas {
     background: var(--color-stone);
   }
 
   .fade-rise {
-    animation: fade-rise 260ms ease both;
+    animation: fade-rise 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .fade-rise-delay {
-    animation: fade-rise 300ms ease 40ms both;
+    animation: fade-rise 340ms cubic-bezier(0.22, 1, 0.36, 1) 60ms both;
+  }
+
+  /* Section content reveal — second intentional motion */
+  .ops-reveal {
+    animation: fade-rise 380ms cubic-bezier(0.22, 1, 0.36, 1) 90ms both;
+  }
+
+  .ops-reveal-late {
+    animation: fade-rise 420ms cubic-bezier(0.22, 1, 0.36, 1) 140ms both;
+  }
+
+  /* Auth stage — solid panels, no glass */
+  .auth-stage {
+    background-color: var(--surface-page);
+    background-image: var(--atmosphere-linen), var(--atmosphere-wash);
+    background-size: 72px 72px, auto;
+    background-repeat: repeat, no-repeat;
+  }
+
+  .auth-panel {
+    background: var(--surface-card);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .fade-rise,
-  .fade-rise-delay {
+  .fade-rise-delay,
+  .ops-reveal,
+  .ops-reveal-late,
+  .ops-rule-accent {
     animation: none !important;
   }
 }
@@ -246,11 +298,23 @@
 @keyframes fade-rise {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Third intentional motion: champagne rule draws in under titles */
+@keyframes rule-draw {
+  from {
+    transform: scaleX(0);
+    opacity: 0.4;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
   }
 }
 

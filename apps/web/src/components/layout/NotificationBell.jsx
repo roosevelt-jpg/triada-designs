@@ -108,7 +108,7 @@ export function NotificationBell() {
     <div className="relative" ref={rootRef}>
       <button
         type="button"
-        className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-line bg-white transition-colors duration-150 hover:bg-stone"
+        className="relative inline-flex h-10 w-10 items-center justify-center rounded-sm border border-line bg-white transition-colors duration-150 hover:bg-stone"
         aria-label={
           unread > 0 ? `Notifications, ${unread} unread` : "Notifications"
         }

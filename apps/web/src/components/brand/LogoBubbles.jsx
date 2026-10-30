@@ -7,15 +7,13 @@ import { useEffect, useRef } from "react";
  * JS-driven drift only — decorative, pointer-events none, reduced-motion safe.
  */
 
+/* Quieter watermarks — fewer, softer, less glass-sphere theatre */
 const BUBBLES = [
-  { src: "/brand/triada-symbol.svg", x: 7, y: 14, size: 140, opacity: 0.28, speed: 22, ampX: 18, ampY: 14, phase: 0.2 },
-  { src: "/brand/triada-logo-primary.svg", x: 82, y: 9, size: 190, opacity: 0.22, speed: 28, ampX: 14, ampY: 20, phase: 1.1 },
-  { src: "/brand/triada-symbol.svg", x: 93, y: 64, size: 110, opacity: 0.26, speed: 18, ampX: 22, ampY: 12, phase: 2.4 },
-  { src: "/brand/triada-logo-primary.svg", x: 12, y: 82, size: 168, opacity: 0.2, speed: 32, ampX: 12, ampY: 16, phase: 0.7 },
-  { src: "/brand/triada-symbol.svg", x: 54, y: 94, size: 92, opacity: 0.24, speed: 20, ampX: 16, ampY: 10, phase: 1.8 },
-  { src: "/brand/triada-symbol.svg", x: 70, y: 34, size: 74, opacity: 0.3, speed: 14, ampX: 10, ampY: 18, phase: 3.2 },
-  { src: "/brand/triada-logo-primary.svg", x: 2, y: 48, size: 132, opacity: 0.18, speed: 26, ampX: 8, ampY: 22, phase: 2.0 },
-  { src: "/brand/triada-symbol.svg", x: 96, y: 24, size: 78, opacity: 0.26, speed: 16, ampX: 14, ampY: 8, phase: 0.4 },
+  { src: "/brand/triada-symbol.svg", x: 8, y: 16, size: 120, opacity: 0.16, speed: 26, ampX: 12, ampY: 10, phase: 0.2 },
+  { src: "/brand/triada-logo-primary.svg", x: 86, y: 12, size: 160, opacity: 0.12, speed: 32, ampX: 10, ampY: 14, phase: 1.1 },
+  { src: "/brand/triada-symbol.svg", x: 92, y: 68, size: 96, opacity: 0.14, speed: 22, ampX: 14, ampY: 8, phase: 2.4 },
+  { src: "/brand/triada-logo-primary.svg", x: 14, y: 84, size: 140, opacity: 0.11, speed: 36, ampX: 8, ampY: 12, phase: 0.7 },
+  { src: "/brand/triada-symbol.svg", x: 52, y: 92, size: 80, opacity: 0.13, speed: 24, ampX: 10, ampY: 8, phase: 1.8 },
 ];
 
 export function LogoBubbles({ className = "" }) {
@@ -89,37 +87,13 @@ export function LogoBubbles({ className = "" }) {
             opacity: b.opacity,
           }}
         >
-          {/* Soft 3D glass bubble shell — ivory / sand / champagne / brown */}
+          {/* Soft watermark disc — restrained, not glass-sphere */}
           <div
             className="absolute inset-0 rounded-full"
             style={{
               background:
-                "radial-gradient(circle at 30% 26%, rgba(255,252,247,0.95) 0%, rgba(250,248,244,0.62) 26%, rgba(232,222,208,0.5) 52%, rgba(199,174,138,0.38) 76%, rgba(154,121,88,0.22) 100%)",
-              boxShadow:
-                "inset 0 2px 4px rgba(255,255,255,0.8), inset 0 -12px 26px rgba(112,86,63,0.14), 0 14px 36px rgba(41,38,34,0.09)",
-              border: "1px solid rgba(154,121,88,0.22)",
-            }}
-          />
-          <div
-            className="absolute rounded-full"
-            style={{
-              inset: "9%",
-              background:
-                "radial-gradient(circle at 70% 74%, rgba(154,121,88,0.18), transparent 56%)",
-            }}
-          />
-          {/* Specular highlight for depth */}
-          <div
-            className="absolute rounded-full"
-            style={{
-              left: "15%",
-              top: "11%",
-              width: "44%",
-              height: "26%",
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0))",
-              filter: "blur(1.5px)",
-              opacity: 0.9,
+                "radial-gradient(circle at 35% 30%, rgba(255,252,247,0.55) 0%, rgba(232,222,208,0.28) 48%, rgba(199,174,138,0.16) 100%)",
+              border: "1px solid rgba(143,115,84,0.14)",
             }}
           />
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -127,11 +101,11 @@ export function LogoBubbles({ className = "" }) {
             src={b.src}
             alt=""
             draggable={false}
-            className="absolute left-1/2 top-1/2 max-h-[50%] max-w-[50%] -translate-x-1/2 -translate-y-1/2 object-contain"
+            className="absolute left-1/2 top-1/2 max-h-[48%] max-w-[48%] -translate-x-1/2 -translate-y-1/2 object-contain"
             style={{
               filter:
-                "sepia(0.4) saturate(0.55) brightness(0.9) contrast(0.9)",
-              opacity: 0.7,
+                "sepia(0.35) saturate(0.5) brightness(0.92) contrast(0.92)",
+              opacity: 0.55,
             }}
             decoding="async"
           />

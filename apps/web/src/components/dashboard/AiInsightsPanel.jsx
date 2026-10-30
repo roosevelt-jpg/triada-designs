@@ -19,12 +19,12 @@ import {
 } from "recharts";
 import { cn } from "@/lib/cn";
 
-const CHART_INK = "#292622";
-const CHART_MUTED = "#6f6a63";
-const CHART_GRID = "#E2DBD1";
-const CHART_BROWN = "#9a7958";
-const CHART_BROWN_DARK = "#70563f";
-const CHART_GOLD = "#c7ae8a";
+const CHART_INK = "#1c1916";
+const CHART_MUTED = "#6a655e";
+const CHART_GRID = "#ddd5c9";
+const CHART_BROWN = "#8f7354";
+const CHART_BROWN_DARK = "#5e4a35";
+const CHART_GOLD = "#d4b896";
 
 const tooltipStyle = {
   background: "#FFFFFF",
@@ -81,16 +81,16 @@ export function AiInsightsPanel({ insights, className }) {
   return (
     <section className={cn("space-y-5", className)} aria-labelledby="ai-insights-heading">
       <div className="max-w-2xl">
-        <p className="ops-section-kicker">AI Insights</p>
+        <p className="ops-section-kicker">Insights</p>
         <h2
           id="ai-insights-heading"
           className="mt-1.5 font-display text-[1.65rem] leading-tight tracking-[-0.02em] text-ink md:text-[1.85rem]"
         >
-          Analytics
+          Performance
         </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-muted">
           {insights.summary ||
-            `Channel mix, volume, response time, and automation mode over the last ${days} days.`}
+            `Channel mix, volume, response time, and automation over the last ${days} days.`}
         </p>
       </div>
 

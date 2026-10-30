@@ -1,26 +1,29 @@
 :root {
   color-scheme: light;
 
-  --color-brand-ink: #292622;
-  --color-brand-brown: #9a7958;
-  --color-brand-brown-dark: #70563f;
+  /* Espresso ink — deeper than warm-gray SaaS defaults */
+  --color-brand-ink: #1c1916;
+  --color-brand-brown: #8f7354;
+  --color-brand-brown-dark: #5e4a35;
+  /* Champagne metal for rules / accents */
   --color-brand-champagne: #c7ae8a;
-  /* Brand gold for primary control labels on black surfaces */
-  --color-brand-gold: #c7ae8a;
-  --color-brand-sand: #e8ded0;
-  --color-brand-ivory: #f7f4ef;
+  /* Brighter gold for labels on black primary controls */
+  --color-brand-gold: #d4b896;
+  --color-brand-sand: #e5d9c8;
+  /* Mineral parchment — not flat cream landing-page ivory */
+  --color-brand-ivory: #f3efe8;
   --color-white: #ffffff;
-  --color-stone: #efebe4;
-  --color-muted: #6f6a63;
-  --color-border: #e2dbd1;
-  --color-border-strong: #cfc5b8;
-  --color-black: #0c0b0a;
-  /* Distinct fill so form fields read clearly against white panels */
-  --color-field: #f3eee6;
-  --color-field-focus: #fffcf7;
+  --color-stone: #ebe6df;
+  --color-muted: #6a655e;
+  --color-border: #ddd5c9;
+  --color-border-strong: #c8bdae;
+  --color-black: #0a0908;
+  /* Field fill reads clearly against white panels */
+  --color-field: #f0ebe3;
+  --color-field-focus: #fffcf8;
 
   --color-success: #237a57;
-  --color-warning: #946200;
+  --color-warning: #8f5e00;
   --color-danger: #b42318;
   --color-info: #245ea8;
   --color-neutral: #68645e;
@@ -28,15 +31,15 @@
   --surface-page: var(--color-brand-ivory);
   --surface-card: var(--color-white);
   --surface-field: var(--color-field);
-  --surface-sidebar: var(--color-white);
-  --surface-header: color-mix(in srgb, var(--color-brand-ivory) 88%, white);
+  --surface-sidebar: #fbfaf7;
+  --surface-header: color-mix(in srgb, var(--color-brand-ivory) 72%, white);
   --text-primary: var(--color-brand-ink);
   --text-secondary: var(--color-muted);
   --border-default: var(--color-border);
   --border-strong: var(--color-border-strong);
 
-  --font-display: "Cormorant Garamond", Georgia, serif;
-  --font-sans: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --font-sans: "DM Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -58,12 +61,21 @@
   --radius-xl: 18px;
   --radius-pill: 999px;
 
-  --shadow-card: 0 1px 0 rgb(41 38 34 / 4%);
-  --shadow-popover: 0 8px 28px rgb(41 38 34 / 10%);
+  --shadow-card: 0 1px 0 rgb(28 25 22 / 4%);
+  --shadow-popover: 0 10px 32px rgb(28 25 22 / 12%);
 
   --content-max-width: 1280px;
-  --sidebar-width: 248px;
-  --topbar-height: 64px;
+  --sidebar-width: 240px;
+  --topbar-height: 60px;
+
+  /* Atmosphere — soft wash + linen, never glow blobs */
+  --atmosphere-wash: linear-gradient(
+    168deg,
+    #f7f4ef 0%,
+    var(--color-brand-ivory) 42%,
+    #ebe4d8 100%
+  );
+  --atmosphere-linen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72' viewBox='0 0 72 72'%3E%3Cg fill='none' stroke='%231c1916' stroke-opacity='0.045' stroke-width='0.6'%3E%3Cpath d='M0 36h72M36 0v72'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 @media (prefers-reduced-motion: reduce) {

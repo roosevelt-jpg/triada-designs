@@ -42,8 +42,10 @@ export default function RootLayout({ children }) {
       <body
         className={`${display.variable} ${sans.variable} antialiased`}
         style={{
-          ["--font-display"]: "var(--font-display-loaded), Georgia, serif",
-          ["--font-sans"]: "var(--font-sans-loaded), Inter, Arial, sans-serif",
+          ["--font-display"]:
+            "var(--font-display-loaded), Georgia, 'Times New Roman', serif",
+          ["--font-sans"]:
+            "var(--font-sans-loaded), 'Helvetica Neue', Helvetica, Arial, sans-serif",
         }}
       >
         {children}

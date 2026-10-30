@@ -30,12 +30,17 @@ export default {
       },
       keyframes: {
         "fade-rise": {
-          from: { opacity: "0", transform: "translateY(6px)" },
+          from: { opacity: "0", transform: "translateY(8px)" },
           to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "rule-draw": {
+          from: { transform: "scaleX(0)", opacity: "0.4" },
+          to: { transform: "scaleX(1)", opacity: "1" },
         },
       },
       animation: {
-        "fade-rise": "fade-rise 260ms ease both",
+        "fade-rise": "fade-rise 280ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        "rule-draw": "rule-draw 420ms ease both",
       },
       fontFamily: {
         display: ["var(--font-display)"],

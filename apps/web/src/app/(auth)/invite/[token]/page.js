@@ -96,19 +96,21 @@ export default function AcceptInvitePage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-ivory">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_20%,rgba(199,174,138,0.28),transparent_50%),radial-gradient(ellipse_at_10%_80%,rgba(154,121,88,0.12),transparent_45%),linear-gradient(165deg,#faf8f4_0%,#efe6d8_55%,#e8ded0_100%)]" />
-      <LogoBubbles className="z-[1]" />
+    <div className="auth-stage relative min-h-screen overflow-hidden">
+      <LogoBubbles className="z-[1] opacity-70" />
 
       <div className="relative z-[2] mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center px-4 py-10">
-        <div className="rounded-xl border border-line bg-white/90 p-6 shadow-popover backdrop-blur-sm sm:p-8">
+        <div className="auth-panel p-6 sm:p-8">
           <BrandLogo variant="primary" className="mb-5 h-9 w-auto" />
-          <h1 className="font-display text-2xl tracking-[-0.02em] text-ink">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brown-dark">
+            Triada Designs · Invite
+          </p>
+          <h1 className="mt-2 font-display text-2xl tracking-[-0.02em] text-ink">
             Complete your profile
           </h1>
-          <p className="mt-2 text-sm text-muted">
-            Warm greetings from Triada Designs — set your password and join the ops
-            workspace.
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Warm greetings from Triada Designs — set your password and join the
+            atelier workspace.
           </p>
 
           {loading ? (
