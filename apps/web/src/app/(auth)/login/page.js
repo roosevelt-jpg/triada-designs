@@ -84,10 +84,7 @@ export default function LoginPage() {
           </aside>
 
           <div className="flex flex-col justify-center bg-white p-7 sm:p-9 md:p-10">
-            <div className="md:hidden">
-              <BrandLogo variant="primary" className="h-9 w-auto max-w-[200px]" />
-            </div>
-            <p className="mt-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-brown-dark md:mt-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brown-dark">
               Admin · Operations
             </p>
             <h1 className="mt-2 font-display text-3xl font-medium tracking-[-0.025em] text-ink sm:text-[2.35rem]">
