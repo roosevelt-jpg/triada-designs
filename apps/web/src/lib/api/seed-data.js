@@ -229,6 +229,7 @@ export const PRODUCTS = [
  *   metaInstagramReady?: boolean,
  *   metaMessengerReady?: boolean,
  *   metaWhatsAppReady?: boolean,
+ *   shopifyHasCredentials?: boolean,
  * }} [opts]
  */
 export function buildIntegrationsList(opts = {}) {
@@ -255,7 +256,10 @@ export function buildIntegrationsList(opts = {}) {
   const googlePlaces = hasGooglePlacesEnv();
   const anthropicReady =
     Boolean(opts.anthropicHasCredentials) || envPresent("ANTHROPIC_API_KEY");
-  const shopifyReady = hasShopifyEnv();
+  const shopifyReady =
+    opts.shopifyHasCredentials !== undefined
+      ? Boolean(opts.shopifyHasCredentials)
+      : hasShopifyEnv();
   const wordpressReady = hasWordpressEnv();
   const telegramReady = hasTelegramEnv();
   const zohoReady = hasZohoEnv();
@@ -480,12 +484,27 @@ export function buildIntegrationsList(opts = {}) {
  *     has_wa_access_token?: boolean,
  *     has_wa_phone_number_id?: boolean,
  *   },
+ *   shopify?: {
+ *     connected?: boolean,
+ *     status?: string,
+ *     status_label?: string,
+ *     summary?: string,
+ *     source?: string,
+ *     has_access_token?: boolean,
+ *     shop_domain?: string,
+ *   },
  * }} [opts]
  */
 export function buildIntegrationsHealth(opts = {}) {
   const envPageReady = hasMetaPageMessagingEnv();
   const envWaReady = hasWhatsAppMessagingEnv();
   const metaFromStore = opts.meta && typeof opts.meta === "object" ? opts.meta : null;
+  const shopifyFromStore =
+    opts.shopify && typeof opts.shopify === "object" ? opts.shopify : null;
+  const shopifyConnected =
+    shopifyFromStore?.connected !== undefined
+      ? Boolean(shopifyFromStore.connected)
+      : hasShopifyEnv();
   const metaReady =
     metaFromStore?.facebook_ready !== undefined
       ? Boolean(metaFromStore.facebook_ready)
@@ -592,6 +611,24 @@ export function buildIntegrationsHealth(opts = {}) {
       message: hasWordpressEnv()
         ? "WordPress is Connected."
         : "Waiting credentials.",
+    },
+    shopify: {
+      connected: shopifyConnected,
+      status: shopifyConnected ? "connected" : "awaiting_credentials",
+      status_label:
+        shopifyFromStore?.status_label ||
+        connectionLabel(shopifyConnected ? "connected" : "awaiting_credentials"),
+      summary:
+        shopifyFromStore?.summary ||
+        (shopifyConnected ? "Shopify is Connected." : "Waiting credentials."),
+      source: shopifyFromStore?.source || (shopifyConnected ? "env" : "none"),
+      has_access_token: Boolean(
+        shopifyFromStore?.has_access_token ?? shopifyConnected,
+      ),
+      shop_domain:
+        shopifyFromStore?.shop_domain ||
+        (process.env.SHOPIFY_SHOP_DOMAIN || "").trim() ||
+        "jwtjzw-nu.myshopify.com",
     },
     zoho: {
       status: zohoReady ? "connected" : "awaiting_credentials",
@@ -898,6 +935,7 @@ export function buildAiInsights(metrics = {}) {
  *   metaInstagramReady?: boolean,
  *   metaMessengerReady?: boolean,
  *   metaWhatsAppReady?: boolean,
+ *   shopifyHasCredentials?: boolean,
  *   metrics?: Record<string, number>,
  * }} [opts]
  */

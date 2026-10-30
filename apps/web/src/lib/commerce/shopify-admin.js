@@ -1,7 +1,7 @@
 /**
  * Shopify Admin REST helpers for product create/update (Next dual-run).
- * Live only when SHOPIFY_* credentials are present; otherwise local_sim.
- * Never logs or returns secret values.
+ * Live when SHOPIFY_* env or Integrations store credentials are present;
+ * otherwise local_sim. Never logs or returns secret values.
  */
 
 import {
@@ -9,6 +9,11 @@ import {
   hasShopifyEnv,
   integrationRuntimeMode,
 } from "@/lib/integrations/env-presence";
+import {
+  getShopifyStatus,
+  normalizeShopifyShopDomain,
+  resolveShopifyAccessToken,
+} from "@/lib/integrations/shopify-credentials";
 import {
   extractProductSpecs,
   formatShopifyPrice,
@@ -21,20 +26,10 @@ const DEFAULT_API_VERSION = "2025-01";
 const META_NAMESPACE = "triada";
 
 export function shopifyShopDomain() {
-  const raw =
+  return normalizeShopifyShopDomain(
     (process.env.SHOPIFY_SHOP_DOMAIN || "").trim() ||
-    (process.env.SHOPIFY_STORE_DOMAIN || "").trim() ||
-    DEFAULT_SHOP;
-  return raw
-    .replace(/^https?:\/\//i, "")
-    .replace(/\/$/, "")
-    .toLowerCase();
-}
-
-function shopifyAccessToken() {
-  return (
-    (process.env.SHOPIFY_ACCESS_TOKEN || "").trim() ||
-    (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim()
+      (process.env.SHOPIFY_STORE_DOMAIN || "").trim() ||
+      DEFAULT_SHOP,
   );
 }
 
@@ -42,11 +37,12 @@ function shopifyApiVersion() {
   return (process.env.SHOPIFY_API_VERSION || "").trim() || DEFAULT_API_VERSION;
 }
 
-/** True when Admin API token is present (domain defaults to Triada store). */
+/** Env-only readiness (sync). Prefer getShopifyRuntime() for live paths. */
 export function shopifyCredentialsReady() {
   return hasShopifyEnv();
 }
 
+/** Sync env-only runtime — used by seed builders. Prefer getShopifyRuntime(). */
 export function shopifyRuntime() {
   const ready = shopifyCredentialsReady();
   const mode = integrationRuntimeMode(ready);
@@ -62,9 +58,36 @@ export function shopifyRuntime() {
   return {
     ready: true,
     mode,
-    status: mode === "live" ? "connected" : "connected",
+    status: "connected",
     shop_domain: shopifyShopDomain(),
     message: "Shopify is Connected.",
+  };
+}
+
+/**
+ * Async runtime: env + Integrations store (+ client_credentials refresh).
+ * @returns {Promise<ReturnType<typeof shopifyRuntime> & { source?: string }>}
+ */
+export async function getShopifyRuntime() {
+  const resolved = await resolveShopifyAccessToken();
+  if (!resolved.ready) {
+    return {
+      ready: false,
+      mode: "local",
+      status: "awaiting_credentials",
+      shop_domain: resolved.shopDomain || shopifyShopDomain(),
+      message: "Waiting credentials.",
+      source: "none",
+    };
+  }
+  const mode = integrationRuntimeMode(true);
+  return {
+    ready: true,
+    mode,
+    status: "connected",
+    shop_domain: resolved.shopDomain || shopifyShopDomain(),
+    message: "Shopify is Connected.",
+    source: resolved.tokenSource,
   };
 }
 
@@ -74,8 +97,17 @@ export function shopifyRuntime() {
  * @param {Record<string, unknown> | null} [body]
  */
 async function adminRequest(method, path, body = null) {
-  const shop = shopifyShopDomain();
-  const token = shopifyAccessToken();
+  const resolved = await resolveShopifyAccessToken();
+  const shop = resolved.shopDomain || shopifyShopDomain();
+  const token = resolved.accessToken;
+  if (!token) {
+    return {
+      ok: false,
+      status: 401,
+      json: { errors: "Missing Shopify access token" },
+      text: "",
+    };
+  }
   const version = shopifyApiVersion();
   const url = `https://${shop}/admin/api/${version}/${path.replace(/^\//, "")}`;
 
@@ -342,7 +374,7 @@ async function syncProductMetafields(productId, desired) {
  * @returns {Promise<import("./products-store.js").ChannelSyncState>}
  */
 export async function upsertShopifyProduct(product) {
-  const runtime = shopifyRuntime();
+  const runtime = await getShopifyRuntime();
   if (!runtime.ready) {
     return {
       status: "awaiting_credentials",
@@ -454,7 +486,7 @@ export async function upsertShopifyProduct(product) {
  * @param {number} [limit]
  */
 export async function listShopifyRemoteProducts(limit = 50) {
-  const runtime = shopifyRuntime();
+  const runtime = await getShopifyRuntime();
   if (!runtime.ready) {
     return {
       mode: "local_sim",
@@ -515,7 +547,7 @@ function localSimProducts() {
   ];
 }
 
-/** Presence-only shopify status for Integrations (no secrets). */
+/** Sync env-only status (seed builders). Prefer getShopifyStatusPayload(). */
 export function shopifyStatusPayload() {
   const runtime = shopifyRuntime();
   return {
@@ -533,4 +565,9 @@ export function shopifyStatusPayload() {
     summary: runtime.message,
     honesty: runtime.message,
   };
+}
+
+/** Presence-only shopify status for Integrations (env + store, no secrets). */
+export async function getShopifyStatusPayload() {
+  return getShopifyStatus();
 }

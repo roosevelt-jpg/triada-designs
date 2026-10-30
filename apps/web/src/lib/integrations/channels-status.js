@@ -123,6 +123,11 @@ function capabilities(channel) {
  *     connected?: boolean,
  *     source?: string,
  *   },
+ *   shopify?: {
+ *     connected?: boolean,
+ *     has_access_token?: boolean,
+ *     source?: string,
+ *   },
  *   webchat_widget?: {
  *     id?: string,
  *     name?: string,
@@ -134,6 +139,8 @@ function capabilities(channel) {
  */
 export function buildSalesChannelsStatus(opts = {}) {
   const meta = opts.meta && typeof opts.meta === "object" ? opts.meta : {};
+  const shopifyFromStore =
+    opts.shopify && typeof opts.shopify === "object" ? opts.shopify : null;
   const facebookReady =
     meta.facebook_ready !== undefined
       ? Boolean(meta.facebook_ready)
@@ -146,7 +153,10 @@ export function buildSalesChannelsStatus(opts = {}) {
     meta.whatsapp_ready !== undefined
       ? Boolean(meta.whatsapp_ready)
       : hasWhatsAppMessagingEnv();
-  const shopifyReady = hasShopifyEnv();
+  const shopifyReady =
+    shopifyFromStore?.connected !== undefined
+      ? Boolean(shopifyFromStore.connected)
+      : hasShopifyEnv();
   const emailReady = hasResendEnv();
   const telegramReady = hasTelegramEnv();
   const tiktokReady = hasTikTokEnv();

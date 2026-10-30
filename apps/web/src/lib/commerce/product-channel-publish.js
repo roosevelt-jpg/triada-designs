@@ -12,8 +12,8 @@ import {
 } from "./products-store.js";
 import { mergeSpecsIntoMetadata } from "./product-specs.js";
 import {
+  getShopifyRuntime,
   listShopifyRemoteProducts,
-  shopifyRuntime,
   upsertShopifyProduct,
 } from "./shopify-admin.js";
 import {
@@ -77,7 +77,7 @@ export async function publishProductToChannels(product, opts = {}) {
       shopify: wantShopify ? shopify : undefined,
       wordpress: wantWordpress ? wordpress : undefined,
     },
-    shopify_runtime: shopifyRuntime(),
+    shopify_runtime: await getShopifyRuntime(),
     wordpress_runtime: wordpressRuntime(),
     summary: buildSummary({
       shopify: wantShopify ? shopify : null,
@@ -105,7 +105,8 @@ export async function saveAndMaybePublishProduct(input, opts = {}) {
     String(input.publish || "").toLowerCase() === "true" ||
     String(input.published_status || "").toLowerCase() === "published";
 
-  const shopifyReady = shopifyRuntime().ready;
+  const shopifyRuntimeLive = await getShopifyRuntime();
+  const shopifyReady = shopifyRuntimeLive.ready;
   const wpReady = wordpressRuntime().ready;
 
   /** @type {Array<'shopify'|'wordpress'>} */
@@ -138,7 +139,7 @@ export async function saveAndMaybePublishProduct(input, opts = {}) {
             external_id: null,
             link: null,
             synced_at: null,
-            mode: shopifyReady ? shopifyRuntime().mode : "local",
+            mode: shopifyReady ? shopifyRuntimeLive.mode : "local",
             message: shopifyReady
               ? "Saved. Publish to push to Shopify."
               : "Waiting credentials.",
@@ -206,7 +207,7 @@ export async function publishProductById(id, opts = {}) {
  */
 export async function syncShopifyCatalogInbound() {
   const remote = await listShopifyRemoteProducts(50);
-  const runtime = shopifyRuntime();
+  const runtime = await getShopifyRuntime();
 
   if (remote.status === "awaiting_credentials") {
     return {

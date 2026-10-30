@@ -99,7 +99,12 @@ import {
   listServices,
   upsertService,
 } from "@/lib/commerce/services-store";
-import { shopifyStatusPayload } from "@/lib/commerce/shopify-admin";
+import { getShopifyStatusPayload } from "@/lib/commerce/shopify-admin";
+import {
+  clearShopifyCredentials,
+  getShopifyStatus,
+  saveShopifyCredentials,
+} from "@/lib/integrations/shopify-credentials";
 import {
   buildPromoComponentsForContact,
   draftWhatsAppCampaignWithBestsellers,
@@ -600,9 +605,10 @@ export async function dispatchV1(method, segments, request, body) {
     // Same Meta store overlay as integrations/list — otherwise overview
     // falsely shows FB/IG/WA as awaiting when credentials live in app_metadata.
     // KPI metrics come from live stores / entity APIs (zeros when empty).
-    const [anthropic, meta] = await Promise.all([
+    const [anthropic, meta, shopify] = await Promise.all([
       getAnthropicStatus(),
       getMetaStatus(),
+      getShopifyStatus(),
     ]);
     const integrationOpts = {
       anthropicHasCredentials: anthropic.has_credentials,
@@ -611,6 +617,7 @@ export async function dispatchV1(method, segments, request, body) {
       metaMessengerReady: meta.messenger_ready,
       metaInstagramReady: meta.instagram_ready,
       metaWhatsAppReady: meta.whatsapp_ready,
+      shopifyHasCredentials: shopify.connected,
     };
     const metrics = await collectLiveDashboardMetrics(integrationOpts);
     return jsonOk(
@@ -695,7 +702,7 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk({
       ...paginate(listed.data),
       mode: listed.mode,
-      shopify: shopifyStatusPayload(),
+      shopify: await getShopifyStatusPayload(),
       wordpress: wordpressStatusPayload(),
       source: "next_dual_run",
     });
@@ -1389,7 +1396,11 @@ export async function dispatchV1(method, segments, request, body) {
 
   // ---- integrations ----
   if (path === "integrations" && m === "GET") {
-    const [anthropic, meta] = await Promise.all([getAnthropicStatus(), getMetaStatus()]);
+    const [anthropic, meta, shopify] = await Promise.all([
+      getAnthropicStatus(),
+      getMetaStatus(),
+      getShopifyStatus(),
+    ]);
     return jsonOk({
       data: buildIntegrationsList({
         anthropicHasCredentials: anthropic.has_credentials,
@@ -1398,13 +1409,18 @@ export async function dispatchV1(method, segments, request, body) {
         metaMessengerReady: meta.messenger_ready,
         metaInstagramReady: meta.instagram_ready,
         metaWhatsAppReady: meta.whatsapp_ready,
+        shopifyHasCredentials: shopify.connected,
       }),
     });
   }
 
   if (path === "integrations/health" && m === "GET") {
-    const [anthropic, meta] = await Promise.all([getAnthropicStatus(), getMetaStatus()]);
-    return jsonOk(buildIntegrationsHealth({ anthropic, meta }));
+    const [anthropic, meta, shopify] = await Promise.all([
+      getAnthropicStatus(),
+      getMetaStatus(),
+      getShopifyStatus(),
+    ]);
+    return jsonOk(buildIntegrationsHealth({ anthropic, meta, shopify }));
   }
 
   if (path === "integrations/wordpress/status" && m === "GET") {
@@ -2022,11 +2038,67 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "integrations/shopify/status" && m === "GET") {
-    return jsonOk(shopifyStatusPayload());
+    return jsonOk(await getShopifyStatus());
+  }
+
+  if (path === "integrations/shopify" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, string>} */ (body)
+        : {};
+    const result = await saveShopifyCredentials(input);
+    if (!result.ok) {
+      return jsonErr(result.message, result.status || 422);
+    }
+    return jsonOk({
+      ok: true,
+      shopify: result.shopify,
+      status: result.shopify,
+      storage: result.storage,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "integrations/shopify/clear" && m === "POST") {
+    const result = await clearShopifyCredentials();
+    return jsonOk({
+      ok: true,
+      shopify: result.shopify,
+      status: result.shopify,
+      storage: result.storage,
+      source: "next_dual_run",
+    });
   }
 
   if (path === "integrations/shopify/connect" && m === "POST") {
-    const status = shopifyStatusPayload();
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, string>} */ (body)
+        : {};
+    const hasCredFields = Boolean(
+      input.access_token ||
+        input.admin_access_token ||
+        input.client_id ||
+        input.client_secret ||
+        input.api_key ||
+        input.api_secret ||
+        input.shop_domain,
+    );
+    if (hasCredFields) {
+      const result = await saveShopifyCredentials(input);
+      if (!result.ok) {
+        return jsonErr(result.message, result.status || 422);
+      }
+      return jsonOk({
+        ok: true,
+        mode: "next_dual_run",
+        message: "Shopify credentials saved. Store marked Connected.",
+        status: result.shopify,
+        shopify: result.shopify,
+        storage: result.storage,
+      });
+    }
+    const status = await getShopifyStatus();
     return jsonOk({
       ok: true,
       mode: "next_dual_run",
@@ -2038,11 +2110,15 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "integrations/shopify/disconnect" && m === "POST") {
+    const result = await clearShopifyCredentials();
     return jsonOk({
       ok: true,
       mode: "next_dual_run",
-      message: "Shopify status unchanged.",
-      status: shopifyStatusPayload(),
+      message: result.shopify.connected
+        ? "Stored credentials cleared. Shopify remains Connected via env."
+        : "Shopify disconnected.",
+      status: result.shopify,
+      storage: result.storage,
     });
   }
 
@@ -2052,11 +2128,11 @@ export async function dispatchV1(method, segments, request, body) {
         ? String(body.sync_type)
         : "products";
     if (syncType === "orders") {
-      const status = shopifyStatusPayload();
+      const status = await getShopifyStatus();
       return jsonOk({
         ok: true,
         run: {
-          status: status.connected ? "completed" : "completed",
+          status: "completed",
           mode: status.connected ? status.mode : "local_sim",
           sync_type: "orders",
           records_upserted: 0,
@@ -2083,8 +2159,11 @@ export async function dispatchV1(method, segments, request, body) {
   if (path === "integrations/channels/status" && m === "GET") {
     // UI expects { channels: { facebook: { status, status_label, ... }, ... }, webchat_widget }.
     // Prior stub returned { data: [...] } and omitted Meta/Shopify → false "Waiting credentials".
-    const meta = await getMetaStatus();
-    return jsonOk(buildSalesChannelsStatus({ meta }));
+    const [meta, shopify] = await Promise.all([
+      getMetaStatus(),
+      getShopifyStatus(),
+    ]);
+    return jsonOk(buildSalesChannelsStatus({ meta, shopify }));
   }
 
   if (path === "integrations/channels/webchat-token" && m === "POST") {
