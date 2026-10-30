@@ -154,7 +154,54 @@
     background-attachment: fixed, scroll;
   }
 
-  /* Section labels: typography only, no gold wash bands */
+  /* Collapsible sidebar groups — typography toggle, no gold wash bands */
+  .nav-section {
+    padding-bottom: 0.15rem;
+  }
+
+  .nav-section-toggle {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0.45rem 0.7rem;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    box-shadow: none;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-brand-brown-dark);
+    transition: background-color 150ms ease;
+  }
+
+  .nav-section-toggle:hover {
+    background: color-mix(in srgb, var(--color-stone) 70%, transparent);
+  }
+
+  .nav-section-toggle--active {
+    color: var(--color-brand-ink);
+    background: color-mix(in srgb, var(--color-brand-sand) 55%, transparent);
+  }
+
+  .nav-section-toggle:focus-visible {
+    outline: 2px solid var(--color-brand-brown);
+    outline-offset: 1px;
+  }
+
+  .nav-section-items {
+    margin: 0;
+    padding: 0.15rem 0 0.35rem;
+    list-style: none;
+    border-top: 1px solid var(--border-default);
+  }
+
+  /* Legacy static band (kept for any leftover markup) */
   .nav-category-band {
     margin: 0;
     padding: 0.2rem 0.7rem 0.4rem;

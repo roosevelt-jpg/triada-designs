@@ -10,6 +10,7 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { SidebarNav } from "@/components/layout/SidebarNav";
 import { WorkspaceClock } from "@/components/layout/WorkspaceClock";
 import { syncSystemTime } from "@/lib/system-time";
 import {
@@ -100,35 +101,11 @@ export function DashboardShell({ children, title, description, actions }) {
             </button>
           </div>
 
-          <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-4" aria-label="Dashboard">
-            {navSections.map((section) => (
-              <div key={section.label}>
-                <p className="nav-category-band">{section.label}</p>
-                <ul className="mt-1 space-y-0.5">
-                  {section.items.map((item) => {
-                    const active =
-                      pathname === item.href || pathname.startsWith(`${item.href}/`);
-                    return (
-                      <li key={item.href}>
-                        <Link
-                          href={item.href}
-                          onClick={() => setOpen(false)}
-                          className={cn(
-                            "block rounded-sm border-l-2 px-2.5 py-[7px] text-[13px] leading-snug transition-[background-color,color,border-color] duration-150",
-                            active
-                              ? "border-brown bg-sand/80 font-medium text-ink"
-                              : "border-transparent font-normal text-ink/70 hover:bg-stone/70 hover:text-ink"
-                          )}
-                        >
-                          {item.label}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </nav>
+          <SidebarNav
+            sections={navSections}
+            pathname={pathname}
+            onNavigate={() => setOpen(false)}
+          />
 
           <div className="border-t border-line px-4 py-3.5">
             <p className="truncate text-sm font-medium text-ink">

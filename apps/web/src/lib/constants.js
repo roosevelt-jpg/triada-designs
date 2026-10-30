@@ -12,24 +12,23 @@ export const SEED_ADMIN = {
 };
 
 /**
- * Sidebar navigation — short category bands, scan-friendly groups.
- * Category labels render as non-route headers with stone/shadow band styling.
+ * Sidebar navigation — collapsible groups with nested page links.
+ * Groups: Workspace, Commerce, Marketing, Automation, Admin.
  */
 export const DASHBOARD_NAV = [
   {
+    id: "workspace",
     label: "Workspace",
     items: [
       { href: "/overview", label: "Overview" },
       { href: "/inbox", label: "Unified inbox" },
       { href: "/contacts", label: "Contacts" },
       { href: "/leads", label: "Leads" },
+      { href: "/analytics", label: "Analytics" },
     ],
   },
   {
-    label: "Insights",
-    items: [{ href: "/analytics", label: "Analytics" }],
-  },
-  {
+    id: "commerce",
     label: "Commerce",
     items: [
       { href: "/products", label: "Products" },
@@ -44,6 +43,7 @@ export const DASHBOARD_NAV = [
     ],
   },
   {
+    id: "marketing",
     label: "Marketing",
     items: [
       { href: "/content", label: "Content studio" },
@@ -58,6 +58,7 @@ export const DASHBOARD_NAV = [
     ],
   },
   {
+    id: "automation",
     label: "Automation",
     items: [
       { href: "/automations", label: "Workflows" },
@@ -68,7 +69,8 @@ export const DASHBOARD_NAV = [
     ],
   },
   {
-    label: "Administration",
+    id: "admin",
+    label: "Admin",
     items: [
       { href: "/integrations", label: "Integrations" },
       { href: "/integrations/channels", label: "Sales channels" },
