@@ -63,7 +63,10 @@ export function MediaUploadField({
     Boolean(value) &&
     (String(mediaType).toLowerCase() === "image" ||
       /^data:image\//i.test(value) ||
-      /\.(jpe?g|png)(\?|$)/i.test(value));
+      /\.(jpe?g|png|webp|gif)(\?|$)/i.test(value) ||
+      // Shopify CDN often omits a clear extension in the path segment.
+      /cdn\.shopify\.com/i.test(value) ||
+      /cdn\.shopifycdn\.net/i.test(value));
   const previewIsVideo =
     Boolean(value) &&
     (String(mediaType).toLowerCase() === "video" ||
@@ -184,9 +187,10 @@ export function MediaUploadField({
       {previewIsImage && value ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={value}
+          src={value.startsWith("//") ? `https:${value}` : value}
           alt=""
           className="mt-1 max-h-40 max-w-full border border-line object-contain"
+          referrerPolicy="no-referrer"
         />
       ) : null}
       {previewIsVideo && value && !String(value).startsWith("data:") ? (

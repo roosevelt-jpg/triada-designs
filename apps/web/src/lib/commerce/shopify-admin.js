@@ -15,9 +15,11 @@ import {
   resolveShopifyAccessToken,
 } from "@/lib/integrations/shopify-credentials";
 import {
+  absoluteProductPhotoUrlForShopify,
   extractProductSpecs,
   formatShopifyPrice,
   productCurrency,
+  shopifyRemoteImageSrc,
   specsDisplayRows,
 } from "./product-specs.js";
 
@@ -301,13 +303,10 @@ export function toShopifyProductPayload(product, opts = {}) {
     variants: [variant],
   };
 
-  if (
-    specs.photo_url &&
-    /^https?:\/\//i.test(String(specs.photo_url)) &&
-    !opts.variantId
-  ) {
-    // Only attach image on create — Shopify rejects duplicate image churn on every edit.
-    productBody.images = [{ src: String(specs.photo_url) }];
+  // Attach image on create only (update path uses products/{id}/images.json).
+  const photoHttps = absoluteProductPhotoUrlForShopify(product);
+  if (photoHttps && !opts.variantId) {
+    productBody.images = [{ src: photoHttps }];
   }
 
   if (opts.includeMetafields !== false && !opts.variantId) {
@@ -316,6 +315,37 @@ export function toShopifyProductPayload(product, opts = {}) {
   }
 
   return { product: productBody };
+}
+
+/**
+ * Ensure Shopify product has the dashboard photo when missing or different.
+ * Uses Admin REST products/{id}/images.json (safe on updates; avoids image churn PUT).
+ * @param {string} productId
+ * @param {string | null} photoHttps
+ * @param {Record<string, unknown> | null | undefined} remoteProduct
+ */
+async function ensureShopifyProductImage(productId, photoHttps, remoteProduct) {
+  if (!productId || !photoHttps || !/^https?:\/\//i.test(photoHttps)) {
+    return { ok: true, attached: false };
+  }
+  const existingSrc = shopifyRemoteImageSrc(remoteProduct);
+  if (existingSrc && existingSrc.replace(/\?.*$/, "") === photoHttps.replace(/\?.*$/, "")) {
+    return { ok: true, attached: false, reason: "unchanged" };
+  }
+  // Only auto-attach when Shopify has no image yet — avoid duplicating on every edit.
+  if (existingSrc) {
+    return { ok: true, attached: false, reason: "already_has_image" };
+  }
+  const result = await adminRequest(
+    "POST",
+    `products/${encodeURIComponent(String(productId))}/images.json`,
+    { image: { src: photoHttps } },
+  );
+  return {
+    ok: result.ok,
+    attached: result.ok,
+    status: result.status,
+  };
 }
 
 /**
@@ -437,6 +467,7 @@ export async function upsertShopifyProduct(product) {
 
     const remote = result.json?.product || {};
     const remoteId = remote.id != null ? String(remote.id) : existingId || null;
+    const photoHttps = absoluteProductPhotoUrlForShopify(product);
 
     if (remoteId && isRemoteId) {
       const specs = extractProductSpecs(product);
@@ -444,6 +475,9 @@ export async function upsertShopifyProduct(product) {
         String(remoteId),
         buildShopifyMetafields(product, specs),
       ).catch(() => {});
+      await ensureShopifyProductImage(String(remoteId), photoHttps, remote).catch(
+        () => {},
+      );
     }
 
     const handle = remote.handle ? String(remote.handle) : null;
@@ -459,6 +493,8 @@ export async function upsertShopifyProduct(product) {
         ? formatShopifyPrice(remoteVariant.price)
         : formatShopifyPrice(product.price);
 
+    const remoteImage = shopifyRemoteImageSrc(remote) || photoHttps || null;
+
     return {
       status: "synced",
       external_id: remoteId,
@@ -468,6 +504,7 @@ export async function upsertShopifyProduct(product) {
       message: isRemoteId
         ? `Updated on Shopify · ${productCurrency(product)} ${remotePrice}`
         : `Created on Shopify · ${productCurrency(product)} ${remotePrice}`,
+      photo_url: remoteImage,
     };
   } catch (err) {
     return {

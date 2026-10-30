@@ -2,6 +2,7 @@
  * Catalog-backed gift finder — approved product list only (never invent prices).
  */
 
+import { productPhotoUrl } from "@/lib/commerce/product-specs";
 import { listProducts } from "@/lib/commerce/products-store";
 import { AI_DISCLOSURE } from "@/lib/jewellery-ops/knowledge";
 import {
@@ -61,7 +62,7 @@ export async function suggestGifts(input = {}) {
   if (!filtered.length) filtered = catalog.slice(0, 3);
 
   const suggestions = filtered.slice(0, 3).map((p) => {
-    const meta = p.metadata && typeof p.metadata === "object" ? p.metadata : {};
+    const photo = productPhotoUrl(p);
     return {
       sku: p.sku || p.id,
       title: p.title,
@@ -69,7 +70,7 @@ export async function suggestGifts(input = {}) {
       currency: p.currency || "AED",
       product_url: p.product_url || "https://triada-designs.com/",
       photo_url:
-        meta.photo_url ||
+        photo ||
         `${p.product_url || "https://triada-designs.com/"}?view=image`,
       reason: [
         recipient ? `For ${recipient}` : "Gift pick",

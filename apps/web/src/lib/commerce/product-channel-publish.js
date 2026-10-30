@@ -10,7 +10,10 @@ import {
   updateProductChannelSync,
   upsertProduct,
 } from "./products-store.js";
-import { mergeSpecsIntoMetadata } from "./product-specs.js";
+import {
+  mergeSpecsIntoMetadata,
+  shopifyRemoteImageSrc,
+} from "./product-specs.js";
 import {
   getShopifyRuntime,
   listShopifyRemoteProducts,
@@ -48,6 +51,48 @@ export async function publishProductToChannels(product, opts = {}) {
   }
   if (wantWordpress) {
     syncPatch.wordpress = await upsertWordpressProductPost(working);
+  }
+
+  // Persist Shopify CDN image onto local metadata when dashboard had none / relative only.
+  const shopifyPhoto =
+    syncPatch.shopify &&
+    typeof syncPatch.shopify === "object" &&
+    "photo_url" in syncPatch.shopify
+      ? String(
+          /** @type {{ photo_url?: string | null }} */ (syncPatch.shopify)
+            .photo_url || "",
+        ).trim()
+      : "";
+  if (shopifyPhoto && /^https?:\/\//i.test(shopifyPhoto)) {
+    const priorPhoto = String(
+      working.metadata?.photo_url ||
+        (working.metadata?.specs &&
+        typeof working.metadata.specs === "object"
+          ? /** @type {Record<string, unknown>} */ (working.metadata.specs)
+              .photo_url
+          : "") ||
+        "",
+    ).trim();
+    // Fill missing / relative brand paths with Shopify CDN; never clobber a newer https upload.
+    if (!priorPhoto || priorPhoto.startsWith("/") || priorPhoto.startsWith("//")) {
+      working = (
+        await upsertProduct({
+          ...working,
+          metadata: mergeSpecsIntoMetadata(working.metadata || {}, {
+            photo_url: shopifyPhoto,
+          }),
+        })
+      ).product;
+    }
+  }
+  // Drop non-ChannelSyncState fields before persisting sync row.
+  if (syncPatch.shopify && typeof syncPatch.shopify === "object") {
+    const { photo_url: _drop, ...shopifySync } = /** @type {Record<string, unknown>} */ (
+      syncPatch.shopify
+    );
+    syncPatch.shopify = /** @type {import("./products-store.js").ChannelSyncState} */ (
+      shopifySync
+    );
   }
 
   const updated = await updateProductChannelSync(working.id, syncPatch);
@@ -310,9 +355,7 @@ export async function syncShopifyCatalogInbound() {
             ? Number(variant.compare_at_price)
             : undefined,
         barcode: variant.barcode ? String(variant.barcode) : undefined,
-        photo_url: Array.isArray(remoteProduct.images) && remoteProduct.images[0]?.src
-          ? String(remoteProduct.images[0].src)
-          : undefined,
+        photo_url: shopifyRemoteImageSrc(remoteProduct) || undefined,
       });
 
       await upsertProduct(

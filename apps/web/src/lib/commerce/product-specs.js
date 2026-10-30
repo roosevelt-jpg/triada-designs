@@ -4,6 +4,7 @@
  */
 
 import { DEFAULT_CURRENCY } from "@/lib/locale/preferred-currency";
+import { resolvePublicAppUrl } from "@/lib/public-app-url";
 
 /** @typedef {{
  *   category: string | null,
@@ -17,6 +18,71 @@ import { DEFAULT_CURRENCY } from "@/lib/locale/preferred-currency";
  *   photo_url: string | null,
  *   barcode: string | null,
  * }} ProductSpecs */
+
+/**
+ * Normalize a stored product media URL for browser / Shopify use.
+ * Handles protocol-relative Shopify CDN (`//cdn.shopify.com/...`),
+ * absolute http(s), same-origin relative paths, and data URLs.
+ * @param {unknown} raw
+ * @returns {string | null}
+ */
+export function normalizeProductMediaUrl(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return null;
+  if (s.startsWith("//")) return `https:${s}`;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^data:/i.test(s)) return s;
+  if (s.startsWith("/")) return s;
+  // Bare Shopify CDN hosts without scheme
+  if (/^(cdn\.shopify\.com|cdn\.shopifycdn\.net)\//i.test(s)) {
+    return `https://${s}`;
+  }
+  return s;
+}
+
+/**
+ * First image src from a Shopify Admin REST product payload.
+ * Prefers images[0].src, then featured image.src.
+ * @param {Record<string, unknown> | null | undefined} remoteProduct
+ * @returns {string | null}
+ */
+export function shopifyRemoteImageSrc(remoteProduct) {
+  if (!remoteProduct || typeof remoteProduct !== "object") return null;
+  const images = Array.isArray(remoteProduct.images) ? remoteProduct.images : [];
+  const fromList =
+    images[0] && typeof images[0] === "object"
+      ? /** @type {Record<string, unknown>} */ (images[0]).src
+      : null;
+  const featured =
+    remoteProduct.image && typeof remoteProduct.image === "object"
+      ? /** @type {Record<string, unknown>} */ (remoteProduct.image).src
+      : null;
+  return normalizeProductMediaUrl(fromList || featured || null);
+}
+
+/**
+ * Display/sync photo for a Triada catalog product (metadata.photo_url / specs).
+ * @param {Record<string, unknown> | null | undefined} product
+ * @returns {string | null}
+ */
+export function productPhotoUrl(product) {
+  return normalizeProductMediaUrl(extractProductSpecs(product || {}).photo_url);
+}
+
+/**
+ * Absolute https URL Shopify can fetch (skips data: URLs).
+ * Relative brand paths become dashboard-origin absolute URLs.
+ * @param {Record<string, unknown> | null | undefined} product
+ * @returns {string | null}
+ */
+export function absoluteProductPhotoUrlForShopify(product) {
+  const url = productPhotoUrl(product);
+  if (!url) return null;
+  if (/^data:/i.test(url)) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  const base = resolvePublicAppUrl().replace(/\/$/, "");
+  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+}
 
 /**
  * @param {Record<string, unknown> | null | undefined} product
@@ -61,7 +127,9 @@ export function extractProductSpecs(product = {}) {
     collection: pickString("collection"),
     compare_at_price: pickNumber("compare_at_price"),
     inventory_quantity: pickNumber("inventory_quantity", "qty", "stock"),
-    photo_url: pickString("photo_url", "image_url"),
+    photo_url: normalizeProductMediaUrl(
+      pickString("photo_url", "image_url", "image", "featured_image"),
+    ),
     barcode: pickString("barcode", "gtin"),
   };
 }

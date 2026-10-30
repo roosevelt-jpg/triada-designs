@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/Input";
 import { MediaUploadField } from "@/components/ui/MediaUploadField";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
+import { productPhotoUrl } from "@/lib/commerce/product-specs";
 import { formatCurrency } from "@/lib/formatters";
 import { DEFAULT_CURRENCY } from "@/lib/locale/preferred-currency";
 
@@ -115,7 +116,7 @@ export default function ProductsPage() {
       compare_at_price: metaNumber(item, "compare_at_price"),
       currency: item.currency || DEFAULT_CURRENCY,
       product_url: item.product_url || "https://triada-designs.com/",
-      photo_url: metaString(item, "photo_url"),
+      photo_url: productPhotoUrl(item) || "",
       category: metaString(item, "category") || "Jewellery",
       collection: metaString(item, "collection"),
       metal: metaString(item, "metal"),
@@ -495,8 +496,29 @@ export default function ProductsPage() {
             const wordpress = item.channel_sync?.wordpress;
             const metal = metaString(item, "metal");
             const weight = metaString(item, "weight_grams");
+            const photo = productPhotoUrl(item);
             return (
-              <article key={item.id} className="surface-card flex flex-col p-5">
+              <article key={item.id} className="surface-card flex flex-col overflow-hidden p-0">
+                <div className="relative aspect-[4/3] w-full bg-[color-mix(in_srgb,var(--line)_55%,transparent)]">
+                  {photo ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- Shopify CDN + local/relative + data URLs
+                    <img
+                      src={photo}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      onError={(event) => {
+                        event.currentTarget.style.visibility = "hidden";
+                      }}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center px-4 text-center text-xs uppercase tracking-[0.14em] text-muted">
+                      No photo
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col p-5">
                 <h3 className="font-display text-2xl text-ink">{item.title}</h3>
                 {item.sku ? (
                   <p className="mt-1 text-xs uppercase tracking-wide text-muted">{item.sku}</p>
@@ -562,6 +584,7 @@ export default function ProductsPage() {
                   >
                     Delete
                   </Button>
+                </div>
                 </div>
               </article>
             );
