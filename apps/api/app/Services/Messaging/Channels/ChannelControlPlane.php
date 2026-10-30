@@ -307,7 +307,7 @@ class ChannelControlPlane
     protected function capabilities(string $channel): array
     {
         return match ($channel) {
-            'telegram' => ['messages.send', 'messages.receive', 'webhooks', 'templates'],
+            'telegram' => ['messages.send', 'messages.receive', 'messaging', 'webhooks', 'templates'],
             'tiktok' => ['posts.publish', 'templates', 'messaging', 'messages.send', 'messages.receive', 'webhooks'],
             'linkedin' => ['posts.publish', 'templates', 'messaging', 'messages.send', 'messages.receive', 'webhooks'],
             'email' => ['messages.send', 'messages.receive', 'templates'],

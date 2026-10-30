@@ -11,6 +11,8 @@ export const maxDuration = 60;
 /**
  * Telegram Bot webhook:
  *   https://dashboard.triada-designs.com/api/webhooks/telegram
+ *
+ * Early-200 + background Support auto-reply (same pattern as Meta / TikTok / LinkedIn).
  */
 
 /**
@@ -29,6 +31,21 @@ function secretOk(request) {
       "",
   ).trim();
   return provided === expected;
+}
+
+/**
+ * Optional health / probe challenge echo (not required by Bot API setWebhook).
+ * @param {URL} url
+ */
+function challengeResponse(url) {
+  const challenge =
+    url.searchParams.get("challenge") ||
+    url.searchParams.get("challenge_code") ||
+    url.searchParams.get("challengeCode") ||
+    url.searchParams.get("hub.challenge") ||
+    "";
+  if (!challenge) return null;
+  return NextResponse.json({ challenge, challengeCode: challenge });
 }
 
 /**
@@ -72,6 +89,17 @@ async function processTelegramInbound(normalized) {
     replied: outcomes.filter((o) => o.replied).length,
     automations: outcomes.map((o) => o.automation),
   };
+}
+
+export async function GET(request) {
+  const url = new URL(request.url);
+  const challenge = challengeResponse(url);
+  if (challenge) return challenge;
+  return NextResponse.json({
+    ok: true,
+    channel: "telegram",
+    webhook: "/api/webhooks/telegram",
+  });
 }
 
 export async function POST(request) {

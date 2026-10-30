@@ -48,51 +48,236 @@ function linkedInMessageText(message) {
  */
 
 /**
+ * Contact display name from a Telegram User object.
+ * @param {Record<string, unknown>} from
+ * @returns {string | null}
+ */
+function telegramContactName(from) {
+  const first = String(from.first_name || "").trim();
+  const last = String(from.last_name || "").trim();
+  const name = `${first} ${last}`.trim();
+  if (name) return name;
+  const username = String(from.username || "").trim();
+  return username || null;
+}
+
+/**
+ * Normalize one Telegram message / callback / simulator flat into Support shape.
+ * @param {Record<string, unknown>} payload
+ * @param {Record<string, unknown>} message
+ * @param {{
+ *   text?: string,
+ *   provider_message_id?: string,
+ *   update_kind?: string,
+ *   simulated?: boolean,
+ * }} [opts]
+ * @returns {NormalizedChannelMessage | null}
+ */
+function telegramNormalizedFromMessage(payload, message, opts = {}) {
+  const from =
+    message.from && typeof message.from === "object"
+      ? /** @type {Record<string, unknown>} */ (message.from)
+      : payload.from && typeof payload.from === "object"
+        ? /** @type {Record<string, unknown>} */ (payload.from)
+        : {};
+  const chat =
+    message.chat && typeof message.chat === "object"
+      ? /** @type {Record<string, unknown>} */ (message.chat)
+      : payload.chat && typeof payload.chat === "object"
+        ? /** @type {Record<string, unknown>} */ (payload.chat)
+        : {};
+
+  const text = String(
+    opts.text ||
+      message.text ||
+      message.caption ||
+      payload.text ||
+      payload.body ||
+      payload.caption ||
+      "",
+  ).trim();
+  if (!text) return null;
+
+  const chatId = String(
+    chat.id ||
+      payload.chat_id ||
+      message.chat_id ||
+      from.id ||
+      payload.from_id ||
+      payload.user_id ||
+      "",
+  ).trim();
+  if (!chatId) return null;
+
+  const userId = String(from.id || payload.from_id || payload.user_id || chatId);
+  const updateId = String(
+    opts.provider_message_id ||
+      message.message_id ||
+      payload.message_id ||
+      payload.update_id ||
+      payload.id ||
+      `tg-${Date.now()}`,
+  );
+  const contactName =
+    telegramContactName(from) ||
+    String(payload.contact_name || "").trim() ||
+    null;
+  const simulated = Boolean(opts.simulated || payload.simulated || message.simulated);
+
+  return {
+    channel: "telegram",
+    body: text,
+    external_user_id: userId,
+    external_conversation_id: `telegram:${chatId}`,
+    provider_message_id: updateId,
+    contact_name: contactName,
+    metadata: {
+      chat_id: chatId,
+      username: from.username || payload.username || null,
+      contact_name: contactName,
+      update_id: String(payload.update_id || ""),
+      update_kind: opts.update_kind || "message",
+      simulated,
+    },
+  };
+}
+
+/**
  * Telegram Bot API update → normalized messages.
+ * Accepts classic `message` / `edited_message`, Business `business_message`,
+ * `callback_query`, simulator flats (`text` + `chat_id`), and `{ updates: [] }` batches.
  * @param {Record<string, unknown>} payload
  * @returns {NormalizedChannelMessage[]}
  */
 export function normalizeTelegramInbound(payload) {
-  const message =
-    /** @type {Record<string, unknown> | null} */ (
-      payload?.message || payload?.edited_message || null
-    );
-  if (!message || typeof message !== "object") return [];
+  if (!payload || typeof payload !== "object") return [];
 
-  const from =
-    message.from && typeof message.from === "object"
-      ? /** @type {Record<string, unknown>} */ (message.from)
-      : {};
-  const chat =
-    message.chat && typeof message.chat === "object"
-      ? /** @type {Record<string, unknown>} */ (message.chat)
-      : {};
-  const text = String(message.text || message.caption || "").trim();
-  if (!text) return [];
+  /** @type {Array<Record<string, unknown>>} */
+  const updates = [];
+  const batch = payload.updates || payload.messages;
+  if (Array.isArray(batch) && batch.length) {
+    for (const item of batch) {
+      if (item && typeof item === "object") {
+        updates.push(/** @type {Record<string, unknown>} */ (item));
+      }
+    }
+  } else {
+    updates.push(payload);
+  }
 
-  const userId = String(from.id || chat.id || "unknown");
-  const chatId = String(chat.id || userId);
-  const updateId = String(payload.update_id || message.message_id || "");
-  const first = String(from.first_name || "").trim();
-  const last = String(from.last_name || "").trim();
-  const contactName = `${first} ${last}`.trim() || null;
+  /** @type {NormalizedChannelMessage[]} */
+  const out = [];
+  for (const update of updates) {
+    const callback =
+      update.callback_query && typeof update.callback_query === "object"
+        ? /** @type {Record<string, unknown>} */ (update.callback_query)
+        : null;
+    if (callback) {
+      const cbMessage =
+        callback.message && typeof callback.message === "object"
+          ? /** @type {Record<string, unknown>} */ (callback.message)
+          : {};
+      const from =
+        callback.from && typeof callback.from === "object"
+          ? /** @type {Record<string, unknown>} */ (callback.from)
+          : {};
+      const message = {
+        ...cbMessage,
+        from: cbMessage.from || from,
+        chat:
+          cbMessage.chat ||
+          (from.id != null ? { id: from.id, type: "private" } : undefined),
+      };
+      const row = telegramNormalizedFromMessage(update, message, {
+        text: String(callback.data || callback.text || "").trim(),
+        provider_message_id: String(
+          callback.id || update.update_id || `tg-cb-${Date.now()}`,
+        ),
+        update_kind: "callback_query",
+        simulated: Boolean(update.simulated),
+      });
+      if (row) out.push(row);
+      continue;
+    }
 
-  return [
-    {
-      channel: "telegram",
-      body: text,
-      external_user_id: userId,
-      external_conversation_id: `telegram:${chatId}`,
-      provider_message_id: String(message.message_id || updateId),
-      contact_name: contactName,
-      metadata: {
-        chat_id: chatId,
-        username: from.username || null,
-        contact_name: contactName,
-        update_id: updateId,
-      },
-    },
-  ];
+    const message =
+      /** @type {Record<string, unknown> | null} */ (
+        (update.message && typeof update.message === "object" && update.message) ||
+          (update.edited_message &&
+            typeof update.edited_message === "object" &&
+            update.edited_message) ||
+          (update.business_message &&
+            typeof update.business_message === "object" &&
+            update.business_message) ||
+          (update.edited_business_message &&
+            typeof update.edited_business_message === "object" &&
+            update.edited_business_message) ||
+          (update.channel_post &&
+            typeof update.channel_post === "object" &&
+            update.channel_post) ||
+          (update.edited_channel_post &&
+            typeof update.edited_channel_post === "object" &&
+            update.edited_channel_post) ||
+          null
+      );
+
+    if (message && typeof message === "object") {
+      const kind = update.edited_message
+        ? "edited_message"
+        : update.business_message || update.edited_business_message
+          ? "business_message"
+          : update.channel_post || update.edited_channel_post
+            ? "channel_post"
+            : "message";
+      const row = telegramNormalizedFromMessage(update, message, {
+        update_kind: kind,
+        simulated: Boolean(update.simulated),
+      });
+      if (row) out.push(row);
+      continue;
+    }
+
+    // Simulator / partner flats: { text|body, chat_id|from.id, ... }
+    const flatText = String(update.text || update.body || update.caption || "").trim();
+    const flatChat = String(
+      update.chat_id ||
+        (update.chat && typeof update.chat === "object"
+          ? /** @type {Record<string, unknown>} */ (update.chat).id
+          : "") ||
+        update.from_id ||
+        update.user_id ||
+        (update.from && typeof update.from === "object"
+          ? /** @type {Record<string, unknown>} */ (update.from).id
+          : "") ||
+        "",
+    ).trim();
+    if (flatText && flatChat) {
+      const syntheticMessage = {
+        message_id: update.message_id || update.id || update.update_id,
+        text: flatText,
+        from:
+          update.from && typeof update.from === "object"
+            ? update.from
+            : { id: flatChat, first_name: update.contact_name || "Telegram" },
+        chat: { id: flatChat, type: "private" },
+      };
+      const row = telegramNormalizedFromMessage(
+        update,
+        /** @type {Record<string, unknown>} */ (syntheticMessage),
+        {
+          text: flatText,
+          update_kind: "flat",
+          simulated: Boolean(update.simulated),
+          provider_message_id: String(
+            update.message_id || update.id || update.update_id || `tg-flat-${Date.now()}`,
+          ),
+        },
+      );
+      if (row) out.push(row);
+    }
+  }
+
+  return out;
 }
 
 /**

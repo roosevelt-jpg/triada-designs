@@ -129,11 +129,13 @@ Status stays **disconnected** / **awaiting_credentials** until live tokens. Neve
 
 | Channel | Webhook | Admin |
 |---|---|---|
-| Telegram | `POST /api/webhooks/telegram` | `/integrations/channels` |
+| Telegram | `POST /api/webhooks/telegram` (+ GET health / challenge echo) | `/integrations/channels` |
 | TikTok | `POST /api/webhooks/tiktok` (+ GET challenge echo) | `/integrations/channels` |
 | Email | `POST /api/webhooks/email` | `/integrations/channels` |
 | LinkedIn | `POST /api/webhooks/linkedin` (+ GET challenge echo) | `/integrations/channels` |
 | Webchat | Public `POST /api/v1/webchat/messages` + embed `/widget/chat.js` | token ensure on channels page |
+
+Telegram Bot Messaging: early-200 accept → background AI Support auto-reply → Unified Inbox trails. Optional `TELEGRAM_WEBHOOK_SECRET` / `TELEGRAM_BOT_WEBHOOK_SECRET` (header `x-telegram-bot-api-secret-token` / `x-channel-webhook-secret`). Live outbound needs `TELEGRAM_BOT_TOKEN` (Bot API `sendMessage`); otherwise `local_sim`. Point BotFather `setWebhook` at `/api/webhooks/telegram`.
 
 LinkedIn Messaging: early-200 accept → background AI Support auto-reply → Unified Inbox trails. Optional `LINKEDIN_WEBHOOK_SECRET` (headers `x-linkedin-webhook-secret` / `x-channel-webhook-secret`). Live outbound needs `LINKEDIN_ACCESS_TOKEN` (or `LINKEDIN_API_KEY`); otherwise `local_sim`.
 

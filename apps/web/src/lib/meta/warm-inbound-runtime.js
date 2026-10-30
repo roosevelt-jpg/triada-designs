@@ -49,6 +49,12 @@ export async function warmInboundRuntime() {
   channelsWarmed.push("whatsapp", "instagram", "messenger", "facebook");
 
   normalizeTelegramInbound({});
+  normalizeTelegramInbound({
+    text: "Hi",
+    chat_id: "warm-tg",
+    from: { id: "warm-tg", first_name: "Warm" },
+    simulated: true,
+  });
   normalizeEmailInbound({ from: "warm@triada.local", body: "Hi" });
   normalizeTikTokInbound({
     event: "im_receive_msg",

@@ -81,7 +81,13 @@ function capabilities(channel) {
     case "email":
       return ["messages.send", "messages.receive", "templates"];
     case "telegram":
-      return ["messages.send", "messages.receive", "webhooks", "templates"];
+      return [
+        "messages.send",
+        "messages.receive",
+        "messaging",
+        "webhooks",
+        "templates",
+      ];
     case "webchat":
       return ["messages.send", "messages.receive", "widget"];
     case "tiktok":

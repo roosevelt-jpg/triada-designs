@@ -1,32 +1,76 @@
 /**
  * Smoke: Telegram inbound persists a trail visible to Unified Inbox list/detail shapes,
- * with greeting fast_path (same durable store + inbox shaping as WhatsApp #56).
+ * with greeting fast_path (same durable store + inbox shaping as WhatsApp #56 / TikTok).
  * From apps/web:
  *   node --import ./scripts/alias-hooks-register.mjs ./scripts/smoke-inbox-telegram-trails.mjs
  */
 
 process.env.INTEGRATION_MODE = process.env.INTEGRATION_MODE || "local";
 
+import { normalizeTelegramInbound } from "@/lib/channels/normalize-inbound.js";
 import { handleInboundSupportChannel } from "@/lib/agents/support-channel.js";
 import {
   getConversation,
   listConversations,
 } from "@/lib/crm/conversations-store.js";
 import { shapeConversationForInbox } from "@/lib/crm/inbox-shape.js";
+import { sendTelegramTextMessage } from "@/lib/integrations/telegram-bot-text.js";
 
 const chatId = `tg${String(Date.now()).slice(-8)}`;
 const extConv = `telegram:${chatId}`;
 const msgId = `tg-inbox.${Date.now()}`;
 
+const classic = normalizeTelegramInbound({
+  update_id: 91001,
+  message: {
+    message_id: 42,
+    from: { id: Number(chatId.replace(/\D/g, "").slice(0, 9)) || 555001, first_name: "Telegram", last_name: "Inbox Smoke", username: "tg_smoke" },
+    chat: { id: Number(chatId.replace(/\D/g, "").slice(0, 9)) || 555001, type: "private" },
+    text: "Hi",
+  },
+});
+if (classic.length !== 1 || classic[0].channel !== "telegram") {
+  throw new Error(`telegram classic normalize failed: ${JSON.stringify(classic)}`);
+}
+
+const flat = normalizeTelegramInbound({
+  text: "Hi",
+  chat_id: chatId,
+  from: { id: chatId, first_name: "Flat" },
+  message_id: `flat-${msgId}`,
+  simulated: true,
+});
+if (flat.length !== 1 || flat[0].external_user_id !== chatId || flat[0].body !== "Hi") {
+  throw new Error(`telegram flat normalize failed: ${JSON.stringify(flat)}`);
+}
+
+const callback = normalizeTelegramInbound({
+  update_id: 91002,
+  callback_query: {
+    id: `cq-${msgId}`,
+    from: { id: chatId, first_name: "Callback" },
+    data: "Hi",
+    message: { message_id: 9, chat: { id: chatId, type: "private" } },
+  },
+});
+if (callback.length !== 1 || callback[0].body !== "Hi") {
+  throw new Error(`telegram callback normalize failed: ${JSON.stringify(callback)}`);
+}
+console.log("ok telegram normalize", {
+  classic: classic[0].external_user_id,
+  flat: flat[0].external_user_id,
+  callback: callback[0].metadata?.update_kind,
+});
+
 const started = Date.now();
 const handled = await handleInboundSupportChannel({
   channel: "telegram",
-  body: "Hi",
+  body: flat[0].body,
   external_user_id: chatId,
   external_conversation_id: extConv,
   provider_message_id: msgId,
   contact_name: "Telegram Inbox Smoke",
-  metadata: { chat_id: chatId },
+  metadata: flat[0].metadata,
   auto_reply: true,
   dry_run: false,
 });
@@ -101,5 +145,35 @@ console.log("ok inbox shape", {
   inbound: Boolean(inbound),
   outbound: Boolean(outbound),
 });
+
+// Live Bot API when TELEGRAM_BOT_TOKEN present; otherwise local_sim (never print secrets).
+const hadToken = Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim());
+if (!hadToken) {
+  const sim = await sendTelegramTextMessage({
+    chat_id: chatId,
+    body: "Triada smoke local_sim",
+  });
+  if (!sim.ok || sim.mode !== "local_sim") {
+    throw new Error(`expected telegram local_sim without creds: ${JSON.stringify(sim)}`);
+  }
+  console.log("SMOKE_PASS telegram local_sim without creds");
+} else {
+  const live = await sendTelegramTextMessage({
+    chat_id: "1",
+    body: "Triada smoke live probe",
+  });
+  if (live.mode !== "live") {
+    throw new Error(`expected telegram live mode with creds: ${JSON.stringify({
+      ok: live.ok,
+      mode: live.mode,
+      error: live.error,
+    })}`);
+  }
+  console.log("SMOKE_PASS telegram live outbound when creds present", {
+    ok: live.ok,
+    // fake chat id may fail at Bot API — mode still live
+    error: live.error || null,
+  });
+}
 
 console.log("SMOKE_PASS inbox telegram trails");

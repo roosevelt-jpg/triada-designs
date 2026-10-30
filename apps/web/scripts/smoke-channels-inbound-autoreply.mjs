@@ -36,7 +36,32 @@ const tgNorm = normalizeTelegramInbound({
 if (tgNorm.length !== 1 || tgNorm[0].channel !== "telegram") {
   throw new Error(`telegram normalize failed: ${JSON.stringify(tgNorm)}`);
 }
-console.log("ok telegram normalize", tgNorm[0].external_user_id);
+const tgFlat = normalizeTelegramInbound({
+  text: "Hi",
+  chat_id: "555001",
+  from: { id: 555001, first_name: "Smoke" },
+  simulated: true,
+});
+if (
+  tgFlat.length !== 1 ||
+  tgFlat[0].external_user_id !== "555001" ||
+  tgFlat[0].body !== "Hi"
+) {
+  throw new Error(`telegram flat normalize failed: ${JSON.stringify(tgFlat)}`);
+}
+const tgCb = normalizeTelegramInbound({
+  update_id: 9002,
+  callback_query: {
+    id: "cq-smoke",
+    from: { id: 555001, first_name: "Smoke" },
+    data: "Hi",
+    message: { chat: { id: 555001, type: "private" }, message_id: 7 },
+  },
+});
+if (tgCb.length !== 1 || tgCb[0].body !== "Hi" || tgCb[0].metadata?.chat_id !== "555001") {
+  throw new Error(`telegram callback normalize failed: ${JSON.stringify(tgCb)}`);
+}
+console.log("ok telegram normalize", tgNorm[0].external_user_id, "flat+callback");
 
 const emailNorm = normalizeEmailInbound({
   from: "guest@example.com",
