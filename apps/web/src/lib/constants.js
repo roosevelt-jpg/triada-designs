@@ -33,6 +33,10 @@ export const DASHBOARD_NAV = [
     label: "Commerce",
     items: [
       { href: "/products", label: "Products" },
+      { href: "/collections", label: "Collections" },
+      { href: "/inventory", label: "Inventory" },
+      { href: "/discounts", label: "Discounts" },
+      { href: "/transfers", label: "Transfers / POs" },
       { href: "/services", label: "Services" },
       { href: "/orders", label: "Orders & invoices" },
       { href: "/orders/invoices", label: "Invoice editor" },

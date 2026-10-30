@@ -12,14 +12,14 @@ import { apiFetch } from "@/lib/api-client";
 import { connectionLabel } from "@/lib/integrations/brand-labels";
 
 const SYNC_AREAS = [
-  { key: "products", label: "Products" },
-  { key: "collections", label: "Collections" },
-  { key: "inventory", label: "Inventory" },
-  { key: "transfers", label: "Transfers / POs" },
-  { key: "customers", label: "Customers" },
-  { key: "growth", label: "Growth" },
-  { key: "discounts", label: "Discounts" },
-  { key: "finance", label: "Finance" },
+  { key: "products", label: "Products", href: "/products" },
+  { key: "collections", label: "Collections", href: "/collections" },
+  { key: "inventory", label: "Inventory", href: "/inventory" },
+  { key: "transfers", label: "Transfers / POs", href: "/transfers" },
+  { key: "customers", label: "Customers", href: "/contacts" },
+  { key: "growth", label: "Growth", href: "/campaigns" },
+  { key: "discounts", label: "Discounts", href: "/discounts" },
+  { key: "finance", label: "Finance", href: "/orders/invoices" },
 ];
 
 function tone(status) {
@@ -88,7 +88,7 @@ export default function ShopifyIntegrationsPage() {
   return (
     <DashboardShell
       title="Shopify"
-      description="Store sync status. Connected or Waiting credentials."
+      description="Store sync status plus links to durable CRUD pages. Create/edit auto-upserts when Connected."
       actions={
         <div className="ops-actions">
           <Button size="sm" variant="secondary" onClick={load}>
@@ -134,14 +134,15 @@ export default function ShopifyIntegrationsPage() {
             <div className="border-b border-line px-5 py-4">
               <h2 className="ops-section-title">Sync areas</h2>
               <p className="mt-1 text-sm text-muted">
-                Auto-sync on dashboard create/edit when Connected. Areas without granted Admin
-                scopes stay Waiting credentials.
+                Auto-sync on dashboard create/edit when Connected. Open each area&apos;s CRUD page
+                to manage durable records. Areas without granted Admin scopes stay Waiting
+                credentials. Purchase Orders stay local on Shopify Basic.
               </p>
             </div>
             <div className="divide-y divide-line">
               {SYNC_AREAS.map((area) => {
                 const row = areas[area.key] || {};
-                const areaStatus = row.status || (connected ? "awaiting_credentials" : "awaiting_credentials");
+                const areaStatus = row.status || "awaiting_credentials";
                 return (
                   <div
                     key={area.key}
@@ -161,6 +162,13 @@ export default function ShopifyIntegrationsPage() {
                         {row.label ||
                           (areaStatus === "connected" ? "Connected" : "Waiting credentials")}
                       </Badge>
+                      {area.href ? (
+                        <Link href={area.href}>
+                          <Button size="sm" variant="secondary">
+                            Open
+                          </Button>
+                        </Link>
+                      ) : null}
                       <Button
                         size="sm"
                         variant="secondary"

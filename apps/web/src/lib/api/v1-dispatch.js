@@ -91,6 +91,7 @@ import {
   deleteProduct,
   getProduct,
   listProducts,
+  upsertProduct,
 } from "@/lib/commerce/products-store";
 import {
   deleteService,
@@ -105,11 +106,15 @@ import {
   saveShopifyCredentials,
 } from "@/lib/integrations/shopify-credentials";
 import {
+  SHOPIFY_BASIC_PO_GAP,
   getShopifySyncCapabilities,
   runShopifyAreaSync,
+  upsertShopifyCollectionRecord,
   upsertShopifyCustomer,
   upsertShopifyDiscount,
   upsertShopifyDraftOrderFromInvoice,
+  upsertShopifyInventoryForProduct,
+  upsertShopifyInventoryTransfer,
   upsertShopifyMarketingEvent,
 } from "@/lib/commerce/shopify-full-sync";
 import {
@@ -118,6 +123,18 @@ import {
   listDiscounts,
   upsertDiscount,
 } from "@/lib/commerce/discounts-store";
+import {
+  deleteCollection,
+  getCollection,
+  listCollections,
+  upsertCollection,
+} from "@/lib/commerce/collections-store";
+import {
+  deleteTransfer,
+  getTransfer,
+  listTransfers,
+  upsertTransfer,
+} from "@/lib/commerce/transfers-store";
 import {
   buildPromoComponentsForContact,
   draftWhatsAppCampaignWithBestsellers,
@@ -640,6 +657,285 @@ export async function dispatchV1(method, segments, request, body) {
         metrics,
       }),
     );
+  }
+
+  if (path === "collections" && m === "GET") {
+    const listed = await listCollections();
+    const capabilities = await getShopifySyncCapabilities().catch(() => null);
+    return jsonOk({
+      data: listed.data,
+      mode: listed.mode,
+      shopify: capabilities?.areas?.collections || null,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "collections" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const saved = await upsertCollection(input);
+    if (!saved.ok) return jsonErr(saved.error || "Invalid collection", saved.status || 422);
+    const shopify = await upsertShopifyCollectionRecord(saved.collection);
+    const refreshed = (await getCollection(saved.collection.id)) || saved.collection;
+    return jsonOk(
+      {
+        ...refreshed,
+        created: saved.created,
+        shopify_auto_synced: shopify.status === "synced",
+        shopify_collection: {
+          status: shopify.status,
+          external_id: shopify.external_id,
+          message: shopify.message,
+          mode: shopify.mode,
+          link: shopify.link || null,
+        },
+        mode: saved.mode,
+        source: "next_dual_run",
+      },
+      saved.created ? 201 : 200,
+    );
+  }
+
+  if (path.match(/^collections\/[^/]+$/) && m === "GET") {
+    const collection = await getCollection(segments[1]);
+    if (!collection) return jsonErr("Collection not found", 404);
+    return jsonOk({ ...collection, source: "next_dual_run" });
+  }
+
+  if (path.match(/^collections\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
+    const existing = await getCollection(segments[1]);
+    if (!existing) return jsonErr("Collection not found", 404);
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const saved = await upsertCollection({ ...existing, ...input, id: existing.id });
+    if (!saved.ok) return jsonErr(saved.error || "Invalid collection", saved.status || 422);
+    const shopify = await upsertShopifyCollectionRecord(saved.collection);
+    const refreshed = (await getCollection(saved.collection.id)) || saved.collection;
+    return jsonOk({
+      ...refreshed,
+      created: false,
+      shopify_auto_synced: shopify.status === "synced",
+      shopify_collection: {
+        status: shopify.status,
+        external_id: shopify.external_id,
+        message: shopify.message,
+        mode: shopify.mode,
+        link: shopify.link || null,
+      },
+      mode: saved.mode,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path.match(/^collections\/[^/]+$/) && m === "DELETE") {
+    await deleteCollection(segments[1]);
+    return jsonOk({ ok: true, id: segments[1], source: "next_dual_run" });
+  }
+
+  if (path === "inventory" && m === "GET") {
+    const listed = await listProducts();
+    const capabilities = await getShopifySyncCapabilities().catch(() => null);
+    const rows = listed.data.map((product) => {
+      const meta =
+        product.metadata && typeof product.metadata === "object"
+          ? product.metadata
+          : {};
+      const specs =
+        meta.specs && typeof meta.specs === "object" ? meta.specs : {};
+      const qtyRaw =
+        meta.inventory_quantity ??
+        specs.inventory_quantity ??
+        product.inventory_quantity;
+      return {
+        id: product.id,
+        title: product.title,
+        sku: product.sku,
+        availability_status: product.availability_status,
+        inventory_quantity:
+          qtyRaw == null || qtyRaw === "" ? null : Number(qtyRaw),
+        shopify_product_id: product.channel_sync?.shopify?.external_id || null,
+        shopify_inventory_sync: meta.shopify_inventory_sync || null,
+        channel_sync: product.channel_sync?.shopify || null,
+      };
+    });
+    return jsonOk({
+      data: rows,
+      mode: listed.mode,
+      shopify: capabilities?.areas?.inventory || null,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "inventory" && (m === "PUT" || m === "PATCH" || m === "POST")) {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const productId = String(input.product_id || input.id || "").trim();
+    if (!productId) return jsonErr("product_id is required", 422);
+    if (input.inventory_quantity == null || input.inventory_quantity === "") {
+      return jsonErr("inventory_quantity is required", 422);
+    }
+    const qty = Math.floor(Number(input.inventory_quantity));
+    if (!Number.isFinite(qty) || qty < 0) {
+      return jsonErr("inventory_quantity must be a non-negative number", 422);
+    }
+    const existing = await getProduct(productId);
+    if (!existing) return jsonErr("Product not found", 404);
+    const result = await saveAndMaybePublishProduct(
+      {
+        ...existing,
+        metadata: {
+          ...(existing.metadata || {}),
+          inventory_quantity: qty,
+          specs: {
+            ...((existing.metadata &&
+              typeof existing.metadata.specs === "object" &&
+              existing.metadata.specs) ||
+              {}),
+            inventory_quantity: qty,
+          },
+        },
+        inventory_quantity: qty,
+        availability_status:
+          qty > 0
+            ? "in_stock_snapshot"
+            : existing.availability_status || "out_of_stock_snapshot",
+      },
+      { publish: true, channels: ["shopify"] },
+    );
+    let product = result.product || existing;
+    const inventory = await upsertShopifyInventoryForProduct(product).catch(
+      () => null,
+    );
+    if (inventory) {
+      const stamped = await upsertProduct({
+        ...product,
+        metadata: {
+          ...(product.metadata || {}),
+          inventory_quantity: qty,
+          shopify_inventory_sync: inventory,
+        },
+      }).catch(() => null);
+      if (stamped?.product) product = stamped.product;
+    }
+    return jsonOk({
+      ...product,
+      inventory_quantity: qty,
+      shopify_auto_synced: inventory?.status === "synced",
+      shopify_inventory: inventory
+        ? {
+            status: inventory.status,
+            external_id: inventory.external_id,
+            message: inventory.message,
+            mode: inventory.mode,
+          }
+        : null,
+      mode: result.mode || "next_dual_run",
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "transfers" && m === "GET") {
+    const listed = await listTransfers();
+    const capabilities = await getShopifySyncCapabilities().catch(() => null);
+    return jsonOk({
+      data: listed.data,
+      mode: listed.mode,
+      shopify: capabilities?.areas?.transfers || null,
+      limitation: SHOPIFY_BASIC_PO_GAP,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "transfers" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const saved = await upsertTransfer(input);
+    if (!saved.ok) return jsonErr(saved.error || "Invalid transfer", saved.status || 422);
+    const shopify = await upsertShopifyInventoryTransfer({
+      id: saved.transfer.id,
+      title: saved.transfer.title,
+      note: saved.transfer.note,
+      kind: saved.transfer.kind,
+      shopify_transfer_id: saved.transfer.shopify_sync?.external_id || null,
+      line_items: saved.transfer.line_items,
+    });
+    const refreshed = (await getTransfer(saved.transfer.id)) || saved.transfer;
+    return jsonOk(
+      {
+        ...refreshed,
+        created: saved.created,
+        shopify_auto_synced: shopify.status === "synced",
+        shopify_transfer: {
+          status: shopify.status,
+          external_id: shopify.external_id,
+          message: shopify.message,
+          mode: shopify.mode,
+          limitation: shopify.limitation || SHOPIFY_BASIC_PO_GAP,
+        },
+        limitation: SHOPIFY_BASIC_PO_GAP,
+        mode: saved.mode,
+        source: "next_dual_run",
+      },
+      saved.created ? 201 : 200,
+    );
+  }
+
+  if (path.match(/^transfers\/[^/]+$/) && m === "GET") {
+    const transfer = await getTransfer(segments[1]);
+    if (!transfer) return jsonErr("Transfer not found", 404);
+    return jsonOk({
+      ...transfer,
+      limitation: SHOPIFY_BASIC_PO_GAP,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path.match(/^transfers\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
+    const existing = await getTransfer(segments[1]);
+    if (!existing) return jsonErr("Transfer not found", 404);
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const saved = await upsertTransfer({ ...existing, ...input, id: existing.id });
+    if (!saved.ok) return jsonErr(saved.error || "Invalid transfer", saved.status || 422);
+    const shopify = await upsertShopifyInventoryTransfer({
+      id: saved.transfer.id,
+      title: saved.transfer.title,
+      note: saved.transfer.note,
+      kind: saved.transfer.kind,
+      shopify_transfer_id: saved.transfer.shopify_sync?.external_id || null,
+      line_items: saved.transfer.line_items,
+    });
+    const refreshed = (await getTransfer(saved.transfer.id)) || saved.transfer;
+    return jsonOk({
+      ...refreshed,
+      created: false,
+      shopify_auto_synced: shopify.status === "synced",
+      shopify_transfer: {
+        status: shopify.status,
+        external_id: shopify.external_id,
+        message: shopify.message,
+        mode: shopify.mode,
+        limitation: shopify.limitation || SHOPIFY_BASIC_PO_GAP,
+      },
+      limitation: SHOPIFY_BASIC_PO_GAP,
+      mode: saved.mode,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path.match(/^transfers\/[^/]+$/) && m === "DELETE") {
+    await deleteTransfer(segments[1]);
+    return jsonOk({ ok: true, id: segments[1], source: "next_dual_run" });
   }
 
   if (path === "discounts" && m === "GET") {
@@ -2582,9 +2878,11 @@ export async function dispatchV1(method, segments, request, body) {
       String(url.searchParams.get("whatsapp_ready") || "").toLowerCase(),
     );
     const listed = await listContacts({ q, whatsapp_ready: whatsappReady });
+    const capabilities = await getShopifySyncCapabilities().catch(() => null);
     return jsonOk({
       data: listed.data,
       mode: listed.mode,
+      shopify: capabilities?.areas?.customers || null,
       source: "next_dual_run",
     });
   }
@@ -2605,18 +2903,23 @@ export async function dispatchV1(method, segments, request, body) {
     if (contact) {
       try {
         shopifyCustomer = await upsertShopifyCustomer(contact);
-        if (shopifyCustomer?.external_id) {
+        if (shopifyCustomer) {
           const stamped = await upsertContacts([
             {
               ...contact,
               metadata: {
                 ...contact.metadata,
-                shopify_customer_id: shopifyCustomer.external_id,
+                shopify_customer_id:
+                  shopifyCustomer.external_id ||
+                  contact.metadata?.shopify_customer_id ||
+                  null,
                 shopify_customer_sync: {
                   status: shopifyCustomer.status,
                   synced_at: shopifyCustomer.synced_at,
                   message: shopifyCustomer.message,
                   mode: shopifyCustomer.mode,
+                  external_id: shopifyCustomer.external_id,
+                  link: shopifyCustomer.link || null,
                 },
               },
             },
@@ -2637,6 +2940,7 @@ export async function dispatchV1(method, segments, request, body) {
               external_id: shopifyCustomer.external_id,
               message: shopifyCustomer.message,
               mode: shopifyCustomer.mode,
+              link: shopifyCustomer.link || null,
             }
           : null,
         mode: result.mode,
@@ -2644,6 +2948,74 @@ export async function dispatchV1(method, segments, request, body) {
       },
       201,
     );
+  }
+
+  if (path.match(/^contacts\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
+    const listed = await listContacts({});
+    const existing = listed.data.find((x) => x.id === segments[1]);
+    if (!existing) return jsonErr("Contact not found.", 404);
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const result = await upsertContacts([
+      {
+        ...existing,
+        ...input,
+        id: existing.id,
+        metadata: {
+          ...(existing.metadata || {}),
+          ...((input.metadata && typeof input.metadata === "object"
+            ? input.metadata
+            : {}) || {}),
+        },
+      },
+    ]);
+    let contact = result.upserted[0] || existing;
+    let shopifyCustomer = null;
+    try {
+      shopifyCustomer = await upsertShopifyCustomer(contact);
+      if (shopifyCustomer) {
+        const stamped = await upsertContacts([
+          {
+            ...contact,
+            metadata: {
+              ...contact.metadata,
+              shopify_customer_id:
+                shopifyCustomer.external_id ||
+                contact.metadata?.shopify_customer_id ||
+                null,
+              shopify_customer_sync: {
+                status: shopifyCustomer.status,
+                synced_at: shopifyCustomer.synced_at,
+                message: shopifyCustomer.message,
+                mode: shopifyCustomer.mode,
+                external_id: shopifyCustomer.external_id,
+                link: shopifyCustomer.link || null,
+              },
+            },
+          },
+        ]);
+        contact = stamped.upserted[0] || contact;
+      }
+    } catch {
+      shopifyCustomer = null;
+    }
+    return jsonOk({
+      ...contact,
+      shopify_auto_synced: shopifyCustomer?.status === "synced",
+      shopify_customer: shopifyCustomer
+        ? {
+            status: shopifyCustomer.status,
+            external_id: shopifyCustomer.external_id,
+            message: shopifyCustomer.message,
+            mode: shopifyCustomer.mode,
+            link: shopifyCustomer.link || null,
+          }
+        : null,
+      mode: result.mode,
+      source: "next_dual_run",
+    });
   }
 
   if (path === "contacts/import" && m === "POST") {

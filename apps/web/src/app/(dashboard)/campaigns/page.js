@@ -121,10 +121,16 @@ export default function CampaignsPage() {
         },
       });
       setSendResult(result);
+      const growth = result.shopify_growth;
+      const growthNote = growth
+        ? growth.status === "synced"
+          ? ` · Shopify growth event #${growth.external_id || "ok"}`
+          : ` · Shopify growth: ${growth.message || growth.status}`
+        : "";
       setFlash(
         result.ok
-          ? `Broadcast sent to ${result.sent}/${result.attempted} recipients.`
-          : `Broadcast finished with ${result.failed} failed.`,
+          ? `Broadcast sent to ${result.sent}/${result.attempted} recipients.${growthNote}`
+          : `Broadcast finished with ${result.failed} failed.${growthNote}`,
       );
     } catch (err) {
       setFlash(err.message || "Broadcast failed");
@@ -324,6 +330,17 @@ export default function CampaignsPage() {
                 Last send · {sendResult.sent}/{sendResult.attempted} ·{" "}
                 {sendResult.media_attached ? "media attached" : "no media"}
               </p>
+              {sendResult.shopify_growth ? (
+                <p className="mt-1 text-muted">
+                  Shopify growth · {sendResult.shopify_growth.status}
+                  {sendResult.shopify_growth.external_id
+                    ? ` #${sendResult.shopify_growth.external_id}`
+                    : ""}
+                  {sendResult.shopify_growth.message
+                    ? ` — ${sendResult.shopify_growth.message}`
+                    : ""}
+                </p>
+              ) : null}
               {sendResult.product_urls?.length ? (
                 <p className="mt-1 text-muted">
                   URLs: {sendResult.product_urls.join(" · ")}

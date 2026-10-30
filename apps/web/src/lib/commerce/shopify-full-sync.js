@@ -16,6 +16,8 @@ import {
 } from "./shopify-admin-http.js";
 import { extractProductSpecs } from "./product-specs.js";
 import { updateDiscountShopifySync } from "./discounts-store.js";
+import { updateCollectionShopifySync } from "./collections-store.js";
+import { updateTransferShopifySync } from "./transfers-store.js";
 
 /** Scopes required per sync area (any-of). */
 export const SHOPIFY_AREA_SCOPES = {
@@ -128,6 +130,153 @@ function scopePendingState(area, externalId = null) {
     external_id: externalId,
     message: `Waiting credentials — ${area} needs Shopify scope (${needed}).`,
   });
+}
+
+/**
+ * Upsert a durable Triada collection record to Shopify custom_collections.
+ * Optionally links collects for product_ids that already have Shopify product ids.
+ * @param {import("./collections-store.js").CollectionRecord} collection
+ */
+export async function upsertShopifyCollectionRecord(collection) {
+  const runtime = await getShopifyRuntime();
+  const existingId =
+    collection.shopify_sync?.external_id != null
+      ? String(collection.shopify_sync.external_id)
+      : null;
+
+  if (!runtime.ready) {
+    const state = scopePendingState("collections", existingId);
+    await updateCollectionShopifySync(collection.id, state).catch(() => {});
+    return state;
+  }
+
+  const caps = await getShopifySyncCapabilities();
+  if (!caps.areas.collections?.ready) {
+    const state = scopePendingState("collections", existingId);
+    await updateCollectionShopifySync(collection.id, state).catch(() => {});
+    return state;
+  }
+
+  const title = String(collection.title || "").trim();
+  if (!title) {
+    const state = shopifySyncState({
+      status: "error",
+      mode: runtime.mode,
+      message: "Collection title required.",
+    });
+    await updateCollectionShopifySync(collection.id, state).catch(() => {});
+    return state;
+  }
+
+  try {
+    let collectionId = existingId;
+    /** @type {Record<string, unknown>} */
+    const payload = {
+      title,
+      published: collection.published !== false,
+      body_html:
+        collection.body_html ||
+        `<p>${title} — Triada Designs</p>`,
+    };
+    if (collection.handle) payload.handle = collection.handle;
+
+    if (!collectionId) {
+      const listed = await shopifyAdminRequest(
+        "GET",
+        `custom_collections.json?title=${encodeURIComponent(title)}&limit=1`,
+      );
+      if (listed.ok) {
+        const hit = Array.isArray(listed.json?.custom_collections)
+          ? listed.json.custom_collections[0]
+          : null;
+        if (hit?.id != null) collectionId = String(hit.id);
+      }
+    }
+
+    let result;
+    if (collectionId && !String(collectionId).startsWith("local-")) {
+      payload.id = Number(collectionId) || collectionId;
+      result = await shopifyAdminRequest(
+        "PUT",
+        `custom_collections/${encodeURIComponent(collectionId)}.json`,
+        { custom_collection: payload },
+      );
+    } else {
+      result = await shopifyAdminRequest("POST", "custom_collections.json", {
+        custom_collection: payload,
+      });
+    }
+
+    if (!result.ok) {
+      const state = isShopifyScopeFailure(result)
+        ? scopePendingState("collections", existingId)
+        : shopifySyncState({
+            status: "error",
+            mode: runtime.mode,
+            external_id: existingId,
+            message: `Collection HTTP ${result.status}`,
+          });
+      await updateCollectionShopifySync(collection.id, state).catch(() => {});
+      return state;
+    }
+
+    collectionId = String(
+      result.json?.custom_collection?.id || collectionId || "",
+    );
+
+    // Best-effort collect link for mapped Triada product ids → Shopify product ids.
+    const productIds = Array.isArray(collection.product_ids)
+      ? collection.product_ids
+      : [];
+    if (collectionId && productIds.length) {
+      const { listProducts } = await import("./products-store.js");
+      const listed = await listProducts();
+      for (const pid of productIds) {
+        const product = listed.data.find((p) => p.id === String(pid));
+        const shopifyProductId =
+          product?.channel_sync?.shopify?.external_id ||
+          product?.metadata?.shopify_product_id ||
+          null;
+        if (!shopifyProductId) continue;
+        const existingCollect = await shopifyAdminRequest(
+          "GET",
+          `collects.json?collection_id=${encodeURIComponent(collectionId)}&product_id=${encodeURIComponent(String(shopifyProductId))}`,
+        );
+        const hasCollect =
+          Array.isArray(existingCollect.json?.collects) &&
+          existingCollect.json.collects.length > 0;
+        if (!hasCollect) {
+          await shopifyAdminRequest("POST", "collects.json", {
+            collect: {
+              collection_id: Number(collectionId) || collectionId,
+              product_id: Number(shopifyProductId) || shopifyProductId,
+            },
+          }).catch(() => {});
+        }
+      }
+    }
+
+    const state = shopifySyncState({
+      status: "synced",
+      mode: runtime.mode,
+      external_id: collectionId,
+      link: collectionId
+        ? `https://${runtime.shop_domain}/admin/collections/${collectionId}`
+        : null,
+      message: `Collection “${title}” synced.`,
+    });
+    await updateCollectionShopifySync(collection.id, state).catch(() => {});
+    return state;
+  } catch (err) {
+    const state = shopifySyncState({
+      status: "error",
+      mode: runtime.mode,
+      external_id: existingId,
+      message: err instanceof Error ? err.message : "Collection sync failed",
+    });
+    await updateCollectionShopifySync(collection.id, state).catch(() => {});
+    return state;
+  }
 }
 
 /**
@@ -787,26 +936,51 @@ export async function upsertShopifyDraftOrderFromInvoice(invoice) {
  *   shopify_transfer_id?: string|null,
  * }} input
  */
+/**
+ * Basic-plan Purchase Orders gap message (shared by UI + sync).
+ */
+export const SHOPIFY_BASIC_PO_GAP =
+  "Purchase Orders Admin GraphQL is not available on Shopify plan Basic (Plus-oriented). Triada keeps PO/transfer records locally; inventory transfers sync when write_inventory_transfers is granted and line items include inventory_item_id.";
+
 export async function upsertShopifyInventoryTransfer(input = {}) {
   const runtime = await getShopifyRuntime();
   const existingId = input.shopify_transfer_id
     ? String(input.shopify_transfer_id)
     : null;
+  const recordId = input.id ? String(input.id) : null;
+  const stamp = async (state) => {
+    if (recordId) {
+      await updateTransferShopifySync(recordId, state).catch(() => {});
+    }
+    return state;
+  };
 
-  if (!runtime.ready) return scopePendingState("transfers", existingId);
+  if (!runtime.ready) {
+    return stamp({
+      ...scopePendingState("transfers", existingId),
+      limitation: SHOPIFY_BASIC_PO_GAP,
+    });
+  }
 
   const caps = await getShopifySyncCapabilities();
   if (!caps.areas.transfers?.ready) {
-    // Probe Plus purchaseOrders — expect undefinedField on Basic.
-    const poProbe = await shopifyAdminGraphql(
-      `{ __type(name: "QueryRoot") { fields { name } } }`,
-    ).catch(() => null);
-    void poProbe;
-    return {
+    return stamp({
       ...scopePendingState("transfers", existingId),
-      limitation:
-        "Purchase Orders Admin API is not available on this shop plan (Basic). Manufacturer jobs remain local until inventory transfer scopes are granted.",
-    };
+      limitation: SHOPIFY_BASIC_PO_GAP,
+    });
+  }
+
+  // Explicit purchase_order kind: never pretend GraphQL POs work on Basic.
+  if (String(input.kind || "").toLowerCase() === "purchase_order") {
+    return stamp({
+      ...shopifySyncState({
+        status: "pending_publish",
+        mode: runtime.mode,
+        external_id: existingId,
+        message: SHOPIFY_BASIC_PO_GAP,
+      }),
+      limitation: SHOPIFY_BASIC_PO_GAP,
+    });
   }
 
   try {
@@ -821,11 +995,14 @@ export async function upsertShopifyInventoryTransfer(input = {}) {
     // Without concrete inventory item GIDs from manufacturer payload, stay honest.
     const items = Array.isArray(input.line_items) ? input.line_items : [];
     if (!items.length || !items.every((i) => i.inventory_item_id)) {
-      return shopifySyncState({
-        status: "pending_publish",
-        mode: runtime.mode,
-        message:
-          "Transfer sync waiting for inventory_item_id mapping on manufacturer lines.",
+      return stamp({
+        ...shopifySyncState({
+          status: "pending_publish",
+          mode: runtime.mode,
+          message:
+            "Transfer sync waiting for inventory_item_id mapping on line items. Record saved locally.",
+        }),
+        limitation: SHOPIFY_BASIC_PO_GAP,
       });
     }
 
@@ -842,32 +1019,41 @@ export async function upsertShopifyInventoryTransfer(input = {}) {
     });
 
     if (!result.ok || result.access_denied) {
-      return scopePendingState("transfers", existingId);
+      return stamp({
+        ...scopePendingState("transfers", existingId),
+        limitation: SHOPIFY_BASIC_PO_GAP,
+      });
     }
     const payload = result.json?.data?.inventoryTransferCreate;
     const userErrors = Array.isArray(payload?.userErrors)
       ? payload.userErrors
       : [];
     if (userErrors.length) {
-      return shopifySyncState({
-        status: "error",
-        mode: runtime.mode,
-        message: userErrors.map((e) => e.message).join("; "),
-      });
+      return stamp(
+        shopifySyncState({
+          status: "error",
+          mode: runtime.mode,
+          message: userErrors.map((e) => e.message).join("; "),
+        }),
+      );
     }
     const gid = payload?.inventoryTransfer?.id;
-    return shopifySyncState({
-      status: "synced",
-      mode: runtime.mode,
-      external_id: gid ? String(gid).split("/").pop() : null,
-      message: "Inventory transfer created on Shopify.",
-    });
+    return stamp(
+      shopifySyncState({
+        status: "synced",
+        mode: runtime.mode,
+        external_id: gid ? String(gid).split("/").pop() : null,
+        message: "Inventory transfer created on Shopify.",
+      }),
+    );
   } catch (err) {
-    return shopifySyncState({
-      status: "error",
-      mode: runtime.mode,
-      message: err instanceof Error ? err.message : "Transfer sync failed",
-    });
+    return stamp(
+      shopifySyncState({
+        status: "error",
+        mode: runtime.mode,
+        message: err instanceof Error ? err.message : "Transfer sync failed",
+      }),
+    );
   }
 }
 
@@ -958,10 +1144,20 @@ export async function runShopifyAreaSync(syncType) {
   }
 
   if (type === "collections") {
+    const { listCollections } = await import("./collections-store.js");
     const { listProducts, upsertProduct } = await import("./products-store.js");
-    const listed = await listProducts();
     let upserted = 0;
     let failed = 0;
+
+    const durable = await listCollections();
+    for (const collection of durable.data) {
+      const result = await upsertShopifyCollectionRecord(collection);
+      if (result.status === "synced") upserted += 1;
+      else if (result.status === "error") failed += 1;
+    }
+
+    // Also push product-field collections for catalog rows that lack a durable record.
+    const listed = await listProducts();
     for (const product of listed.data) {
       const result = await upsertShopifyCollectionForProduct(product);
       if (result.status === "synced" && result.external_id) {
@@ -987,7 +1183,10 @@ export async function runShopifyAreaSync(syncType) {
         sync_type: "collections",
         records_upserted: upserted,
         records_failed: failed,
-        summary: { note: caps.areas.collections?.message },
+        summary: {
+          note: caps.areas.collections?.message,
+          durable_collections: durable.data.length,
+        },
       },
       status_payload: caps,
       capabilities: caps,
@@ -1137,22 +1336,61 @@ export async function runShopifyAreaSync(syncType) {
   }
 
   if (type === "transfers" || type === "purchase_orders") {
-    const result = await upsertShopifyInventoryTransfer({
-      title: "Triada manufacturer sync probe",
-      note: "Capability probe — no line items",
-    });
+    const { listTransfers } = await import("./transfers-store.js");
+    const listed = await listTransfers();
+    let upserted = 0;
+    let failed = 0;
+    let pending = 0;
+    for (const transfer of listed.data) {
+      const result = await upsertShopifyInventoryTransfer({
+        id: transfer.id,
+        title: transfer.title,
+        note: transfer.note,
+        kind: transfer.kind,
+        shopify_transfer_id: transfer.shopify_sync?.external_id || null,
+        line_items: transfer.line_items,
+      });
+      if (result.status === "synced") upserted += 1;
+      else if (result.status === "error") failed += 1;
+      else pending += 1;
+    }
+    if (!listed.data.length) {
+      const probe = await upsertShopifyInventoryTransfer({
+        title: "Triada transfer sync probe",
+        note: "No durable transfers yet — capability probe",
+        kind: type === "purchase_orders" ? "purchase_order" : "transfer",
+      });
+      return {
+        ok: true,
+        mode: caps.mode,
+        run: {
+          status: "completed",
+          mode: caps.areas.transfers?.ready ? caps.mode : "local_sim",
+          sync_type: type,
+          records_upserted: probe.status === "synced" ? 1 : 0,
+          records_failed: probe.status === "error" ? 1 : 0,
+          summary: {
+            note: probe.message,
+            limitation: probe.limitation || SHOPIFY_BASIC_PO_GAP,
+          },
+        },
+        status_payload: caps,
+        capabilities: caps,
+      };
+    }
     return {
-      ok: true,
+      ok: failed === 0,
       mode: caps.mode,
       run: {
         status: "completed",
         mode: caps.areas.transfers?.ready ? caps.mode : "local_sim",
         sync_type: type,
-        records_upserted: result.status === "synced" ? 1 : 0,
-        records_failed: result.status === "error" ? 1 : 0,
+        records_upserted: upserted,
+        records_failed: failed,
         summary: {
-          note: result.message,
-          limitation: result.limitation || caps.limitations?.[0],
+          note: caps.areas.transfers?.message,
+          pending,
+          limitation: SHOPIFY_BASIC_PO_GAP,
         },
       },
       status_payload: caps,

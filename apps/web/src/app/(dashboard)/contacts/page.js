@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
@@ -14,8 +15,37 @@ import {
   parseContactsUploadFile,
 } from "@/lib/crm/parse-contacts-file";
 
+const EMPTY_FORM = {
+  name: "",
+  email: "",
+  phone: "",
+  lifecycle_status: "lead",
+  marketing_opt_out: false,
+};
+
+function syncTone(status) {
+  if (status === "synced" || status === "connected") return "success";
+  if (status === "error") return "danger";
+  if (status === "awaiting_credentials" || status === "pending_publish") return "warning";
+  return "neutral";
+}
+
+function syncLabel(status) {
+  if (status === "synced") return "Synced";
+  if (status === "awaiting_credentials") return "Waiting credentials";
+  if (status === "pending_publish") return "Pending";
+  if (status === "error") return "Error";
+  return status || "—";
+}
+
+function shopifySyncOf(contact) {
+  const meta = contact?.metadata && typeof contact.metadata === "object" ? contact.metadata : {};
+  return meta.shopify_customer_sync || {};
+}
+
 export default function ContactsPage() {
   const [items, setItems] = useState([]);
+  const [shopify, setShopify] = useState(null);
   const [q, setQ] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -23,6 +53,10 @@ export default function ContactsPage() {
   const [syncingWa, setSyncingWa] = useState(false);
   const [uploadNotice, setUploadNotice] = useState("");
   const [invalidRows, setInvalidRows] = useState([]);
+  const [busy, setBusy] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
   const fileRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -32,6 +66,7 @@ export default function ContactsPage() {
       const query = q ? `?q=${encodeURIComponent(q)}` : "";
       const response = await apiFetch(`/v1/contacts${query}`);
       setItems(response.data || []);
+      setShopify(response.shopify || null);
     } catch (err) {
       setError(err.message || "Failed to load contacts");
     } finally {
@@ -42,6 +77,64 @@ export default function ContactsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  function openCreate() {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setShowForm(true);
+    setUploadNotice("");
+  }
+
+  function openEdit(contact) {
+    setEditingId(contact.id);
+    setForm({
+      name: contact.name || "",
+      email: contact.email || "",
+      phone: contact.phone_e164 || contact.phone || "",
+      lifecycle_status: contact.lifecycle_status || "lead",
+      marketing_opt_out: Boolean(contact.marketing_opt_out),
+    });
+    setShowForm(true);
+  }
+
+  function updateField(name, value) {
+    setForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  async function submitForm(event) {
+    event.preventDefault();
+    setBusy("save");
+    setError("");
+    setUploadNotice("");
+    const payload = {
+      name: form.name.trim(),
+      email: form.email.trim() || null,
+      phone: form.phone.trim() || null,
+      lifecycle_status: form.lifecycle_status,
+      marketing_opt_out: Boolean(form.marketing_opt_out),
+      source: editingId ? undefined : "manual",
+    };
+    try {
+      const path = editingId ? `/v1/contacts/${editingId}` : "/v1/contacts";
+      const result = await apiFetch(path, {
+        method: editingId ? "PUT" : "POST",
+        body: payload,
+      });
+      setUploadNotice(
+        result.shopify_auto_synced
+          ? `Contact saved · Shopify customer synced.`
+          : `Contact saved${result.shopify_customer?.message ? ` · ${result.shopify_customer.message}` : ""}.`,
+      );
+      setShowForm(false);
+      setEditingId(null);
+      setForm(EMPTY_FORM);
+      await load();
+    } catch (err) {
+      setError(err.message || "Save failed");
+    } finally {
+      setBusy("");
+    }
+  }
 
   async function syncFromWhatsApp() {
     setSyncingWa(true);
@@ -124,9 +217,9 @@ export default function ContactsPage() {
   return (
     <DashboardShell
       title="Contacts"
-      description="CRM contacts for WhatsApp campaigns. Sync from WhatsApp or upload CSV/Excel."
+      description="CRM contacts for WhatsApp and Shopify customers. Create/edit auto-upserts Shopify customers when Connected."
       actions={
-        <div className="flex w-full max-w-2xl flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="flex w-full max-w-3xl flex-col gap-2 sm:flex-row sm:items-end">
           <div className="w-full max-w-xs">
             <Input
               label="Search"
@@ -137,6 +230,11 @@ export default function ContactsPage() {
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {shopify ? (
+              <Badge tone={syncTone(shopify.status)}>
+                Shopify · {shopify.label || syncLabel(shopify.status)}
+              </Badge>
+            ) : null}
             <input
               ref={fileRef}
               type="file"
@@ -144,9 +242,13 @@ export default function ContactsPage() {
               className="hidden"
               onChange={onUploadFile}
             />
+            <Button size="sm" onClick={openCreate}>
+              Add contact
+            </Button>
             <Button
               type="button"
               size="sm"
+              variant="secondary"
               disabled={uploading || syncingWa}
               onClick={() => fileRef.current?.click()}
             >
@@ -159,8 +261,13 @@ export default function ContactsPage() {
               disabled={uploading || syncingWa}
               onClick={syncFromWhatsApp}
             >
-              {syncingWa ? "Syncing…" : "Sync WhatsApp contacts"}
+              {syncingWa ? "Syncing…" : "Sync WhatsApp"}
             </Button>
+            <Link href="/integrations/shopify">
+              <Button size="sm" variant="secondary">
+                Shopify sync
+              </Button>
+            </Link>
           </div>
         </div>
       }
@@ -169,6 +276,74 @@ export default function ContactsPage() {
         <p className="mb-3 rounded-md border border-line bg-stone/30 px-3 py-2 text-sm text-ink">
           {uploadNotice}
         </p>
+      ) : null}
+
+      {showForm ? (
+        <form onSubmit={submitForm} className="mb-6 space-y-4 border-b border-line pb-6">
+          <h2 className="font-display text-2xl text-ink">
+            {editingId ? "Edit contact" : "New contact"}
+          </h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input
+              label="Name"
+              name="name"
+              value={form.name}
+              onChange={(e) => updateField("name", e.target.value)}
+              placeholder="Customer name"
+            />
+            <Input
+              label="Email"
+              name="email"
+              type="email"
+              value={form.email}
+              onChange={(e) => updateField("email", e.target.value)}
+            />
+            <Input
+              label="Phone"
+              name="phone"
+              value={form.phone}
+              onChange={(e) => updateField("phone", e.target.value)}
+              hint="E.164 preferred (+971…)."
+            />
+            <label className="block space-y-1.5">
+              <span className="block text-[13px] font-medium text-ink">Lifecycle</span>
+              <select
+                name="lifecycle_status"
+                value={form.lifecycle_status}
+                onChange={(e) => updateField("lifecycle_status", e.target.value)}
+                className="ops-field h-10 w-full px-3 text-ink focus:border-brown focus:outline-none"
+              >
+                <option value="lead">Lead</option>
+                <option value="customer">Customer</option>
+                <option value="vip">VIP</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 pt-7 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={form.marketing_opt_out}
+                onChange={(e) => updateField("marketing_opt_out", e.target.checked)}
+              />
+              Marketing opt-out
+            </label>
+          </div>
+          <div className="ops-actions">
+            <Button type="submit" disabled={busy === "save"}>
+              {busy === "save" ? "Saving…" : editingId ? "Save & sync" : "Create & sync"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setShowForm(false);
+                setEditingId(null);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
       ) : null}
 
       {invalidRows.length > 0 ? (
@@ -206,7 +381,7 @@ export default function ContactsPage() {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No contacts"
-          description="Sync WhatsApp contacts from Meta, upload CSV/Excel, or create a contact from inbox."
+          description="Add a contact, sync WhatsApp, or upload CSV/Excel. Shopify customers sync on create/edit when Connected."
         />
       ) : null}
       {!loading && !error && items.length > 0 ? (
@@ -218,29 +393,44 @@ export default function ContactsPage() {
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Phone (E.164)</th>
                 <th className="px-4 py-3 font-medium">WhatsApp</th>
+                <th className="px-4 py-3 font-medium">Shopify</th>
                 <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Source</th>
+                <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((contact) => (
-                <tr key={contact.id} className="border-b border-line/70">
-                  <td className="px-4 py-3 font-medium">{contact.name || "—"}</td>
-                  <td className="px-4 py-3 text-muted">{contact.email || "—"}</td>
-                  <td className="px-4 py-3 text-muted">
-                    {contact.phone_e164 || contact.phone || "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {contact.whatsapp_ready ? (
-                      <Badge tone="success">ready</Badge>
-                    ) : (
-                      <Badge tone="warning">unavailable</Badge>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 capitalize">{contact.lifecycle_status || "—"}</td>
-                  <td className="px-4 py-3 capitalize text-muted">{contact.source || "—"}</td>
-                </tr>
-              ))}
+              {items.map((contact) => {
+                const sync = shopifySyncOf(contact);
+                const shopifyId = contact.metadata?.shopify_customer_id;
+                return (
+                  <tr key={contact.id} className="border-b border-line/70">
+                    <td className="px-4 py-3 font-medium">{contact.name || "—"}</td>
+                    <td className="px-4 py-3 text-muted">{contact.email || "—"}</td>
+                    <td className="px-4 py-3 text-muted">
+                      {contact.phone_e164 || contact.phone || "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {contact.whatsapp_ready ? (
+                        <Badge tone="success">ready</Badge>
+                      ) : (
+                        <Badge tone="warning">unavailable</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge tone={syncTone(sync.status)}>{syncLabel(sync.status)}</Badge>
+                      {shopifyId ? (
+                        <p className="mt-1 text-xs text-muted">#{shopifyId}</p>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 capitalize">{contact.lifecycle_status || "—"}</td>
+                    <td className="px-4 py-3">
+                      <Button size="sm" variant="secondary" onClick={() => openEdit(contact)}>
+                        Edit
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

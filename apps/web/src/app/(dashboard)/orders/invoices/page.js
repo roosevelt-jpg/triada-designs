@@ -190,7 +190,17 @@ export default function InvoiceEditorPage() {
         });
       }
       const inv = result.invoice;
-      setNotice(`Saved ${inv?.invoice_number || payload.number}. Logo header stays branded; address and contact use your text or Triada defaults.`);
+      const finance = result.shopify_finance;
+      const financeNote = finance
+        ? finance.status === "synced"
+          ? ` · Shopify draft order #${finance.external_id || "ok"}`
+          : ` · Shopify finance: ${finance.message || finance.status}`
+        : result.shopify_auto_synced
+          ? " · Shopify draft order synced"
+          : "";
+      setNotice(
+        `Saved ${inv?.invoice_number || payload.number}.${financeNote} Logo header stays branded; address and contact use your text or Triada defaults.`,
+      );
       if (inv) {
         setForm(invoiceToForm(inv));
         setPreviewHtml(inv.html || "");
@@ -439,7 +449,16 @@ export default function InvoiceEditorPage() {
                 {invoices.length === 0 ? (
                   <p className="px-5 py-4 text-sm text-muted">No invoices yet — create one with the form above.</p>
                 ) : null}
-                {invoices.map((inv) => (
+                {invoices.map((inv) => {
+                  const financeSync =
+                    inv.metadata?.shopify_finance_sync ||
+                    inv.shopify_finance_sync ||
+                    null;
+                  const draftId =
+                    inv.metadata?.shopify_draft_order_id ||
+                    financeSync?.external_id ||
+                    null;
+                  return (
                   <div
                     key={inv.id}
                     className="flex flex-wrap items-center justify-between gap-2 px-5 py-3"
@@ -452,10 +471,24 @@ export default function InvoiceEditorPage() {
                       <p className="font-medium text-ink">{inv.invoice_number || inv.id}</p>
                       <p className="text-sm text-muted">
                         {inv.customer_name || "Client"} · {inv.total} {inv.currency}
+                        {draftId ? ` · Shopify draft #${draftId}` : ""}
                       </p>
                     </button>
                     <div className="flex items-center gap-2">
                       <Badge>{inv.status}</Badge>
+                      {financeSync?.status ? (
+                        <Badge
+                          tone={
+                            financeSync.status === "synced"
+                              ? "success"
+                              : financeSync.status === "error"
+                                ? "danger"
+                                : "warning"
+                          }
+                        >
+                          Shopify · {financeSync.status}
+                        </Badge>
+                      ) : null}
                       <Button
                         size="sm"
                         variant="secondary"
@@ -466,7 +499,8 @@ export default function InvoiceEditorPage() {
                       </Button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           </div>
