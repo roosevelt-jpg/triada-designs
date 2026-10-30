@@ -386,8 +386,13 @@ export async function listConversations(opts = {}) {
     .trim()
     .toLowerCase();
   if (!channel) return data;
-  return data.filter(
-    (c) => String(c.channel || "").toLowerCase() === channel,
+  // Page messaging stores as messenger; Inbox "Facebook" filter must include it.
+  const aliases =
+    channel === "facebook" || channel === "messenger"
+      ? new Set(["facebook", "messenger"])
+      : new Set([channel]);
+  return data.filter((c) =>
+    aliases.has(String(c.channel || "").toLowerCase()),
   );
 }
 

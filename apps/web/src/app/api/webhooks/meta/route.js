@@ -123,7 +123,8 @@ export async function POST(request) {
       payload,
       rawBody,
       headers,
-      background_send: false,
+      // Detach Graph / Cloud sends so inbox persist is not blocked by provider latency.
+      background_send: true,
     });
   });
 

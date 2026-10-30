@@ -59,6 +59,95 @@ if (igNorm.length !== 1 || igNorm[0].channel !== "instagram") {
 }
 console.log("ok IG normalize", igNorm[0].body, igNorm[0].external_user_id);
 
+// Instagram Platform / Graph webhooks reference uses entry.changes[field=messages].
+const igChangesPayload = {
+  object: "instagram",
+  entry: [
+    {
+      id: "IG_SMOKE_ACCOUNT",
+      time: Date.now(),
+      changes: [
+        {
+          field: "messages",
+          value: {
+            sender: { id: "IG_CHANGES_USER" },
+            recipient: { id: "IG_SMOKE_ACCOUNT" },
+            timestamp: Date.now(),
+            message: {
+              mid: `mid.ig.changes.${Date.now()}`,
+              text: "Hi from changes",
+            },
+          },
+        },
+      ],
+    },
+  ],
+};
+const igChangesNorm = normalizeMetaInboundMessages(igChangesPayload);
+if (
+  igChangesNorm.length !== 1 ||
+  igChangesNorm[0].channel !== "instagram" ||
+  igChangesNorm[0].body !== "Hi from changes"
+) {
+  throw new Error(
+    `IG changes normalize failed: ${JSON.stringify(igChangesNorm)}`,
+  );
+}
+console.log("ok IG changes normalize", igChangesNorm[0].external_user_id);
+
+const igStandbyPayload = {
+  object: "instagram",
+  entry: [
+    {
+      id: "IG_SMOKE_ACCOUNT",
+      time: Date.now(),
+      standby: [
+        {
+          sender: { id: "IG_STANDBY_USER" },
+          recipient: { id: "IG_SMOKE_ACCOUNT" },
+          timestamp: Date.now(),
+          message: {
+            mid: `mid.ig.standby.${Date.now()}`,
+            text: "Hi from standby",
+          },
+        },
+      ],
+    },
+  ],
+};
+const igStandbyNorm = normalizeMetaInboundMessages(igStandbyPayload);
+if (
+  igStandbyNorm.length !== 1 ||
+  igStandbyNorm[0].channel !== "instagram" ||
+  igStandbyNorm[0].body !== "Hi from standby"
+) {
+  throw new Error(
+    `IG standby normalize failed: ${JSON.stringify(igStandbyNorm)}`,
+  );
+}
+console.log("ok IG standby normalize", igStandbyNorm[0].external_user_id);
+
+const igChangesIngested = await ingestMetaWebhook({
+  payload: igChangesPayload,
+  rawBody: JSON.stringify(igChangesPayload),
+  headers: {},
+});
+if (!igChangesIngested.ok || !(igChangesIngested.replied >= 1)) {
+  throw new Error(
+    `IG changes webhook ingest failed: ${JSON.stringify(igChangesIngested)}`,
+  );
+}
+if (igChangesIngested.automations?.[0]?.agent_key !== "ai_support") {
+  throw new Error(
+    `IG changes agent not Support: ${JSON.stringify(igChangesIngested.automations)}`,
+  );
+}
+console.log("ok IG changes webhook ingest", {
+  replied: igChangesIngested.replied,
+  agent: igChangesIngested.automations?.[0]?.agent_key,
+  fast_path: igChangesIngested.automations?.[0]?.fast_path,
+});
+
 const igHandled = await handleInboundPageMessaging({
   channel: "instagram",
   body: "Hi",

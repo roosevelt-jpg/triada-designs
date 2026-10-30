@@ -14,7 +14,7 @@ const CHANNEL_FILTERS = [
   { value: "", label: "All channels" },
   { value: "webchat", label: "Webchat" },
   { value: "email", label: "Email" },
-  { value: "facebook", label: "Facebook" },
+  { value: "facebook", label: "Facebook / Messenger" },
   { value: "instagram", label: "Instagram" },
   { value: "whatsapp", label: "WhatsApp" },
   { value: "telegram", label: "Telegram" },
