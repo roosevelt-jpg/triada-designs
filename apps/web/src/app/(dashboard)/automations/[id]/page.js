@@ -368,10 +368,28 @@ export default function AutomationBuilderPage() {
       </div>
 
       {loading ? <Skeleton className="h-72" /> : null}
-      {error ? <ErrorState message={error} onRetry={load} /> : null}
+      {error ? (
+        <div className="space-y-4">
+          <ErrorState message={error} onRetry={load} />
+          <p className="text-sm text-muted">
+            <Link href="/automations" className="text-brown-dark hover:text-ink">
+              ← Back to workflows
+            </Link>
+            {" · "}
+            Create a new blank canvas or ask the assistant to rebuild it.
+          </p>
+        </div>
+      ) : null}
 
       {!loading && !workflow && !error ? (
-        <EmptyState title="Workflow not found" description="It may have been deleted." />
+        <EmptyState
+          title="Workflow not found"
+          description="It may have been deleted. Start a new blank canvas from Workflows."
+          actionLabel="All workflows"
+          onAction={() => {
+            window.location.href = "/automations";
+          }}
+        />
       ) : null}
 
       {!loading && workflow ? (

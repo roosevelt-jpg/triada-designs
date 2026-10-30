@@ -183,13 +183,84 @@ export default function AutomationsPage() {
   return (
     <DashboardShell
       title="Workflows"
-      description="Describe a flow for the assistant to build end-to-end, or start a blank canvas. Review, then publish to live — JSON is never the editing surface."
+      description="Start a blank drag-and-drop canvas, or describe a flow for the assistant. Review on the builder, then Publish to live."
       actions={
         <Button size="sm" onClick={openCreate} disabled={creating || Boolean(busy)}>
           New workflow
         </Button>
       }
     >
+      <section className="mb-8 space-y-3 border-b border-line pb-8">
+        <h2 className="font-display text-2xl text-ink">New workflow</h2>
+        <p className="text-sm text-muted">
+          Open a blank visual canvas, drag actions from the palette, connect steps, then Publish to
+          live when ready.
+        </p>
+        {showCreate ? (
+          <form
+            onSubmit={createWorkflow}
+            className="grid gap-3 md:grid-cols-2"
+          >
+            <label className="block text-sm md:col-span-1">
+              <span className="mb-1 block text-muted">Name</span>
+              <input
+                className="ops-field w-full px-3 py-2"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. WhatsApp first reply"
+                autoFocus
+              />
+            </label>
+            <label className="block text-sm md:col-span-1">
+              <span className="mb-1 block text-muted">Trigger</span>
+              <select
+                className="ops-field w-full px-3 py-2"
+                value={form.trigger_type}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, trigger_type: e.target.value }))
+                }
+              >
+                {(triggerTypes.length ? triggerTypes : TRIGGER_TYPES).map((t) => (
+                  <option key={t} value={t}>
+                    {String(t).replaceAll("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm md:col-span-2">
+              <span className="mb-1 block text-muted">Description</span>
+              <input
+                className="ops-field w-full px-3 py-2"
+                value={form.description}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, description: e.target.value }))
+                }
+                placeholder="Optional short note"
+              />
+            </label>
+            <div className="flex flex-wrap gap-2 md:col-span-2">
+              <Button type="submit" disabled={creating}>
+                {creating ? "Creating…" : "Create & open builder"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={creating}
+                onClick={() => setShowCreate(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <div className="ops-actions">
+            <Button onClick={openCreate} disabled={creating || Boolean(busy)}>
+              Start blank canvas
+            </Button>
+          </div>
+        )}
+      </section>
+
       <section className="mb-8 space-y-3 border-b border-line pb-8">
         <h2 className="font-display text-2xl text-ink">Workflow Builder Assistant</h2>
         <p className="text-sm text-muted">
@@ -221,71 +292,14 @@ export default function AutomationsPage() {
           {notice}
         </p>
       ) : null}
-      {showCreate ? (
-        <form
-          onSubmit={createWorkflow}
-          className="surface-card mb-5 grid gap-3 p-4 md:grid-cols-2 md:p-5"
-        >
-          <label className="block text-sm md:col-span-1">
-            <span className="mb-1 block text-muted">Name</span>
-            <input
-              className="ops-field w-full px-3 py-2"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. WhatsApp first reply"
-              autoFocus
-            />
-          </label>
-          <label className="block text-sm md:col-span-1">
-            <span className="mb-1 block text-muted">Trigger</span>
-            <select
-              className="ops-field w-full px-3 py-2"
-              value={form.trigger_type}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, trigger_type: e.target.value }))
-              }
-            >
-              {(triggerTypes.length ? triggerTypes : TRIGGER_TYPES).map((t) => (
-                <option key={t} value={t}>
-                  {String(t).replaceAll("_", " ")}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm md:col-span-2">
-            <span className="mb-1 block text-muted">Description</span>
-            <input
-              className="ops-field w-full px-3 py-2"
-              value={form.description}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, description: e.target.value }))
-              }
-              placeholder="Optional short note"
-            />
-          </label>
-          <div className="flex flex-wrap gap-2 md:col-span-2">
-            <Button type="submit" disabled={creating}>
-              {creating ? "Creating…" : "Create & open builder"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={creating}
-              onClick={() => setShowCreate(false)}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      ) : null}
 
       {loading ? <Skeleton className="h-64" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
-      {!loading && !error && items.length === 0 && !showCreate ? (
+      {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No workflows yet"
-          description="Create a workflow, then edit it in the visual builder and publish to live."
-          actionLabel="Create workflow"
+          description="Start a blank canvas or use the assistant, then Publish to live from the builder."
+          actionLabel="Start blank canvas"
           onAction={openCreate}
         />
       ) : null}

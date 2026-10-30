@@ -39,6 +39,25 @@ function newId() {
 }
 
 /**
+ * Columns that exist on public.automations (see live_catalogs migration).
+ * API-facing fields like version / run_count / activated_at / node_* live in
+ * metadata so PostgREST upserts do not reject unknown columns and silently
+ * fall through to ephemeral /tmp local_mock on Vercel.
+ */
+const DB_COLUMNS = new Set([
+  "id",
+  "workspace_id",
+  "name",
+  "status",
+  "trigger_type",
+  "description",
+  "definition",
+  "metadata",
+  "created_at",
+  "updated_at",
+]);
+
+/**
  * @param {Partial<WorkflowRecord> & Record<string, unknown>} input
  */
 export function shapeWorkflow(input = {}) {
@@ -59,6 +78,33 @@ export function shapeWorkflow(input = {}) {
       ? Object.keys(/** @type {Record<string, unknown>} */ (definition.nodes))
       : [];
 
+  const metadata =
+    input.metadata && typeof input.metadata === "object"
+      ? /** @type {Record<string, unknown>} */ ({ ...input.metadata })
+      : {};
+
+  const version = Math.max(
+    1,
+    Number(input.version ?? metadata.version) || 1,
+  );
+  const runCount = Math.max(
+    0,
+    Number(input.run_count ?? metadata.run_count) || 0,
+  );
+  const activatedAt = input.activated_at
+    ? String(input.activated_at)
+    : metadata.activated_at
+      ? String(metadata.activated_at)
+      : null;
+
+  // Keep durable extras inside metadata for round-trips through Supabase.
+  metadata.version = version;
+  metadata.run_count = runCount;
+  metadata.activated_at = activatedAt;
+  if (!Array.isArray(metadata.node_summary)) {
+    metadata.node_summary = nodes;
+  }
+
   return {
     id: String(input.id || newId()),
     workspace_id: String(input.workspace_id || WORKSPACE_ID),
@@ -70,18 +116,48 @@ export function shapeWorkflow(input = {}) {
         : null,
     description: String(input.description || "").trim(),
     definition,
-    metadata:
-      input.metadata && typeof input.metadata === "object"
-        ? /** @type {Record<string, unknown>} */ (input.metadata)
-        : {},
-    version: Math.max(1, Number(input.version) || 1),
-    run_count: Math.max(0, Number(input.run_count) || 0),
+    metadata,
+    version,
+    run_count: runCount,
     node_summary: nodes,
     node_count: nodes.length,
-    activated_at: input.activated_at ? String(input.activated_at) : null,
+    activated_at: activatedAt,
     created_at: String(input.created_at || nowIso()),
     updated_at: String(input.updated_at || nowIso()),
   };
+}
+
+/**
+ * Strip API-only fields so upsert matches the automations table schema.
+ * @param {ReturnType<typeof shapeWorkflow>} workflow
+ */
+export function toAutomationsDbRow(workflow) {
+  const row = {
+    id: workflow.id,
+    workspace_id: workflow.workspace_id || WORKSPACE_ID,
+    name: workflow.name,
+    status: workflow.status,
+    trigger_type: workflow.trigger_type,
+    description: workflow.description || "",
+    definition: workflow.definition || {},
+    metadata: {
+      ...(workflow.metadata && typeof workflow.metadata === "object"
+        ? workflow.metadata
+        : {}),
+      version: workflow.version ?? 1,
+      run_count: workflow.run_count ?? 0,
+      activated_at: workflow.activated_at || null,
+      node_summary: Array.isArray(workflow.node_summary)
+        ? workflow.node_summary
+        : [],
+    },
+    created_at: workflow.created_at || nowIso(),
+    updated_at: workflow.updated_at || nowIso(),
+  };
+  for (const key of Object.keys(row)) {
+    if (!DB_COLUMNS.has(key)) delete row[key];
+  }
+  return row;
 }
 
 async function readLocal() {
@@ -174,18 +250,21 @@ export async function upsertWorkflow(input) {
   });
 
   if (hasSupabaseAdminCredentials()) {
-    try {
-      const supabase = createAdminSupabaseClient();
-      if (supabase) {
-        const { error } = await supabase.from(TABLE).upsert({
-          ...workflow,
-          definition: workflow.definition,
-          metadata: workflow.metadata,
-        });
-        if (!error) return { mode: "supabase", workflow, created };
+    const supabase = createAdminSupabaseClient();
+    if (supabase) {
+      const row = toAutomationsDbRow(workflow);
+      const { error } = await supabase.from(TABLE).upsert(row, {
+        onConflict: "id",
+      });
+      if (error) {
+        const err = new Error(
+          error.message || "Failed to persist workflow to durable store.",
+        );
+        err.code = "automations_persist_failed";
+        err.status = 502;
+        throw err;
       }
-    } catch {
-      /* fall through */
+      return { mode: "supabase", workflow, created };
     }
   }
 
