@@ -3670,7 +3670,11 @@ export async function dispatchV1(method, segments, request, body) {
       listTrainingDocs(),
     ]);
     const data = [
-      ...listed.data,
+      ...listed.data.map((row) => ({
+        ...row,
+        editable: true,
+        read_only: false,
+      })),
       ...training.data.map((doc) => ({
         id: doc.id,
         title: doc.title,
@@ -3680,7 +3684,8 @@ export async function dispatchV1(method, segments, request, body) {
         tags: doc.tags,
         category: doc.category,
         updated_at: doc.updated_at,
-        read_only: true,
+        editable: true,
+        read_only: false,
       })),
     ];
     return jsonOk({
@@ -3696,7 +3701,38 @@ export async function dispatchV1(method, segments, request, body) {
         ? /** @type {Record<string, unknown>} */ (body)
         : {};
     if (String(input.source_type || "faq") === "training_doc") {
-      return jsonErr("Create training docs on /agents/training.", 422);
+      const title = String(input.title || "").trim();
+      const docBody = String(input.body || "").trim();
+      if (!title || !docBody) {
+        return jsonErr("title and body are required.", 422);
+      }
+      const saved = await upsertTrainingDoc({
+        ...input,
+        title,
+        body: docBody,
+        category: input.category || "general",
+      });
+      await appendAuditEvent({
+        action: "knowledge.create",
+        actor: "admin",
+        entity_type: "training_doc",
+        entity_id: saved.doc.id,
+      }).catch(() => {});
+      return jsonOk(
+        {
+          id: saved.doc.id,
+          title: saved.doc.title,
+          source_type: "training_doc",
+          status: saved.doc.status,
+          body: saved.doc.body,
+          tags: saved.doc.tags,
+          category: saved.doc.category,
+          mode: saved.storage === "supabase" ? "supabase" : saved.storage,
+          created: true,
+          editable: true,
+        },
+        201,
+      );
     }
     const result = await upsertKnowledge(input);
     await appendAuditEvent({
@@ -3712,11 +3748,42 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path.match(/^knowledge\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
+    const id = segments[1];
     const input =
       body && typeof body === "object"
         ? /** @type {Record<string, unknown>} */ (body)
         : {};
-    const result = await upsertKnowledge({ ...input, id: segments[1] });
+    const wantsTraining =
+      String(input.source_type || "") === "training_doc" ||
+      String(id || "").startsWith("tdoc-");
+    if (wantsTraining) {
+      const saved = await upsertTrainingDoc({ ...input, id });
+      await appendAuditEvent({
+        action: "knowledge.update",
+        actor: "admin",
+        entity_type: "training_doc",
+        entity_id: saved.doc.id,
+      }).catch(() => {});
+      return jsonOk({
+        id: saved.doc.id,
+        title: saved.doc.title,
+        source_type: "training_doc",
+        status: saved.doc.status,
+        body: saved.doc.body,
+        tags: saved.doc.tags,
+        category: saved.doc.category,
+        mode: saved.storage === "supabase" ? "supabase" : saved.storage,
+        created: false,
+        editable: true,
+      });
+    }
+    const result = await upsertKnowledge({ ...input, id });
+    await appendAuditEvent({
+      action: "knowledge.update",
+      actor: "admin",
+      entity_type: "knowledge",
+      entity_id: result.knowledge.id,
+    }).catch(() => {});
     return jsonOk({
       ...result.knowledge,
       mode: result.mode,
@@ -3725,15 +3792,31 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path.match(/^knowledge\/[^/]+$/) && m === "DELETE") {
-    const result = await deleteKnowledge(segments[1]);
+    const id = segments[1];
+    if (String(id || "").startsWith("tdoc-")) {
+      const result = await deleteTrainingDoc(id);
+      if (!result.ok) return jsonErr(result.message || "Delete failed", 400);
+      await appendAuditEvent({
+        action: "knowledge.delete",
+        actor: "admin",
+        entity_type: "training_doc",
+        entity_id: id,
+      }).catch(() => {});
+      return jsonOk({
+        ok: true,
+        id,
+        mode: result.storage === "supabase" ? "supabase" : result.storage,
+      });
+    }
+    const result = await deleteKnowledge(id);
     if (!result.ok) return jsonErr(result.message || "Delete failed", 400);
     await appendAuditEvent({
       action: "knowledge.delete",
       actor: "admin",
       entity_type: "knowledge",
-      entity_id: segments[1],
+      entity_id: id,
     }).catch(() => {});
-    return jsonOk({ ok: true, id: segments[1], mode: result.mode });
+    return jsonOk({ ok: true, id, mode: result.mode });
   }
 
   if (path === "calendar" && m === "GET") {
