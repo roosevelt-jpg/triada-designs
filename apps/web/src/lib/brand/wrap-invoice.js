@@ -25,6 +25,9 @@ import { wrapEmailMessage } from "./wrap-email";
  *   notes?: string,
  *   greeting?: string,
  *   preparedFor?: string,
+ *   addressLine?: string,
+ *   opsEmail?: string,
+ *   phones?: string,
  * }} InvoiceDocInput
  */
 
@@ -50,6 +53,11 @@ export function wrapInvoiceDocument(input = {}) {
     : input.customerName
       ? `Prepared for <strong>${escapeHtml(input.customerName)}</strong>`
       : "Prepared for our valued client";
+  const addressLine =
+    String(input.addressLine || "").trim() || BRAND.address.singleLine;
+  const opsEmail = String(input.opsEmail || "").trim() || BRAND.opsEmail;
+  const phonesDisplay =
+    String(input.phones || "").trim() || BRAND.phones.join(" · ");
 
   const rowsHtml =
     lines.length > 0
@@ -120,8 +128,8 @@ export function wrapInvoiceDocument(input = {}) {
     ${input.notes ? `<p style="font-size:13px;color:${BRAND.colors.brown};">${escapeHtml(input.notes)}</p>` : ""}
     <div class="footer">
       <strong style="color:${BRAND.colors.ink};">${escapeHtml(BRAND.name)}</strong><br/>
-      ${escapeHtml(BRAND.address.singleLine)}<br/>
-      ${escapeHtml(BRAND.opsEmail)} · ${escapeHtml(BRAND.phones.join(" · "))}<br/>
+      ${escapeHtml(addressLine)}<br/>
+      ${escapeHtml(opsEmail)} · ${escapeHtml(phonesDisplay)}<br/>
       ${escapeHtml(BRAND.siteUrl)}
     </div>
   </div>

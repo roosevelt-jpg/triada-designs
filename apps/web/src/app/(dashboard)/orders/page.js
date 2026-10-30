@@ -168,7 +168,7 @@ export default function OrdersPage() {
                 <div>
                   <h2 className="ops-section-title">Invoices</h2>
                   <p className="mt-1 text-sm text-muted">
-                    Branded with Triada logo header, warm greeting, and address footer. Edit every content field in plain text.
+                    Branded with Triada logo header and warm greeting. Address and contact are editable plain text in the invoice editor.
                   </p>
                 </div>
                 <Link href="/orders/invoices">

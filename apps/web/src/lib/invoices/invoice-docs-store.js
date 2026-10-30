@@ -1,6 +1,7 @@
 /**
  * Admin-editable invoice / receipt content (plain-text fields).
- * Brand chrome (logo header, address footer, warm greeting defaults) stays in wrap-invoice.
+ * Brand chrome (logo header, warm greeting defaults) stays in wrap-invoice.
+ * Address / ops email / phones may be overridden per invoice (blank = brand defaults).
  * Persists to Supabase when keyed, else local mock under .triada-local.
  */
 
@@ -42,6 +43,9 @@ const LOCAL_FILE = path.join(LOCAL_DIR, "invoice-docs.json");
  *   notes: string,
  *   greeting: string,
  *   prepared_for: string,
+ *   address_line: string,
+ *   ops_email: string,
+ *   phones: string,
  *   source: string,
  *   metadata: Record<string, unknown>,
  *   created_at: string,
@@ -155,6 +159,9 @@ export function seedInvoiceDocs() {
       notes: "Handmade to order · silver with gold plating · ~7 days make time.",
       greeting: "",
       prepared_for: "",
+      address_line: "",
+      ops_email: "",
+      phones: "",
       source: "seed",
       metadata: {},
       created_at: at,
@@ -206,6 +213,9 @@ export function shapeInvoiceDoc(input = {}) {
     notes: String(input.notes || "").trim(),
     greeting: String(input.greeting || "").trim(),
     prepared_for: String(input.prepared_for || input.preparedFor || "").trim(),
+    address_line: String(input.address_line || input.addressLine || "").trim(),
+    ops_email: String(input.ops_email || input.opsEmail || "").trim(),
+    phones: String(input.phones || "").trim(),
     source: String(input.source || "manual"),
     metadata:
       input.metadata && typeof input.metadata === "object"
@@ -232,6 +242,9 @@ export function invoiceDocToWrapInput(doc) {
     notes: doc.notes || undefined,
     greeting: doc.greeting || undefined,
     preparedFor: doc.prepared_for || undefined,
+    addressLine: doc.address_line || undefined,
+    opsEmail: doc.ops_email || undefined,
+    phones: doc.phones || undefined,
   };
 }
 
@@ -253,6 +266,9 @@ export function presentInvoiceDoc(doc) {
     notes: doc.notes,
     greeting_override: doc.greeting,
     prepared_for: doc.prepared_for,
+    address_line: doc.address_line,
+    ops_email: doc.ops_email,
+    phones: doc.phones,
     line_items: doc.line_items,
     line_items_text: formatLineItemsPlainText(doc.line_items),
     source: doc.source,

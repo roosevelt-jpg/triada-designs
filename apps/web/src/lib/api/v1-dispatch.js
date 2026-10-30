@@ -3638,6 +3638,9 @@ export async function dispatchV1(method, segments, request, body) {
           notes: body?.notes,
           greeting: body?.greeting,
           preparedFor: body?.prepared_for,
+          addressLine: body?.address_line || body?.addressLine,
+          opsEmail: body?.ops_email || body?.opsEmail,
+          phones: body?.phones,
         }),
       );
     }

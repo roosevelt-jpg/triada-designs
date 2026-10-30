@@ -26,6 +26,9 @@ const emptyForm = {
   issued_at: "",
   greeting: "",
   prepared_for: "",
+  address_line: "",
+  ops_email: "",
+  phones: "",
   line_items_text: "",
   notes: "",
 };
@@ -44,6 +47,9 @@ function invoiceToForm(inv) {
     issued_at: inv.issued_at ? String(inv.issued_at).slice(0, 16) : "",
     greeting: inv.greeting_override || "",
     prepared_for: inv.prepared_for || "",
+    address_line: inv.address_line || "",
+    ops_email: inv.ops_email || "",
+    phones: inv.phones || "",
     line_items_text:
       inv.line_items_text ||
       (Array.isArray(inv.line_items)
@@ -68,6 +74,9 @@ function formPayload(form) {
     issued_at: form.issued_at ? new Date(form.issued_at).toISOString() : undefined,
     greeting: form.greeting,
     prepared_for: form.prepared_for,
+    address_line: form.address_line,
+    ops_email: form.ops_email,
+    phones: form.phones,
     line_items_text: form.line_items_text,
     notes: form.notes,
   };
@@ -181,7 +190,7 @@ export default function InvoiceEditorPage() {
         });
       }
       const inv = result.invoice;
-      setNotice(`Saved ${inv?.invoice_number || payload.number}. Logo header, warm greeting, and address footer stay branded.`);
+      setNotice(`Saved ${inv?.invoice_number || payload.number}. Logo header stays branded; address and contact use your text or Triada defaults.`);
       if (inv) {
         setForm(invoiceToForm(inv));
         setPreviewHtml(inv.html || "");
@@ -218,7 +227,7 @@ export default function InvoiceEditorPage() {
   return (
     <DashboardShell
       title="Invoice editor"
-      description="Edit every invoice content field in plain text. Logo header, address footer, and warm greetings stay aligned in the branded preview."
+      description="Edit every invoice content field in plain text, including address and contact. Logo header and layout stay aligned in the branded preview."
       actions={
         <div className="ops-actions">
           <Link href="/orders">
@@ -335,6 +344,38 @@ export default function InvoiceEditorPage() {
 
                 <label className="block space-y-1.5">
                   <span className="block text-[13px] font-medium text-ink">
+                    Address (plain text)
+                  </span>
+                  <textarea
+                    className="ops-field min-h-[56px] px-3 py-2"
+                    value={form.address_line}
+                    onChange={(e) => setForm((f) => ({ ...f, address_line: e.target.value }))}
+                    placeholder="Leave blank for Triada Timisoara address"
+                  />
+                  <span className="block text-sm text-muted">
+                    Footer address line. Blank keeps the branded Timisoara address; alignment stays the same.
+                  </span>
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Input
+                    label="Ops email (plain text)"
+                    value={form.ops_email}
+                    onChange={(e) => setForm((f) => ({ ...f, ops_email: e.target.value }))}
+                    placeholder="Leave blank for Triada ops email"
+                    hint="Blank keeps brand ops email in the footer"
+                  />
+                  <Input
+                    label="Phones (plain text)"
+                    value={form.phones}
+                    onChange={(e) => setForm((f) => ({ ...f, phones: e.target.value }))}
+                    placeholder="+40 … · +49 …"
+                    hint="Blank keeps brand phones; use · between numbers"
+                  />
+                </div>
+
+                <label className="block space-y-1.5">
+                  <span className="block text-[13px] font-medium text-ink">
                     Line items (plain text)
                   </span>
                   <textarea
@@ -434,7 +475,7 @@ export default function InvoiceEditorPage() {
             <div className="border-b border-line px-5 py-3.5">
               <h2 className="ops-section-title">Branded preview</h2>
               <p className="mt-1 text-sm text-muted">
-                Logo header + warm greeting + Timisoara address footer are fixed brand chrome.
+                Logo header stays branded. Address and contact footer use your plain text or Triada defaults — same alignment.
               </p>
               {previewGreeting ? (
                 <p className="mt-2 text-sm text-brown-dark">{previewGreeting}</p>
