@@ -173,6 +173,7 @@ import {
   getMetaStatus,
   saveMetaCredentials,
 } from "@/lib/integrations/meta-credentials";
+import { backfillMetaConversationHistory } from "@/lib/meta/conversation-history-backfill";
 import {
   createAndSubmitWhatsAppTemplate,
   listWhatsAppTemplatesPayload,
@@ -1651,12 +1652,25 @@ export async function dispatchV1(method, segments, request, body) {
     if (!result.ok) {
       return jsonErr(result.message, result.status || 422);
     }
+    let inbox_backfill = null;
+    try {
+      inbox_backfill = await backfillMetaConversationHistory({
+        platforms: ["messenger", "instagram"],
+      });
+    } catch (err) {
+      inbox_backfill = {
+        ok: false,
+        message:
+          err instanceof Error ? err.message : "inbox_history_backfill_failed",
+      };
+    }
     return jsonOk({
       ok: true,
       meta: result.meta,
       health: buildIntegrationsHealth({ meta: result.meta }).meta,
       storage: result.storage,
       source: "next_dual_run",
+      inbox_backfill,
     });
   }
 
@@ -1720,6 +1734,22 @@ export async function dispatchV1(method, segments, request, body) {
       if (!result.ok) {
         return jsonErr(result.message, result.status || 422);
       }
+      // After Connect, pull existing Messenger + IG threads into Unified Inbox
+      // (webhooks alone never create historical rows). Failures are non-blocking.
+      let inbox_backfill = null;
+      try {
+        inbox_backfill = await backfillMetaConversationHistory({
+          platforms: ["messenger", "instagram"],
+        });
+      } catch (err) {
+        inbox_backfill = {
+          ok: false,
+          message:
+            err instanceof Error
+              ? err.message
+              : "inbox_history_backfill_failed",
+        };
+      }
       return jsonOk({
         ok: true,
         mode: "next_dual_run",
@@ -1728,6 +1758,7 @@ export async function dispatchV1(method, segments, request, body) {
         storage: result.storage,
         message: "Meta credentials saved. Channels marked Connected.",
         verify_token_hint: "triada-meta-verify-2026",
+        inbox_backfill,
       });
     }
     return jsonOk({
@@ -1736,6 +1767,44 @@ export async function dispatchV1(method, segments, request, body) {
       message: "Meta connect accepted.",
       verify_token_hint: "triada-meta-verify-2026",
     });
+  }
+
+  if (
+    (path === "integrations/meta/backfill-conversations" ||
+      path === "integrations/meta/sync-inbox") &&
+    m === "POST"
+  ) {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    const platformsRaw = Array.isArray(input.platforms)
+      ? input.platforms.map(String)
+      : undefined;
+    try {
+      const result = await backfillMetaConversationHistory({
+        platforms: platformsRaw,
+        conversation_limit:
+          input.conversation_limit != null
+            ? Number(input.conversation_limit)
+            : undefined,
+        message_limit:
+          input.message_limit != null ? Number(input.message_limit) : undefined,
+        dry_run: input.dry_run === true,
+      });
+      return jsonOk({
+        ok: Boolean(result.ok),
+        mode: "next_dual_run",
+        ...result,
+      });
+    } catch (err) {
+      return jsonErr(
+        err instanceof Error
+          ? err.message
+          : "Meta conversation history import failed",
+        502,
+      );
+    }
   }
 
   if (

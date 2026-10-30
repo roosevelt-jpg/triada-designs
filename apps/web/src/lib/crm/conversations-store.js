@@ -609,6 +609,152 @@ export async function appendOutboundReply(id, input) {
 }
 
 /**
+ * Upsert a historical Page Messaging thread (Graph Conversations API backfill).
+ * Merges by provider_message_id; does not mark unanswered (avoids sweep blast).
+ * @param {{
+ *   channel: string,
+ *   external_user_id: string,
+ *   external_conversation_id?: string,
+ *   page_or_account_id?: string,
+ *   contact_name?: string | null,
+ *   subject?: string,
+ *   metadata?: Record<string, unknown>,
+ *   messages: Array<{
+ *     direction: 'inbound' | 'outbound',
+ *     body: string,
+ *     at?: string,
+ *     provider_message_id?: string | null,
+ *   }>,
+ * }} input
+ */
+export async function upsertHistoricalDmThread(input) {
+  const channel = String(input.channel || "messenger").toLowerCase();
+  const externalUserId = String(input.external_user_id || "").trim();
+  const externalConversationId =
+    String(input.external_conversation_id || "").trim() ||
+    (externalUserId ? `${channel}:${externalUserId}` : "");
+  const rawMessages = Array.isArray(input.messages) ? input.messages : [];
+  if (!externalUserId || rawMessages.length === 0) {
+    return { row: null, created: false, added: 0 };
+  }
+
+  const existing = await findConversationByExternal({
+    channel,
+    external_conversation_id: externalConversationId,
+    external_user_id: externalUserId,
+  });
+
+  const contactName =
+    typeof input.contact_name === "string" && input.contact_name.trim()
+      ? input.contact_name.trim()
+      : null;
+
+  const sorted = [...rawMessages]
+    .map((m) => {
+      const direction =
+        m?.direction === "outbound" ? "outbound" : "inbound";
+      const body = formatChatMessageBody(m?.body) || "(empty message)";
+      const at =
+        m?.at && !Number.isNaN(Date.parse(String(m.at)))
+          ? new Date(String(m.at)).toISOString()
+          : nowIso();
+      const providerMessageId = m?.provider_message_id
+        ? String(m.provider_message_id)
+        : null;
+      return { direction, body, at, provider_message_id: providerMessageId };
+    })
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+
+  const existingIds = new Set(
+    Array.isArray(existing?.provider_message_ids)
+      ? existing.provider_message_ids.map(String)
+      : [],
+  );
+  const toAdd = sorted.filter(
+    (m) =>
+      !m.provider_message_id || !existingIds.has(String(m.provider_message_id)),
+  );
+  if (existing && toAdd.length === 0) {
+    return { row: existing, created: false, added: 0 };
+  }
+
+  const id =
+    (existing?.id || "") ||
+    (externalConversationId
+      ? `conv-${channel}-${externalConversationId.replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 48)}`
+      : `conv-${channel}-${Date.now().toString(36)}`);
+
+  const messages = Array.isArray(existing?.messages)
+    ? [...existing.messages]
+    : [];
+  const providerIds = Array.isArray(existing?.provider_message_ids)
+    ? [...existing.provider_message_ids]
+    : [];
+
+  for (const m of toAdd) {
+    messages.push({
+      id: `msg-hist-${Date.now().toString(36)}-${providerIds.length}`,
+      direction: m.direction,
+      body: m.body,
+      at: m.at,
+      provider_message_id: m.provider_message_id,
+      agent_key: m.direction === "outbound" ? "ai_support" : null,
+    });
+    if (m.provider_message_id) providerIds.push(m.provider_message_id);
+  }
+
+  const lastInbound = [...messages].reverse().find((m) => m.direction === "inbound");
+  const lastOutbound = [...messages]
+    .reverse()
+    .find((m) => m.direction === "outbound");
+  const lastMsg = messages[messages.length - 1] || null;
+  const at = lastMsg?.at || nowIso();
+
+  const next = shapeRecord({
+    ...(existing || {}),
+    id,
+    workspace_id: WORKSPACE_ID,
+    channel,
+    status: existing?.status || "open",
+    automation_mode: existing?.automation_mode || "ai",
+    subject: String(
+      input.subject ||
+        existing?.subject ||
+        lastInbound?.body ||
+        lastMsg?.body ||
+        `${channel} conversation`,
+    ).slice(0, 80),
+    contact_id: existing?.contact_id || null,
+    assigned_agent_key: existing?.assigned_agent_key || "ai_support",
+    external_user_id: externalUserId,
+    external_conversation_id: externalConversationId,
+    page_or_account_id:
+      input.page_or_account_id || existing?.page_or_account_id || null,
+    provider_message_ids: providerIds.slice(-100),
+    metadata: {
+      ...(existing?.metadata || {}),
+      ...(input.metadata || {}),
+      ...(contactName ? { contact_name: contactName } : {}),
+      graph_history_backfill: true,
+    },
+    last_inbound_at: lastInbound?.at || existing?.last_inbound_at || null,
+    last_inbound_body:
+      lastInbound?.body || existing?.last_inbound_body || null,
+    last_outbound_at: lastOutbound?.at || existing?.last_outbound_at || null,
+    last_outbound_body:
+      lastOutbound?.body || existing?.last_outbound_body || null,
+    // Historical import must not enqueue Social Media Manager / Support sweeps.
+    unanswered: false,
+    created_at: existing?.created_at || sorted[0]?.at || at,
+    updated_at: at,
+    messages: messages.slice(-100),
+  });
+
+  const saved = await persistOne(next);
+  return { row: saved.row, created: !existing, added: toAdd.length };
+}
+
+/**
  * Record a new inbound DM (Meta / LinkedIn / simulators).
  * @param {{
  *   channel: string,

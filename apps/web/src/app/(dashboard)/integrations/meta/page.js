@@ -189,6 +189,38 @@ export default function MetaIntegrationsPage() {
     }
   }
 
+  async function importExistingDms() {
+    setBusy("inbox-backfill");
+    setNotice("");
+    setError("");
+    try {
+      const result = await apiFetch("/v1/integrations/meta/backfill-conversations", {
+        method: "POST",
+        body: { platforms: ["messenger", "instagram"] },
+      });
+      const created = Number(result.threads_created || 0);
+      const updated = Number(result.threads_updated || 0);
+      const messages = Number(result.messages_added || 0);
+      if (result.session_expired) {
+        setError(
+          result.message ||
+            "Page access token expired. Refresh the Meta Page token, then import again.",
+        );
+      } else if (result.ok === false && result.errors?.length) {
+        setError(result.message || result.errors[0]?.message || "Import failed");
+      } else {
+        setNotice(
+          result.message ||
+            `Imported ${created + updated} conversation(s), ${messages} message(s) into Unified Inbox.`,
+        );
+      }
+    } catch (err) {
+      setError(err.message || "Could not import existing Messenger / Instagram conversations");
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function sendWaTemplateWithMedia(event) {
     event.preventDefault();
     setBusy("wa-media");
@@ -395,6 +427,28 @@ export default function MetaIntegrationsPage() {
                     Rotate verify token
                   </Button>
                 </div>
+              </div>
+            </div>
+            <div className="rounded-md border border-line px-3 py-3">
+              <p className="text-xs uppercase tracking-wide text-muted">
+                Unified Inbox history
+              </p>
+              <p className="mt-1 max-w-3xl text-sm text-muted">
+                Existing Messenger and Instagram conversations on Meta do not appear until
+                imported. New DMs after connect still arrive live via webhook.
+              </p>
+              <div className="mt-3 ops-actions">
+                <Button onClick={importExistingDms} disabled={busy === "inbox-backfill"}>
+                  {busy === "inbox-backfill"
+                    ? "Importing…"
+                    : "Import existing Messenger & Instagram DMs"}
+                </Button>
+                <Link
+                  href="/inbox"
+                  className="text-sm text-brown-dark underline-offset-2 hover:underline"
+                >
+                  Open Unified Inbox
+                </Link>
               </div>
             </div>
           </section>
