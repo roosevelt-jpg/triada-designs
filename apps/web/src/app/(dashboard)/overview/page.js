@@ -9,22 +9,17 @@ import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
-import { formatDateLong } from "@/lib/formatters";
-import { nowDate, syncSystemTime } from "@/lib/system-time";
 
 export default function OverviewPage() {
   const [data, setData] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [today, setToday] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      await syncSystemTime().catch(() => {});
-      setToday(formatDateLong(nowDate()));
       const [dashboard, analyticsPayload] = await Promise.all([
         apiFetch("/v1/dashboard"),
         apiFetch("/v1/analytics").catch(() => null),
@@ -48,11 +43,7 @@ export default function OverviewPage() {
   return (
     <DashboardShell
       title="Overview"
-      description={
-        today
-          ? `Atelier workspace · ${today}`
-          : "Atelier workspace — conversations, leads, and content that need you"
-      }
+      description="Atelier workspace — conversations, leads, and content that need you"
       actions={
         <>
           <Link href="/inbox">
