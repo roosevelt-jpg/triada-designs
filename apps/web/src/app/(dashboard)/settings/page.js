@@ -127,7 +127,7 @@ export default function SettingsPage() {
 
       {!loading && workspace ? (
         <div className="space-y-5">
-          <section className="surface-card p-5">
+          <section id="workspace" className="surface-card scroll-mt-24 p-5">
             <div className="ops-card-header">
               <div className="min-w-0">
                 <h2 className="font-display text-2xl">{workspace.name}</h2>
@@ -146,7 +146,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          <section className="surface-card p-5">
+          <section id="live-support" className="surface-card scroll-mt-24 p-5">
             <div className="ops-card-header">
               <div className="min-w-0">
                 <h2 className="font-display text-2xl">Live support handoff</h2>
@@ -191,7 +191,7 @@ export default function SettingsPage() {
             </form>
           </section>
 
-          <section className="surface-card p-5">
+          <section id="timezone" className="surface-card scroll-mt-24 p-5">
             <div className="ops-card-header">
               <div className="min-w-0">
                 <h2 className="font-display text-2xl">Timezone & system time</h2>
@@ -220,7 +220,7 @@ export default function SettingsPage() {
             </form>
           </section>
 
-          <section className="surface-card p-5">
+          <section id="ai-agents" className="surface-card scroll-mt-24 p-5">
             <div className="ops-card-header">
               <div className="min-w-0">
                 <h2 className="font-display text-2xl">AI agents</h2>
@@ -243,7 +243,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          <section className="surface-card p-5">
+          <section id="brand" className="surface-card scroll-mt-24 p-5">
             <div className="ops-card-header">
               <div className="min-w-0">
                 <h2 className="font-display text-2xl">Brand on outbound</h2>
@@ -269,7 +269,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          <section className="surface-card p-5">
+          <section id="emergency" className="surface-card scroll-mt-24 p-5">
             <div className="ops-card-header">
               <div className="min-w-0">
                 <h2 className="font-display text-2xl">Emergency controls</h2>
@@ -295,7 +295,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          <section className="surface-card p-5">
+          <section id="meta" className="surface-card scroll-mt-24 p-5">
             <div className="ops-card-header">
               <div className="min-w-0">
                 <h2 className="font-display text-2xl">Meta messaging</h2>

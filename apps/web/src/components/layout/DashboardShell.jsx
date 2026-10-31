@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Menu, LogOut, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { apiFetch, getStoredToken, setStoredToken } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
-import { Button } from "@/components/ui/Button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { ProfileMenu } from "@/components/layout/ProfileMenu";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import { WorkspaceClock } from "@/components/layout/WorkspaceClock";
 import { syncSystemTime } from "@/lib/system-time";
@@ -120,13 +120,6 @@ export function DashboardShell({
             pathname={pathname}
             onNavigate={() => setOpen(false)}
           />
-
-          <div className="border-t border-line px-4 py-3.5">
-            <p className="truncate text-sm font-medium text-ink">
-              {user?.user?.name || "…"}
-            </p>
-            <p className="truncate text-xs capitalize text-muted">{user?.role || "—"}</p>
-          </div>
         </aside>
 
         {open ? (
@@ -160,15 +153,14 @@ export function DashboardShell({
               <WorkspaceClock />
               <NotificationBell />
               <div className="hidden h-8 w-px bg-line sm:block" aria-hidden />
-              <div className="hidden text-right md:block">
-                <p className="text-sm font-medium leading-tight">
-                  {user?.user?.name || "Loading…"}
-                </p>
-                <p className="text-xs capitalize text-muted">{user?.role || "—"}</p>
-              </div>
-              <Button variant="ghost" size="sm" onClick={logout} aria-label="Sign out">
-                <LogOut size={16} />
-              </Button>
+              <ProfileMenu
+                user={user}
+                onLogout={logout}
+                canViewSettings={
+                  Boolean(user?.is_admin || user?.role === "admin") ||
+                  canAccess(user?.permissions, "settings", "view")
+                }
+              />
             </div>
           </header>
 

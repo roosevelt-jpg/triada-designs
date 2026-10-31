@@ -14,6 +14,7 @@ export const SEED_ADMIN = {
 /**
  * Sidebar navigation — collapsible groups with nested page links.
  * Groups: Workspace, Commerce, Marketing, Automation, Admin.
+ * Settings is not listed here — it lives under the header profile menu.
  */
 export const DASHBOARD_NAV = [
   {
@@ -76,7 +77,7 @@ export const DASHBOARD_NAV = [
       { href: "/integrations/channels", label: "Sales channels" },
       { href: "/team", label: "Team" },
       { href: "/audit-logs", label: "Audit logs" },
-      { href: "/settings", label: "Settings" },
     ],
   },
 ];
+
