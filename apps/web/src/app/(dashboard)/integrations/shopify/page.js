@@ -64,11 +64,8 @@ export default function ShopifyIntegrationsPage() {
         body: { sync_type: syncType },
       });
       setStatus(result.status);
-      const note = result.run?.summary?.note || result.run?.summary?.limitation;
       setNotice(
-        `Sync ${result.run?.status || "done"}: ${result.run?.records_upserted ?? 0} records${
-          note ? ` · ${note}` : ""
-        }.`,
+        `Sync ${result.run?.status || "done"}: ${result.run?.records_upserted ?? 0} records.`,
       );
     } catch (err) {
       setError(err.message);
@@ -88,7 +85,7 @@ export default function ShopifyIntegrationsPage() {
   return (
     <DashboardShell
       title="Shopify"
-      description="Store sync status plus links to durable CRUD pages. Create/edit auto-upserts when Connected."
+      description="Store connection status and sync areas. Create and edit sync when Connected."
       actions={
         <div className="ops-actions">
           <Button size="sm" variant="secondary" onClick={load}>
@@ -134,15 +131,16 @@ export default function ShopifyIntegrationsPage() {
             <div className="border-b border-line px-5 py-4">
               <h2 className="ops-section-title">Sync areas</h2>
               <p className="mt-1 text-sm text-muted">
-                Auto-sync on dashboard create/edit when Connected. Open each area&apos;s CRUD page
-                to manage durable records. Areas without granted Admin scopes stay Waiting
-                credentials. Purchase Orders stay local on Shopify Basic.
+                Open each area to manage records. Status is Connected or Waiting credentials.
               </p>
             </div>
             <div className="divide-y divide-line">
               {SYNC_AREAS.map((area) => {
                 const row = areas[area.key] || {};
                 const areaStatus = row.status || "awaiting_credentials";
+                const areaLabel =
+                  row.label ||
+                  (areaStatus === "connected" ? "Connected" : "Waiting credentials");
                 return (
                   <div
                     key={area.key}
@@ -151,17 +149,11 @@ export default function ShopifyIntegrationsPage() {
                     <div>
                       <p className="text-sm font-medium text-ink">{area.label}</p>
                       <p className="text-xs text-muted">
-                        {row.message ||
-                          (connected
-                            ? "Waiting credentials for this area."
-                            : "Waiting credentials.")}
+                        {areaStatus === "connected" ? "Connected." : "Waiting credentials."}
                       </p>
                     </div>
                     <div className="ops-actions">
-                      <Badge tone={tone(areaStatus)}>
-                        {row.label ||
-                          (areaStatus === "connected" ? "Connected" : "Waiting credentials")}
-                      </Badge>
+                      <Badge tone={tone(areaStatus)}>{areaLabel}</Badge>
                       {area.href ? (
                         <Link href={area.href}>
                           <Button size="sm" variant="secondary">

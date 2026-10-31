@@ -207,8 +207,8 @@ export default function ContactsPage() {
       });
       setUploadNotice(
         result.shopify_auto_synced
-          ? `Contact saved · Shopify customer synced.`
-          : `Contact saved${result.shopify_customer?.message ? ` · ${result.shopify_customer.message}` : ""}.`,
+          ? "Contact saved · Shopify customer synced."
+          : "Contact saved.",
       );
       setShowForm(false);
       setEditingId(null);
@@ -305,7 +305,7 @@ export default function ContactsPage() {
   return (
     <DashboardShell
       title="Contacts"
-      description="CRM contacts for WhatsApp and Shopify customers. Create/edit auto-upserts Shopify customers when Connected. Click a row for the full profile."
+      description="CRM contacts for messaging and store customers. Saves sync to Shopify when Connected. Click a row for the full profile."
       actions={
         <div className="flex w-full max-w-3xl flex-col gap-2 sm:flex-row sm:items-end">
           <div className="w-full max-w-xs">

@@ -106,7 +106,6 @@ import {
   saveShopifyCredentials,
 } from "@/lib/integrations/shopify-credentials";
 import {
-  SHOPIFY_BASIC_PO_GAP,
   getShopifySyncCapabilities,
   runShopifyAreaSync,
   upsertShopifyCollectionRecord,
@@ -847,7 +846,6 @@ export async function dispatchV1(method, segments, request, body) {
       data: listed.data,
       mode: listed.mode,
       shopify: capabilities?.areas?.transfers || null,
-      limitation: SHOPIFY_BASIC_PO_GAP,
       source: "next_dual_run",
     });
   }
@@ -878,9 +876,7 @@ export async function dispatchV1(method, segments, request, body) {
           external_id: shopify.external_id,
           message: shopify.message,
           mode: shopify.mode,
-          limitation: shopify.limitation || SHOPIFY_BASIC_PO_GAP,
         },
-        limitation: SHOPIFY_BASIC_PO_GAP,
         mode: saved.mode,
         source: "next_dual_run",
       },
@@ -893,7 +889,6 @@ export async function dispatchV1(method, segments, request, body) {
     if (!transfer) return jsonErr("Transfer not found", 404);
     return jsonOk({
       ...transfer,
-      limitation: SHOPIFY_BASIC_PO_GAP,
       source: "next_dual_run",
     });
   }
@@ -925,9 +920,7 @@ export async function dispatchV1(method, segments, request, body) {
         external_id: shopify.external_id,
         message: shopify.message,
         mode: shopify.mode,
-        limitation: shopify.limitation || SHOPIFY_BASIC_PO_GAP,
       },
-      limitation: SHOPIFY_BASIC_PO_GAP,
       mode: saved.mode,
       source: "next_dual_run",
     });

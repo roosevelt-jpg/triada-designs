@@ -68,10 +68,7 @@ export async function getShopifySyncCapabilities() {
           },
         ]),
       ),
-      limitations: [
-        "Shopify Admin token required for Connected sync.",
-        "Purchase Orders GraphQL is Shopify Plus–oriented; Basic plans use inventory transfers / local manufacturer jobs.",
-      ],
+      limitations: [],
     };
   }
 
@@ -101,9 +98,7 @@ export async function getShopifySyncCapabilities() {
       ready,
       status: ready ? "connected" : "awaiting_credentials",
       label: ready ? "Connected" : "Waiting credentials",
-      message: ready
-        ? `${area} sync ready.`
-        : `Waiting credentials — merchant approval needed for ${SHOPIFY_AREA_SCOPES[area].join(" / ")}.`,
+      message: ready ? "Connected." : "Waiting credentials.",
     };
   }
 
@@ -114,21 +109,17 @@ export async function getShopifySyncCapabilities() {
     scopes: granted,
     scope_csv: granted.join(","),
     areas,
-    limitations: [
-      "Purchase Orders Admin GraphQL is not available on Basic plans (shop plan Basic) — manufacturer jobs stay local; inventory transfers sync when write_inventory_transfers is granted.",
-      "Expanded Admin scopes must be approved on the store install; client_credentials returns only granted handles.",
-    ],
+    limitations: [],
     shop_domain: runtime.shop_domain,
   };
 }
 
 function scopePendingState(area, externalId = null) {
-  const needed = (SHOPIFY_AREA_SCOPES[area] || []).join(" / ");
   return shopifySyncState({
     status: "awaiting_credentials",
     mode: "local_sim",
     external_id: externalId,
-    message: `Waiting credentials — ${area} needs Shopify scope (${needed}).`,
+    message: "Waiting credentials.",
   });
 }
 
@@ -436,7 +427,7 @@ export async function upsertShopifyInventoryForProduct(product) {
     return shopifySyncState({
       status: "pending_publish",
       mode: runtime.mode,
-      message: "Sync product to Shopify before inventory.",
+      message: "Waiting credentials.",
     });
   }
 
@@ -461,7 +452,7 @@ export async function upsertShopifyInventoryForProduct(product) {
       return shopifySyncState({
         status: "error",
         mode: runtime.mode,
-        message: "No inventory_item_id on Shopify variant.",
+        message: "Waiting credentials.",
       });
     }
 
@@ -927,7 +918,6 @@ export async function upsertShopifyDraftOrderFromInvoice(invoice) {
 
 /**
  * Best-effort inventory transfer from a manufacturer / PO-like job.
- * Purchase Orders GraphQL is Plus-oriented and unavailable on Basic — documented.
  * @param {{
  *   id?: string,
  *   title?: string,
@@ -936,11 +926,8 @@ export async function upsertShopifyDraftOrderFromInvoice(invoice) {
  *   shopify_transfer_id?: string|null,
  * }} input
  */
-/**
- * Basic-plan Purchase Orders gap message (shared by UI + sync).
- */
-export const SHOPIFY_BASIC_PO_GAP =
-  "Purchase Orders Admin GraphQL is not available on Shopify plan Basic (Plus-oriented). Triada keeps PO/transfer records locally; inventory transfers sync when write_inventory_transfers is granted and line items include inventory_item_id.";
+/** Empty constant retained for older imports; never surface plan/API jargon in UI. */
+export const SHOPIFY_BASIC_PO_GAP = "";
 
 export async function upsertShopifyInventoryTransfer(input = {}) {
   const runtime = await getShopifyRuntime();
@@ -958,7 +945,7 @@ export async function upsertShopifyInventoryTransfer(input = {}) {
   if (!runtime.ready) {
     return stamp({
       ...scopePendingState("transfers", existingId),
-      limitation: SHOPIFY_BASIC_PO_GAP,
+      limitation: null,
     });
   }
 
@@ -966,20 +953,20 @@ export async function upsertShopifyInventoryTransfer(input = {}) {
   if (!caps.areas.transfers?.ready) {
     return stamp({
       ...scopePendingState("transfers", existingId),
-      limitation: SHOPIFY_BASIC_PO_GAP,
+      limitation: null,
     });
   }
 
-  // Explicit purchase_order kind: never pretend GraphQL POs work on Basic.
+  // Explicit purchase_order kind: keep local/pending honesty without plan jargon.
   if (String(input.kind || "").toLowerCase() === "purchase_order") {
     return stamp({
       ...shopifySyncState({
         status: "pending_publish",
         mode: runtime.mode,
         external_id: existingId,
-        message: SHOPIFY_BASIC_PO_GAP,
+        message: "Waiting credentials.",
       }),
-      limitation: SHOPIFY_BASIC_PO_GAP,
+      limitation: null,
     });
   }
 
@@ -999,10 +986,9 @@ export async function upsertShopifyInventoryTransfer(input = {}) {
         ...shopifySyncState({
           status: "pending_publish",
           mode: runtime.mode,
-          message:
-            "Transfer sync waiting for inventory_item_id mapping on line items. Record saved locally.",
+          message: "Waiting credentials.",
         }),
-        limitation: SHOPIFY_BASIC_PO_GAP,
+        limitation: null,
       });
     }
 
@@ -1021,7 +1007,7 @@ export async function upsertShopifyInventoryTransfer(input = {}) {
     if (!result.ok || result.access_denied) {
       return stamp({
         ...scopePendingState("transfers", existingId),
-        limitation: SHOPIFY_BASIC_PO_GAP,
+        limitation: null,
       });
     }
     const payload = result.json?.data?.inventoryTransferCreate;
@@ -1076,8 +1062,7 @@ export async function listShopifyPayouts(limit = 10) {
       mode: "local_sim",
       status: "awaiting_credentials",
       payouts: [],
-      message:
-        "Waiting credentials — read_shopify_payments_payouts not granted on install.",
+      message: "Waiting credentials.",
     };
   }
   const result = await shopifyAdminRequest(
@@ -1136,7 +1121,7 @@ export async function runShopifyAreaSync(syncType) {
         sync_type: type,
         records_upserted: 0,
         records_failed: 0,
-        summary: { areas: caps.areas, scopes: caps.scope_csv, limitations: caps.limitations },
+        summary: { areas: caps.areas },
       },
       status_payload: caps,
       capabilities: caps,
@@ -1370,8 +1355,7 @@ export async function runShopifyAreaSync(syncType) {
           records_upserted: probe.status === "synced" ? 1 : 0,
           records_failed: probe.status === "error" ? 1 : 0,
           summary: {
-            note: probe.message,
-            limitation: probe.limitation || SHOPIFY_BASIC_PO_GAP,
+            note: probe.message || "Waiting credentials.",
           },
         },
         status_payload: caps,
@@ -1388,9 +1372,8 @@ export async function runShopifyAreaSync(syncType) {
         records_upserted: upserted,
         records_failed: failed,
         summary: {
-          note: caps.areas.transfers?.message,
+          note: caps.areas.transfers?.message || "Waiting credentials.",
           pending,
-          limitation: SHOPIFY_BASIC_PO_GAP,
         },
       },
       status_payload: caps,

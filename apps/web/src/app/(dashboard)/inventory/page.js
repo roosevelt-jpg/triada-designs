@@ -79,11 +79,10 @@ export default function InventoryPage() {
         method: "PUT",
         body: { product_id: row.id, inventory_quantity: qty },
       });
-      const sync = result.shopify_inventory;
       setNotice(
         result.shopify_auto_synced
           ? `Inventory for “${row.title}” set to ${qty} on Shopify.`
-          : `Saved qty ${qty}${sync?.message ? ` · ${sync.message}` : ""}.`,
+          : `Saved qty ${qty}.`,
       );
       await load();
     } catch (err) {
@@ -96,7 +95,7 @@ export default function InventoryPage() {
   return (
     <DashboardShell
       title="Inventory"
-      description="Set stock quantities per product. When Shopify is Connected, saves push inventory_levels/set."
+      description="Set stock quantities per product. Saves sync to Shopify when Connected."
       actions={
         <div className="ops-actions">
           {shopify ? (

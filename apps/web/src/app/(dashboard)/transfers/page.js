@@ -35,7 +35,7 @@ function syncTone(status) {
 function syncLabel(status) {
   if (status === "synced") return "Synced";
   if (status === "awaiting_credentials") return "Waiting credentials";
-  if (status === "pending_publish") return "Local / pending";
+  if (status === "pending_publish") return "Pending";
   if (status === "error") return "Error";
   return status || "—";
 }
@@ -43,7 +43,6 @@ function syncLabel(status) {
 export default function TransfersPage() {
   const [items, setItems] = useState([]);
   const [shopify, setShopify] = useState(null);
-  const [limitation, setLimitation] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -59,7 +58,6 @@ export default function TransfersPage() {
       const response = await apiFetch("/v1/transfers");
       setItems(response.data || []);
       setShopify(response.shopify || null);
-      setLimitation(response.limitation || "");
     } catch (err) {
       setError(err.message || "Failed to load transfers");
     } finally {
@@ -131,13 +129,9 @@ export default function TransfersPage() {
         method: editingId ? "PUT" : "POST",
         body: payload,
       });
-      const sync = result.shopify_transfer || result.shopify_sync;
       setNotice(
-        result.shopify_auto_synced
-          ? `Transfer synced to Shopify.`
-          : `Saved locally${sync?.message ? ` · ${sync.message}` : ""}.`,
+        result.shopify_auto_synced ? "Transfer synced to Shopify." : "Transfer saved.",
       );
-      if (result.limitation) setLimitation(result.limitation);
       setShowForm(false);
       setEditingId(null);
       setForm(EMPTY_FORM);
@@ -169,7 +163,7 @@ export default function TransfersPage() {
   return (
     <DashboardShell
       title="Transfers / POs"
-      description="Inventory transfers and purchase-order style jobs. Durable locally; Shopify inventory transfers sync when scopes and inventory_item_id mapping allow."
+      description="Inventory transfers and purchase orders. Shopify syncs when Connected."
       actions={
         <div className="ops-actions">
           {shopify ? (
@@ -193,11 +187,6 @@ export default function TransfersPage() {
         </div>
       }
     >
-      {limitation ? (
-        <p className="mb-4 rounded-md border border-line bg-stone/30 px-3 py-2 text-sm text-ink">
-          <strong className="font-medium">Basic plan gap:</strong> {limitation}
-        </p>
-      ) : null}
       {notice ? <p className="mb-4 text-sm text-brown-dark">{notice}</p> : null}
       {loading ? <Skeleton className="h-64" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -225,7 +214,7 @@ export default function TransfersPage() {
                 className="ops-field h-10 w-full px-3 text-ink focus:border-brown focus:outline-none"
               >
                 <option value="transfer">Inventory transfer</option>
-                <option value="purchase_order">Purchase order (local on Basic)</option>
+                <option value="purchase_order">Purchase order</option>
               </select>
             </label>
             <Input
@@ -245,7 +234,6 @@ export default function TransfersPage() {
               name="supplier"
               value={form.supplier}
               onChange={(e) => updateField("supplier", e.target.value)}
-              hint="Used for purchase-order style records."
             />
             <label className="block space-y-1.5">
               <span className="block text-[13px] font-medium text-ink">Status</span>
@@ -283,11 +271,10 @@ export default function TransfersPage() {
               onChange={(e) => updateField("line_qty", e.target.value)}
             />
             <Input
-              label="Shopify inventory_item_id"
+              label="Inventory item ID"
               name="line_inventory_item_id"
               value={form.line_inventory_item_id}
               onChange={(e) => updateField("line_inventory_item_id", e.target.value)}
-              hint="Required for live inventoryTransfer create."
             />
           </div>
           <label className="block space-y-1.5">
@@ -321,7 +308,7 @@ export default function TransfersPage() {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No transfers yet"
-          description="Create a transfer or PO-style job. Manufacturer jobs also attempt Shopify transfer sync."
+          description="Create a transfer or purchase order to get started."
         />
       ) : null}
 
@@ -346,12 +333,6 @@ export default function TransfersPage() {
                   {(item.line_items || []).length} line(s)
                   {sync.external_id ? ` · Shopify #${sync.external_id}` : ""}
                 </p>
-                {sync.message ? (
-                  <p className="mt-2 text-xs text-muted">{sync.message}</p>
-                ) : null}
-                {sync.limitation ? (
-                  <p className="mt-1 text-xs text-muted">{sync.limitation}</p>
-                ) : null}
                 <div className="mt-4 ops-actions">
                   <Button size="sm" variant="secondary" onClick={() => openEdit(item)}>
                     Edit

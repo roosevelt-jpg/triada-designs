@@ -113,11 +113,10 @@ export default function DiscountsPage() {
         method: editingId ? "PUT" : "POST",
         body: payload,
       });
-      const sync = result.shopify_discount || result.shopify_sync;
       setNotice(
         result.shopify_auto_synced
           ? `Discount ${result.code} synced to Shopify.`
-          : `Saved ${result.code}${sync?.message ? ` · ${sync.message}` : ""}.`,
+          : `Saved ${result.code}.`,
       );
       setShowForm(false);
       setEditingId(null);
@@ -150,7 +149,7 @@ export default function DiscountsPage() {
   return (
     <DashboardShell
       title="Discounts"
-      description="Price rules and discount codes. When Shopify is Connected, create/edit auto-upserts price_rules + codes."
+      description="Discount codes for campaigns and checkout. Saves sync to Shopify when Connected."
       actions={
         <div className="ops-actions">
           {shopify ? (
@@ -302,9 +301,6 @@ export default function DiscountsPage() {
                     {item.status}
                   </Badge>
                 </div>
-                {sync.message ? (
-                  <p className="mt-2 text-xs text-muted">{sync.message}</p>
-                ) : null}
                 <div className="mt-4 ops-actions">
                   <Button size="sm" variant="secondary" onClick={() => openEdit(item)}>
                     Edit

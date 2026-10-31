@@ -27,7 +27,6 @@ const emptyForm = {
 
 export default function TrainingDocsPage() {
   const [docs, setDocs] = useState([]);
-  const [storage, setStorage] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -42,7 +41,6 @@ export default function TrainingDocsPage() {
     try {
       const data = await apiFetch("/v1/agents/training-docs");
       setDocs(data.data || []);
-      setStorage(data.storage || "");
     } catch (err) {
       setError(err.message || "Failed to load training docs");
     } finally {
@@ -70,7 +68,7 @@ export default function TrainingDocsPage() {
           status: "published",
         },
       });
-      setNotice(`Saved “${result.doc?.title || form.title}” (${result.storage || "stored"}).`);
+      setNotice(`Saved “${result.doc?.title || form.title}”.`);
       setForm(emptyForm);
       await load();
     } catch (err) {
@@ -167,7 +165,7 @@ export default function TrainingDocsPage() {
             <section className="surface-card space-y-4 p-5">
               <h2 className="ops-section-title">Upload or write</h2>
               <p className="text-sm text-muted">
-                Accepted: plain text / Markdown. Storage: {storage || "…"}. No API secrets in docs.
+                Accepted: plain text / Markdown.
               </p>
               <label className="block text-sm">
                 <span className="mb-1.5 block text-[13px] font-medium text-ink">Upload file</span>

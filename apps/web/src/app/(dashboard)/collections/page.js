@@ -107,11 +107,14 @@ export default function CollectionsPage() {
         method: editingId ? "PUT" : "POST",
         body: payload,
       });
-      const sync = result.shopify_collection || result.shopify_sync;
       setNotice(
-        editingId
-          ? `Collection updated${result.shopify_auto_synced ? " · Shopify synced" : sync?.message ? ` · ${sync.message}` : ""}.`
-          : `Collection created${result.shopify_auto_synced ? " · Shopify synced" : sync?.message ? ` · ${sync.message}` : ""}.`,
+        result.shopify_auto_synced
+          ? editingId
+            ? "Collection updated · Shopify synced."
+            : "Collection created · Shopify synced."
+          : editingId
+            ? "Collection updated."
+            : "Collection created.",
       );
       setShowForm(false);
       setEditingId(null);
@@ -144,7 +147,7 @@ export default function CollectionsPage() {
   return (
     <DashboardShell
       title="Collections"
-      description="Durable product collections. When Shopify is Connected, create/edit auto-upserts custom collections."
+      description="Product collections for the storefront. Saves sync to Shopify when Connected."
       actions={
         <div className="ops-actions">
           {shopify ? (
@@ -186,14 +189,14 @@ export default function CollectionsPage() {
               name="handle"
               value={form.handle}
               onChange={(e) => updateField("handle", e.target.value)}
-              hint="Optional Shopify URL handle."
+              hint="Optional storefront URL handle."
             />
             <Input
               label="Product IDs"
               name="product_ids"
               value={form.product_ids}
               onChange={(e) => updateField("product_ids", e.target.value)}
-              hint="Comma-separated Triada product ids already synced to Shopify."
+              hint="Comma-separated product ids to include."
             />
             <label className="flex items-center gap-2 pt-7 text-sm text-ink">
               <input
@@ -236,7 +239,7 @@ export default function CollectionsPage() {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No collections yet"
-          description="Add a collection here or set Collection on a product — both auto-sync when Shopify is Connected."
+          description="Add a collection here or set Collection on a product."
         />
       ) : null}
 
@@ -260,9 +263,6 @@ export default function CollectionsPage() {
                   {(item.product_ids || []).length} linked products
                   {sync.external_id ? ` · Shopify #${sync.external_id}` : ""}
                 </p>
-                {sync.message ? (
-                  <p className="mt-1 text-xs text-muted">{sync.message}</p>
-                ) : null}
                 <div className="mt-4 ops-actions">
                   <Button size="sm" variant="secondary" onClick={() => openEdit(item)}>
                     Edit

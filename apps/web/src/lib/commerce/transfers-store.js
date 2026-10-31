@@ -1,7 +1,6 @@
 /**
  * Inventory transfers / PO-like jobs store.
- * Durable local/Supabase records; best-effort Shopify inventoryTransfer when scopes allow.
- * Purchase Orders GraphQL remains unavailable on Shopify Basic — documented on UI + sync.
+ * Local/Supabase transfer + PO records; best-effort Shopify inventoryTransfer when Connected.
  */
 
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
