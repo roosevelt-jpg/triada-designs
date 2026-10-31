@@ -8,10 +8,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { ListSearch } from "@/components/ui/ListSearch";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatDateTime } from "@/lib/formatters";
+import { matchesListQuery } from "@/lib/list-search";
 import { formatInWorkspace } from "@/lib/system-time";
 
 export const CHANNEL_FILTERS = [
@@ -130,6 +132,7 @@ function ContactAvatar({ name, picture, avatar_url, size = "md" }) {
 export function InboxChatWorkspace({ selectedId = null }) {
   const [items, setItems] = useState([]);
   const [channel, setChannel] = useState("");
+  const [listQuery, setListQuery] = useState("");
   const [listError, setListError] = useState("");
   const [listLoading, setListLoading] = useState(true);
   const [conversation, setConversation] = useState(null);
@@ -224,6 +227,27 @@ export function InboxChatWorkspace({ selectedId = null }) {
     }
     return groups;
   }, [conversation?.messages]);
+
+  const filteredItems = useMemo(() => {
+    const q = listQuery.trim();
+    if (!q) return items;
+    return items.filter((row) =>
+      matchesListQuery(
+        [
+          row.contact?.name,
+          row.contact?.email,
+          row.contact?.phone,
+          row.contact?.phone_e164,
+          row.channel,
+          row.subject,
+          row.last_inbound_body,
+          row.last_outbound_body,
+          row.automation_mode,
+        ],
+        q,
+      ),
+    );
+  }, [items, listQuery]);
 
   async function takeover() {
     if (!selectedId) return;
@@ -321,6 +345,18 @@ export function InboxChatWorkspace({ selectedId = null }) {
           ))}
         </div>
 
+        <div className="inbox-chat__list-search">
+          <ListSearch
+            hideLabel
+            label="Search conversations"
+            name="inbox_q"
+            value={listQuery}
+            onChange={setListQuery}
+            placeholder="Search name, channel, or message…"
+            inputClassName="h-10"
+          />
+        </div>
+
         <div className="inbox-chat__list-scroll">
           {listLoading ? (
             <div className="space-y-2 p-3">
@@ -342,8 +378,19 @@ export function InboxChatWorkspace({ selectedId = null }) {
               />
             </div>
           ) : null}
-          {!listLoading && !listError && items.length > 0
-            ? items.map((row) => {
+          {!listLoading &&
+          !listError &&
+          items.length > 0 &&
+          filteredItems.length === 0 ? (
+            <div className="p-4">
+              <EmptyState
+                title="No matching conversations"
+                description={`Nothing matches “${listQuery.trim()}”. Try another name, channel, or snippet.`}
+              />
+            </div>
+          ) : null}
+          {!listLoading && !listError && filteredItems.length > 0
+            ? filteredItems.map((row) => {
                 const active = row.id === selectedId;
                 const preview =
                   row.last_inbound_body ||

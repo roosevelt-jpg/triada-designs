@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { CurrencySelect } from "@/components/ui/CurrencySelect";
 import { Input } from "@/components/ui/Input";
+import { ListSearch } from "@/components/ui/ListSearch";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { formatCurrency, formatStage } from "@/lib/formatters";
@@ -37,6 +38,7 @@ const STAGES = [
 export default function LeadsPage() {
   const [items, setItems] = useState([]);
   const [opportunities, setOpportunities] = useState([]);
+  const [q, setQ] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -50,8 +52,9 @@ export default function LeadsPage() {
     setLoading(true);
     setError("");
     try {
+      const query = q ? `?q=${encodeURIComponent(q)}` : "";
       const [response, opp] = await Promise.all([
-        apiFetch("/v1/leads"),
+        apiFetch(`/v1/leads${query}`),
         apiFetch("/v1/opportunities"),
       ]);
       setItems(response.data || []);
@@ -61,7 +64,7 @@ export default function LeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [q]);
 
   useEffect(() => {
     load();
@@ -165,9 +168,19 @@ export default function LeadsPage() {
       title="Leads"
       description="Add, edit, and stage the pipeline. Sync to Zoho when Connected."
       actions={
-        <Button size="sm" onClick={openCreate}>
-          Add lead
-        </Button>
+        <div className="flex w-full max-w-3xl flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="w-full max-w-xs">
+            <ListSearch
+              name="q"
+              value={q}
+              onChange={setQ}
+              placeholder="Name, title, channel, email"
+            />
+          </div>
+          <Button size="sm" onClick={openCreate}>
+            Add lead
+          </Button>
+        </div>
       }
     >
       {notice ? <p className="mb-4 text-sm text-brown-dark">{notice}</p> : null}
@@ -271,8 +284,12 @@ export default function LeadsPage() {
 
       {!loading && !error && items.length === 0 ? (
         <EmptyState
-          title="No leads yet"
-          description="Add a lead or qualify a conversation into the pipeline."
+          title={q.trim() ? "No matching leads" : "No leads yet"}
+          description={
+            q.trim()
+              ? `Nothing matches “${q.trim()}”. Try another name, title, or channel.`
+              : "Add a lead or qualify a conversation into the pipeline."
+          }
         />
       ) : null}
 

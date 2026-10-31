@@ -3552,7 +3552,9 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "leads" && m === "GET") {
-    const listed = await listLeads();
+    const url = new URL(request.url);
+    const q = url.searchParams.get("q") || "";
+    const listed = await listLeads({ q });
     return jsonOk({
       data: listed.data.map(presentLead),
       mode: listed.mode,

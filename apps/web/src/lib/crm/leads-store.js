@@ -183,7 +183,7 @@ export async function listLeads(opts = {}) {
           if (q) {
             rows = rows.filter((r) => {
               const hay =
-                `${r.title} ${r.contact_name || ""} ${r.contact_email || ""} ${r.stage} ${r.source_channel || ""}`.toLowerCase();
+                `${r.title} ${r.contact_name || ""} ${r.contact_email || ""} ${r.contact_phone || ""} ${r.stage} ${r.source_channel || ""}`.toLowerCase();
               return hay.includes(q);
             });
           }
@@ -200,7 +200,7 @@ export async function listLeads(opts = {}) {
   if (q) {
     rows = rows.filter((r) => {
       const hay =
-        `${r.title} ${r.contact_name || ""} ${r.contact_email || ""} ${r.stage} ${r.source_channel || ""}`.toLowerCase();
+        `${r.title} ${r.contact_name || ""} ${r.contact_email || ""} ${r.contact_phone || ""} ${r.stage} ${r.source_channel || ""}`.toLowerCase();
       return hay.includes(q);
     });
   }

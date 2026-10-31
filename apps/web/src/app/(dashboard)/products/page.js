@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { CurrencySelect } from "@/components/ui/CurrencySelect";
 import { Input } from "@/components/ui/Input";
+import { ListSearch } from "@/components/ui/ListSearch";
 import { ProductPhotosField } from "@/components/ui/ProductPhotosField";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
@@ -136,6 +137,7 @@ function SalePriceBadge({ price, compareAt, currency }) {
 
 export default function ProductsPage() {
   const [items, setItems] = useState([]);
+  const [q, setQ] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -152,7 +154,8 @@ export default function ProductsPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await apiFetch("/v1/products");
+      const query = q ? `?q=${encodeURIComponent(q)}` : "";
+      const response = await apiFetch(`/v1/products${query}`);
       setItems(response.data || []);
       setChannelStatus({
         shopify: response.shopify || null,
@@ -163,7 +166,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [q]);
 
   useEffect(() => {
     load();
@@ -350,9 +353,19 @@ export default function ProductsPage() {
       title="Products"
       description="Curate the Triada jewellery catalog. Connected Shopify stores receive price and specification updates on every save."
       actions={
-        <Button size="sm" onClick={openCreate}>
-          Add product
-        </Button>
+        <div className="flex w-full max-w-3xl flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="w-full max-w-xs">
+            <ListSearch
+              name="q"
+              value={q}
+              onChange={setQ}
+              placeholder="Title, SKU, description"
+            />
+          </div>
+          <Button size="sm" onClick={openCreate}>
+            Add product
+          </Button>
+        </div>
       }
     >
       <div className="mb-6 ops-actions">
@@ -566,8 +579,12 @@ export default function ProductsPage() {
 
       {!loading && !error && items.length === 0 ? (
         <EmptyState
-          title="No products yet"
-          description="Add a catalog piece. When Shopify is Connected, saves sync automatically."
+          title={q.trim() ? "No matching products" : "No products yet"}
+          description={
+            q.trim()
+              ? `Nothing matches “${q.trim()}”. Try another title, SKU, or description.`
+              : "Add a catalog piece. When Shopify is Connected, saves sync automatically."
+          }
         />
       ) : null}
 

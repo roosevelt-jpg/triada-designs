@@ -158,6 +158,39 @@ async function writeLocal(rows) {
 }
 
 /**
+ * @param {ProductRecord} product
+ * @param {string} q lowercase trimmed query
+ */
+function productMatchesQuery(product, q) {
+  const meta =
+    product?.metadata && typeof product.metadata === "object"
+      ? /** @type {Record<string, unknown>} */ (product.metadata)
+      : {};
+  const specs =
+    meta.specs && typeof meta.specs === "object"
+      ? /** @type {Record<string, unknown>} */ (meta.specs)
+      : {};
+  const hay = [
+    product.title,
+    product.sku,
+    product.description,
+    product.published_status,
+    product.availability_status,
+    specs.category,
+    specs.collection,
+    specs.metal,
+    specs.stone,
+    specs.barcode,
+    meta.category,
+    meta.collection,
+  ]
+    .map((v) => (v == null ? "" : String(v)))
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(q);
+}
+
+/**
  * @param {{ q?: string }} [opts]
  * @returns {Promise<{ mode: string, data: ProductRecord[] }>}
  */
@@ -178,11 +211,7 @@ export async function listProducts(opts = {}) {
         if (!error && Array.isArray(data)) {
           let rows = data.map(shapeProduct);
           if (q) {
-            rows = rows.filter((p) => {
-              const hay =
-                `${p.title} ${p.sku || ""} ${p.description} ${p.published_status}`.toLowerCase();
-              return hay.includes(q);
-            });
+            rows = rows.filter((p) => productMatchesQuery(p, q));
           }
           return { mode: "supabase", data: rows };
         }
@@ -194,11 +223,7 @@ export async function listProducts(opts = {}) {
 
   let rows = await readLocal();
   if (q) {
-    rows = rows.filter((p) => {
-      const hay =
-        `${p.title} ${p.sku || ""} ${p.description} ${p.published_status}`.toLowerCase();
-      return hay.includes(q);
-    });
+    rows = rows.filter((p) => productMatchesQuery(p, q));
   }
   return { mode: "local_mock", data: rows };
 }

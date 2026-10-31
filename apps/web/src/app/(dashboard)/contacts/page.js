@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
+import { ListSearch } from "@/components/ui/ListSearch";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import {
@@ -309,11 +310,10 @@ export default function ContactsPage() {
       actions={
         <div className="flex w-full max-w-3xl flex-col gap-2 sm:flex-row sm:items-end">
           <div className="w-full max-w-xs">
-            <Input
-              label="Search"
+            <ListSearch
               name="q"
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={setQ}
               placeholder="Name, email, phone"
             />
           </div>
@@ -468,8 +468,12 @@ export default function ContactsPage() {
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && items.length === 0 ? (
         <EmptyState
-          title="No contacts"
-          description="Add a contact, sync WhatsApp, or upload CSV/Excel. Shopify customers sync on create/edit when Connected."
+          title={q.trim() ? "No matching contacts" : "No contacts"}
+          description={
+            q.trim()
+              ? `Nothing matches “${q.trim()}”. Try another name, email, or phone.`
+              : "Add a contact, sync WhatsApp, or upload CSV/Excel. Shopify customers sync on create/edit when Connected."
+          }
         />
       ) : null}
       {!loading && !error && items.length > 0 ? (

@@ -408,6 +408,12 @@
     font-size: 0.75rem;
   }
 
+  .inbox-chat__list-search {
+    padding: 0.55rem 0.75rem 0.65rem;
+    border-bottom: 1px solid var(--border-default);
+    background: color-mix(in srgb, var(--color-brand-ivory) 55%, white);
+  }
+
   .inbox-chat__list-scroll {
     flex: 1;
     overflow-y: auto;
