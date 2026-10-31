@@ -8,10 +8,14 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { CurrencySelect } from "@/components/ui/CurrencySelect";
 import { Input } from "@/components/ui/Input";
-import { MediaUploadField } from "@/components/ui/MediaUploadField";
+import { ProductPhotosField } from "@/components/ui/ProductPhotosField";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
-import { productPhotoUrl } from "@/lib/commerce/product-specs";
+import {
+  extractProductSpecs,
+  isSalePrice,
+  productPhotoUrls,
+} from "@/lib/commerce/product-specs";
 import { formatCurrency } from "@/lib/formatters";
 import { DEFAULT_CURRENCY } from "@/lib/locale/preferred-currency";
 
@@ -23,7 +27,7 @@ const EMPTY_FORM = {
   compare_at_price: "",
   currency: DEFAULT_CURRENCY,
   product_url: "https://triada-designs.com/",
-  photo_url: "",
+  photo_urls: /** @type {string[]} */ ([]),
   category: "Jewellery",
   collection: "",
   metal: "",
@@ -62,6 +66,72 @@ function metaString(item, key) {
 function metaNumber(item, key) {
   const s = metaString(item, key);
   return s;
+}
+
+/** @param {{ photos: string[], title: string }} props */
+function ProductCardGallery({ photos, title }) {
+  const [index, setIndex] = useState(0);
+  const safeIndex = photos.length ? Math.min(index, photos.length - 1) : 0;
+  const photo = photos[safeIndex] || null;
+
+  return (
+    <div className="relative aspect-[4/3] w-full bg-[color-mix(in_srgb,var(--line)_55%,transparent)]">
+      {photo ? (
+        // eslint-disable-next-line @next/next/no-img-element -- Shopify CDN + local/relative + data URLs
+        <img
+          src={photo}
+          alt={title || ""}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={(event) => {
+            event.currentTarget.style.visibility = "hidden";
+          }}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center px-4 text-center text-xs uppercase tracking-[0.14em] text-muted">
+          No photo
+        </div>
+      )}
+      {photos.length > 1 ? (
+        <div className="absolute inset-x-0 bottom-2 flex items-center justify-center gap-1.5">
+          {photos.map((_, i) => (
+            <button
+              key={`dot-${i}`}
+              type="button"
+              aria-label={`Photo ${i + 1}`}
+              className={`h-1.5 w-1.5 rounded-full transition ${
+                i === safeIndex ? "bg-white" : "bg-white/45"
+              }`}
+              onClick={() => setIndex(i)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** @param {{ price: unknown, compareAt: unknown, currency: string }} props */
+function SalePriceBadge({ price, compareAt, currency }) {
+  const onSale = isSalePrice(price, compareAt);
+  if (!onSale) {
+    return (
+      <Badge tone="brand">
+        {formatCurrency(price, currency || "USD")}
+      </Badge>
+    );
+  }
+  return (
+    <span className="inline-flex flex-wrap items-baseline gap-2">
+      <span className="text-sm font-medium text-danger line-through">
+        {formatCurrency(compareAt, currency || "USD")}
+      </span>
+      <span className="text-sm font-semibold text-success">
+        {formatCurrency(price, currency || "USD")}
+      </span>
+    </span>
+  );
 }
 
 export default function ProductsPage() {
@@ -116,7 +186,7 @@ export default function ProductsPage() {
       compare_at_price: metaNumber(item, "compare_at_price"),
       currency: item.currency || DEFAULT_CURRENCY,
       product_url: item.product_url || "https://triada-designs.com/",
-      photo_url: productPhotoUrl(item) || "",
+      photo_urls: productPhotoUrls(item),
       category: metaString(item, "category") || "Jewellery",
       collection: metaString(item, "collection"),
       metal: metaString(item, "metal"),
@@ -153,6 +223,11 @@ export default function ProductsPage() {
         ? { ...priorMeta.specs }
         : {};
 
+    const photo_urls = Array.isArray(form.photo_urls)
+      ? form.photo_urls.filter((u) => String(u || "").trim())
+      : [];
+    const photo_url = photo_urls[0] || null;
+
     const specs = {
       ...priorSpecs,
       category: form.category.trim() || "Jewellery",
@@ -167,7 +242,8 @@ export default function ProductsPage() {
         form.inventory_quantity === "" ? null : Number(form.inventory_quantity),
       compare_at_price:
         form.compare_at_price === "" ? null : Number(form.compare_at_price),
-      photo_url: form.photo_url.trim() || null,
+      photo_url,
+      photo_urls,
     };
 
     const payload = {
@@ -186,7 +262,8 @@ export default function ProductsPage() {
         ...priorMeta,
         ...specs,
         specs,
-        photo_url: specs.photo_url,
+        photo_url,
+        photo_urls,
       },
     };
 
@@ -196,6 +273,10 @@ export default function ProductsPage() {
         method: editingId ? "PUT" : "POST",
         body: payload,
       });
+      const assignedSku =
+        !editingId && result.product?.sku && !form.sku.trim()
+          ? `SKU ${result.product.sku}`
+          : null;
       const shopifyNote = result.shopify_auto_synced
         ? "Shopify synced"
         : result.channels?.shopify?.status === "awaiting_credentials"
@@ -204,6 +285,7 @@ export default function ProductsPage() {
       setNotice(
         [
           editingId ? "Updated" : "Created",
+          assignedSku,
           shopifyNote,
           result.summary || null,
         ]
@@ -284,8 +366,8 @@ export default function ProductsPage() {
 
       {shopifyConnected ? (
         <p className="mb-4 text-sm text-muted">
-          Shopify syncs on every create and edit — prices, currency, SKU, and
-          specs stay aligned with the store.
+          Shopify syncs on every create and edit — photos, prices, compare-at,
+          SKU, and specs stay aligned with the store.
         </p>
       ) : null}
 
@@ -315,7 +397,12 @@ export default function ProductsPage() {
               name="sku"
               value={form.sku}
               onChange={(e) => updateField("sku", e.target.value)}
-              placeholder="TD-RING-PRIEST-01"
+              placeholder="Auto on create if blank"
+              hint={
+                editingId
+                  ? "Leave as-is to keep the assigned SKU."
+                  : "Leave blank to auto-assign TD-{TITLE}-{code}."
+              }
             />
             <Input
               label="Price"
@@ -339,7 +426,7 @@ export default function ProductsPage() {
               min="0"
               value={form.compare_at_price}
               onChange={(e) => updateField("compare_at_price", e.target.value)}
-              hint="Optional strikethrough price on Shopify."
+              hint="When higher than price: red strikethrough + green sale price on cards and Shopify."
             />
             <Input
               label="Barcode"
@@ -415,16 +502,11 @@ export default function ProductsPage() {
               hint="Only verified materials and timing — never invent claims."
             />
             <div className="md:col-span-2">
-              <MediaUploadField
-                label="Product photo"
-                value={form.photo_url}
-                mediaType="image"
-                purpose="whatsapp"
+              <ProductPhotosField
+                label="Product photos"
+                values={form.photo_urls}
                 folder="products"
-                onUploaded={(payload) =>
-                  updateField("photo_url", payload.media_url || payload.url)
-                }
-                onClear={() => updateField("photo_url", "")}
+                onChange={(urls) => updateField("photo_urls", urls)}
               />
             </div>
           </div>
@@ -496,28 +578,15 @@ export default function ProductsPage() {
             const wordpress = item.channel_sync?.wordpress;
             const metal = metaString(item, "metal");
             const weight = metaString(item, "weight_grams");
-            const photo = productPhotoUrl(item);
+            const photos = productPhotoUrls(item);
+            const compareAt = extractProductSpecs(item).compare_at_price;
             return (
               <article key={item.id} className="surface-card flex flex-col overflow-hidden p-0">
-                <div className="relative aspect-[4/3] w-full bg-[color-mix(in_srgb,var(--line)_55%,transparent)]">
-                  {photo ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- Shopify CDN + local/relative + data URLs
-                    <img
-                      src={photo}
-                      alt=""
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      onError={(event) => {
-                        event.currentTarget.style.visibility = "hidden";
-                      }}
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center px-4 text-center text-xs uppercase tracking-[0.14em] text-muted">
-                      No photo
-                    </div>
-                  )}
-                </div>
+                <ProductCardGallery
+                  key={`${item.id}:${photos.length}:${photos[0] || ""}`}
+                  photos={photos}
+                  title={item.title || ""}
+                />
                 <div className="flex flex-1 flex-col p-5">
                 <h3 className="font-display text-2xl text-ink">{item.title}</h3>
                 {item.sku ? (
@@ -531,10 +600,12 @@ export default function ProductsPage() {
                       .join(" · ")}
                   </p>
                 )}
-                <div className="mt-4 ops-actions">
-                  <Badge tone="brand">
-                    {formatCurrency(item.price, item.currency || "USD")}
-                  </Badge>
+                <div className="mt-4 ops-actions items-center">
+                  <SalePriceBadge
+                    price={item.price}
+                    compareAt={compareAt}
+                    currency={item.currency || "USD"}
+                  />
                   <Badge tone="info">{item.availability_status}</Badge>
                   <Badge
                     tone={

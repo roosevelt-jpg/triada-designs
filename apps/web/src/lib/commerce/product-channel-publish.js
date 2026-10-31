@@ -11,8 +11,12 @@ import {
   upsertProduct,
 } from "./products-store.js";
 import {
+  generateProductSku,
   mergeSpecsIntoMetadata,
+  productPhotoUrl,
+  productPhotoUrls,
   shopifyRemoteImageSrc,
+  shopifyRemoteImageSrcs,
 } from "./product-specs.js";
 import {
   getShopifyRuntime,
@@ -53,33 +57,38 @@ export async function publishProductToChannels(product, opts = {}) {
     syncPatch.wordpress = await upsertWordpressProductPost(working);
   }
 
-  // Persist Shopify CDN image onto local metadata when dashboard had none / relative only.
-  const shopifyPhoto =
-    syncPatch.shopify &&
-    typeof syncPatch.shopify === "object" &&
-    "photo_url" in syncPatch.shopify
-      ? String(
-          /** @type {{ photo_url?: string | null }} */ (syncPatch.shopify)
-            .photo_url || "",
-        ).trim()
-      : "";
-  if (shopifyPhoto && /^https?:\/\//i.test(shopifyPhoto)) {
-    const priorPhoto = String(
-      working.metadata?.photo_url ||
-        (working.metadata?.specs &&
-        typeof working.metadata.specs === "object"
-          ? /** @type {Record<string, unknown>} */ (working.metadata.specs)
-              .photo_url
-          : "") ||
-        "",
-    ).trim();
-    // Fill missing / relative brand paths with Shopify CDN; never clobber a newer https upload.
-    if (!priorPhoto || priorPhoto.startsWith("/") || priorPhoto.startsWith("//")) {
+  // Persist Shopify CDN images onto local metadata when dashboard had none / relative only.
+  const shopifySyncRaw =
+    syncPatch.shopify && typeof syncPatch.shopify === "object"
+      ? /** @type {{ photo_url?: string | null, photo_urls?: unknown }} */ (
+          syncPatch.shopify
+        )
+      : null;
+  const shopifyPhotos = shopifySyncRaw
+    ? shopifyRemoteImageSrcs({
+        images: Array.isArray(shopifySyncRaw.photo_urls)
+          ? shopifySyncRaw.photo_urls.map((src) => ({ src }))
+          : shopifySyncRaw.photo_url
+            ? [{ src: shopifySyncRaw.photo_url }]
+            : [],
+      })
+    : [];
+  if (shopifyPhotos.length) {
+    const priorPhotos = productPhotoUrls(working);
+    const priorPrimary = productPhotoUrl(working) || "";
+    const onlyRelativeOrEmpty =
+      !priorPhotos.length ||
+      priorPhotos.every(
+        (url) => url.startsWith("/") || url.startsWith("//"),
+      );
+    // Fill missing / relative brand paths with Shopify CDN; never clobber https uploads.
+    if (onlyRelativeOrEmpty || (!priorPrimary && shopifyPhotos[0])) {
       working = (
         await upsertProduct({
           ...working,
           metadata: mergeSpecsIntoMetadata(working.metadata || {}, {
-            photo_url: shopifyPhoto,
+            photo_urls: shopifyPhotos,
+            photo_url: shopifyPhotos[0],
           }),
         })
       ).product;
@@ -87,9 +96,11 @@ export async function publishProductToChannels(product, opts = {}) {
   }
   // Drop non-ChannelSyncState fields before persisting sync row.
   if (syncPatch.shopify && typeof syncPatch.shopify === "object") {
-    const { photo_url: _drop, ...shopifySync } = /** @type {Record<string, unknown>} */ (
-      syncPatch.shopify
-    );
+    const {
+      photo_url: _dropPhoto,
+      photo_urls: _dropPhotos,
+      ...shopifySync
+    } = /** @type {Record<string, unknown>} */ (syncPatch.shopify);
     syncPatch.shopify = /** @type {import("./products-store.js").ChannelSyncState} */ (
       shopifySync
     );
@@ -179,7 +190,30 @@ export async function saveAndMaybePublishProduct(input, opts = {}) {
     return { ok: false, error: "title is required", status: 422 };
   }
 
-  const saved = await upsertProduct(input);
+  // Auto-assign SKU on create when the admin left it blank (synced to Shopify variant).
+  const incomingId = input.id != null ? String(input.id) : null;
+  const existing =
+    incomingId && String(incomingId).trim()
+      ? await getProduct(String(incomingId))
+      : null;
+  const isCreate = !existing;
+  let prepared = { ...input, title };
+  if (isCreate) {
+    const sku = generateProductSku({
+      title,
+      id: incomingId || undefined,
+      sku: input.sku,
+    });
+    prepared = { ...prepared, sku };
+  } else if (
+    (!input.sku || !String(input.sku).trim()) &&
+    existing?.sku
+  ) {
+    // Keep prior SKU when edit form clears the field accidentally.
+    prepared = { ...prepared, sku: existing.sku };
+  }
+
+  const saved = await upsertProduct(prepared);
   const explicitPublish =
     opts.publish === true ||
     String(input.publish || "").toLowerCase() === "true" ||
@@ -345,6 +379,7 @@ export async function syncShopifyCatalogInbound() {
                 : weight;
 
       const currencyFromTags = parseCurrencyTag(remoteProduct.tags);
+      const remotePhotos = shopifyRemoteImageSrcs(remoteProduct);
       const metadata = mergeSpecsIntoMetadata(existing?.metadata || {}, {
         category: remoteProduct.product_type
           ? String(remoteProduct.product_type)
@@ -355,7 +390,9 @@ export async function syncShopifyCatalogInbound() {
             ? Number(variant.compare_at_price)
             : undefined,
         barcode: variant.barcode ? String(variant.barcode) : undefined,
-        photo_url: shopifyRemoteImageSrc(remoteProduct) || undefined,
+        photo_urls: remotePhotos.length ? remotePhotos : undefined,
+        photo_url:
+          remotePhotos[0] || shopifyRemoteImageSrc(remoteProduct) || undefined,
       });
 
       await upsertProduct(

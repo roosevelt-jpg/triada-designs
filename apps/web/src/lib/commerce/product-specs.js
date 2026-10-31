@@ -16,8 +16,39 @@ import { resolvePublicAppUrl } from "@/lib/public-app-url";
  *   compare_at_price: number | null,
  *   inventory_quantity: number | null,
  *   photo_url: string | null,
+ *   photo_urls: string[],
  *   barcode: string | null,
  * }} ProductSpecs */
+
+/**
+ * Deduplicate and normalize a list of media URLs (order preserved).
+ * @param {unknown} raw
+ * @returns {string[]}
+ */
+export function normalizeProductMediaUrlList(raw) {
+  /** @type {string[]} */
+  const out = [];
+  const seen = new Set();
+  const push = (value) => {
+    const n = normalizeProductMediaUrl(value);
+    if (!n) return;
+    const key = n.replace(/\?.*$/, "");
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(n);
+  };
+  if (Array.isArray(raw)) {
+    for (const item of raw) push(item);
+  } else if (typeof raw === "string" && raw.trim()) {
+    // Allow comma/newline-separated legacy strings.
+    if (raw.includes(",") || raw.includes("\n")) {
+      for (const part of raw.split(/[,\n]/)) push(part);
+    } else {
+      push(raw);
+    }
+  }
+  return out;
+}
 
 /**
  * Normalize a stored product media URL for browser / Shopify use.
@@ -41,47 +72,149 @@ export function normalizeProductMediaUrl(raw) {
 }
 
 /**
+ * All image srcs from a Shopify Admin REST product payload (order preserved).
+ * @param {Record<string, unknown> | null | undefined} remoteProduct
+ * @returns {string[]}
+ */
+export function shopifyRemoteImageSrcs(remoteProduct) {
+  if (!remoteProduct || typeof remoteProduct !== "object") return [];
+  /** @type {unknown[]} */
+  const images = Array.isArray(remoteProduct.images) ? remoteProduct.images : [];
+  /** @type {string[]} */
+  const fromList = [];
+  for (const row of images) {
+    if (!row || typeof row !== "object") continue;
+    const src = /** @type {Record<string, unknown>} */ (row).src;
+    const n = normalizeProductMediaUrl(src);
+    if (n) fromList.push(n);
+  }
+  if (fromList.length) return normalizeProductMediaUrlList(fromList);
+  const featured =
+    remoteProduct.image && typeof remoteProduct.image === "object"
+      ? /** @type {Record<string, unknown>} */ (remoteProduct.image).src
+      : null;
+  const one = normalizeProductMediaUrl(featured);
+  return one ? [one] : [];
+}
+
+/**
  * First image src from a Shopify Admin REST product payload.
  * Prefers images[0].src, then featured image.src.
  * @param {Record<string, unknown> | null | undefined} remoteProduct
  * @returns {string | null}
  */
 export function shopifyRemoteImageSrc(remoteProduct) {
-  if (!remoteProduct || typeof remoteProduct !== "object") return null;
-  const images = Array.isArray(remoteProduct.images) ? remoteProduct.images : [];
-  const fromList =
-    images[0] && typeof images[0] === "object"
-      ? /** @type {Record<string, unknown>} */ (images[0]).src
-      : null;
-  const featured =
-    remoteProduct.image && typeof remoteProduct.image === "object"
-      ? /** @type {Record<string, unknown>} */ (remoteProduct.image).src
-      : null;
-  return normalizeProductMediaUrl(fromList || featured || null);
+  return shopifyRemoteImageSrcs(remoteProduct)[0] || null;
 }
 
 /**
- * Display/sync photo for a Triada catalog product (metadata.photo_url / specs).
+ * All display/sync photos for a Triada catalog product.
+ * Prefers metadata.photo_urls[]; falls back to photo_url / image_url.
+ * @param {Record<string, unknown> | null | undefined} product
+ * @returns {string[]}
+ */
+export function productPhotoUrls(product) {
+  return extractProductSpecs(product || {}).photo_urls || [];
+}
+
+/**
+ * Display/sync primary photo for a Triada catalog product (metadata.photo_url / specs).
  * @param {Record<string, unknown> | null | undefined} product
  * @returns {string | null}
  */
 export function productPhotoUrl(product) {
-  return normalizeProductMediaUrl(extractProductSpecs(product || {}).photo_url);
+  const urls = productPhotoUrls(product);
+  return urls[0] || null;
 }
 
 /**
  * Absolute https URL Shopify can fetch (skips data: URLs).
  * Relative brand paths become dashboard-origin absolute URLs.
+ * @param {string | null | undefined} url
+ * @returns {string | null}
+ */
+export function absoluteMediaUrlForShopify(url) {
+  const raw = normalizeProductMediaUrl(url);
+  if (!raw) return null;
+  if (/^data:/i.test(raw)) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const base = resolvePublicAppUrl().replace(/\/$/, "");
+  return `${base}${raw.startsWith("/") ? "" : "/"}${raw}`;
+}
+
+/**
+ * Absolute https URL Shopify can fetch for the primary product photo.
  * @param {Record<string, unknown> | null | undefined} product
  * @returns {string | null}
  */
 export function absoluteProductPhotoUrlForShopify(product) {
-  const url = productPhotoUrl(product);
-  if (!url) return null;
-  if (/^data:/i.test(url)) return null;
-  if (/^https?:\/\//i.test(url)) return url;
-  const base = resolvePublicAppUrl().replace(/\/$/, "");
-  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+  return absoluteMediaUrlForShopify(productPhotoUrl(product));
+}
+
+/**
+ * Absolute https URLs for every product photo Shopify should receive.
+ * @param {Record<string, unknown> | null | undefined} product
+ * @returns {string[]}
+ */
+export function absoluteProductPhotoUrlsForShopify(product) {
+  /** @type {string[]} */
+  const out = [];
+  const seen = new Set();
+  for (const url of productPhotoUrls(product)) {
+    const abs = absoluteMediaUrlForShopify(url);
+    if (!abs) continue;
+    const key = abs.replace(/\?.*$/, "");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(abs);
+  }
+  return out;
+}
+
+/**
+ * Auto-assign a Triada SKU when the admin leaves SKU blank on create.
+ * Format: TD-{TITLE_SLUG}-{4-char suffix} (matches seed style TD-RING-PRIEST-01).
+ * @param {{ title?: unknown, id?: unknown, sku?: unknown } | null | undefined} input
+ * @returns {string}
+ */
+export function generateProductSku(input = {}) {
+  const existing = input?.sku != null ? String(input.sku).trim() : "";
+  if (existing) return existing;
+
+  const titleSlug = String(input?.title || "ITEM")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-")
+    .slice(0, 28);
+  const slug = titleSlug || "ITEM";
+
+  const idRaw = String(input?.id || "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+  let suffix = idRaw.slice(-4);
+  if (suffix.length < 4) {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let rand = "";
+    for (let i = 0; i < 4 - suffix.length; i += 1) {
+      rand += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    suffix = `${rand}${suffix}`.slice(0, 4);
+  }
+  return `TD-${slug}-${suffix}`;
+}
+
+/**
+ * True when compare-at is a real sale (higher than current price).
+ * @param {unknown} price
+ * @param {unknown} compareAt
+ */
+export function isSalePrice(price, compareAt) {
+  const p = Number(price);
+  const c = Number(compareAt);
+  return Number.isFinite(p) && Number.isFinite(c) && c > p;
 }
 
 /**
@@ -118,6 +251,20 @@ export function extractProductSpecs(product = {}) {
     return null;
   };
 
+  const photoUrls = normalizeProductMediaUrlList([
+    ...(Array.isArray(nested.photo_urls) ? nested.photo_urls : []),
+    ...(Array.isArray(meta.photo_urls) ? meta.photo_urls : []),
+    nested.photo_url,
+    meta.photo_url,
+    nested.image_url,
+    meta.image_url,
+    nested.image,
+    meta.image,
+    nested.featured_image,
+    meta.featured_image,
+    product?.photo_url,
+  ]);
+
   return {
     category: pickString("category", "product_type") || "Jewellery",
     metal: pickString("metal"),
@@ -127,9 +274,8 @@ export function extractProductSpecs(product = {}) {
     collection: pickString("collection"),
     compare_at_price: pickNumber("compare_at_price"),
     inventory_quantity: pickNumber("inventory_quantity", "qty", "stock"),
-    photo_url: normalizeProductMediaUrl(
-      pickString("photo_url", "image_url", "image", "featured_image"),
-    ),
+    photo_url: photoUrls[0] || null,
+    photo_urls: photoUrls,
     barcode: pickString("barcode", "gtin"),
   };
 }
@@ -185,8 +331,25 @@ export function mergeSpecsIntoMetadata(metadata = {}, specsInput = {}) {
   assignString("collection", specsInput.collection);
   assignNumber("compare_at_price", specsInput.compare_at_price);
   assignNumber("inventory_quantity", specsInput.inventory_quantity);
-  assignString("photo_url", specsInput.photo_url);
   assignString("barcode", specsInput.barcode);
+
+  if (specsInput.photo_urls !== undefined || specsInput.photo_url !== undefined) {
+    const mergedPhotos = normalizeProductMediaUrlList([
+      ...(Array.isArray(specsInput.photo_urls) ? specsInput.photo_urls : []),
+      specsInput.photo_url,
+    ]);
+    if (!mergedPhotos.length) {
+      delete nextSpecs.photo_url;
+      delete nextSpecs.photo_urls;
+      delete base.photo_url;
+      delete base.photo_urls;
+    } else {
+      nextSpecs.photo_urls = mergedPhotos;
+      nextSpecs.photo_url = mergedPhotos[0];
+      base.photo_urls = mergedPhotos;
+      base.photo_url = mergedPhotos[0];
+    }
+  }
 
   base.specs = nextSpecs;
   return base;
