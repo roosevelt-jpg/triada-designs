@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { CustomerProfileSummary } from "@/components/crm/CustomerProfileSummary";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -188,42 +189,22 @@ export default function ConversationDetailPage() {
           <aside className="surface-card h-fit space-y-4 p-5">
             <div>
               <h2 className="font-display text-2xl">Customer</h2>
-              <div className="mt-3 flex items-start gap-3">
-                {conversation.contact?.picture || conversation.contact?.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={conversation.contact.picture || conversation.contact.avatar_url}
-                    alt=""
-                    className="h-14 w-14 shrink-0 rounded-full object-cover ring-1 ring-line"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div
-                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-stone font-display text-lg text-ink ring-1 ring-line"
-                    aria-hidden
-                  >
-                    {String(conversation.contact?.name || "?")
-                      .trim()
-                      .charAt(0)
-                      .toUpperCase() || "?"}
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <p className="font-medium">{conversation.contact?.name}</p>
-                  <p className="mt-1 text-sm text-muted">
-                    {conversation.contact?.email || "No email"}
-                  </p>
-                  <p className="text-sm text-muted">
-                    {conversation.contact?.phone || "No phone"}
-                  </p>
-                  <p className="text-sm text-muted">
-                    Language:{" "}
-                    {conversation.contact?.preferred_language ||
-                      conversation.detected_language ||
-                      "—"}
-                  </p>
-                </div>
+              <div className="mt-3">
+                <CustomerProfileSummary
+                  contact={conversation.contact}
+                  detectedLanguage={conversation.detected_language}
+                />
               </div>
+              {conversation.contact_id ? (
+                <p className="mt-3">
+                  <a
+                    href={`/contacts?open=${encodeURIComponent(conversation.contact_id)}`}
+                    className="text-sm font-medium text-brown hover:underline"
+                  >
+                    Open full CRM profile
+                  </a>
+                </p>
+              ) : null}
             </div>
             <div>
               <p className="text-sm font-medium">Status</p>

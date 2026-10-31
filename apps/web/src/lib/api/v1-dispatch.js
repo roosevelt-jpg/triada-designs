@@ -3100,9 +3100,25 @@ export async function dispatchV1(method, segments, request, body) {
   if (path.match(/^contacts\/[^/]+$/) && m === "GET") {
     const listed = await listContacts({});
     const c = listed.data.find((x) => x.id === segments[1]);
-    return c
-      ? jsonOk({ ...c, mode: listed.mode })
-      : jsonErr("Contact not found.", 404);
+    if (!c) return jsonErr("Contact not found.", 404);
+    const contactId = String(c.id);
+    const allConversations = await listConversations({});
+    const linked = allConversations.filter(
+      (row) => row.contact_id && String(row.contact_id) === contactId,
+    );
+    const shapedTrails = linked
+      .map((row) => shapeConversationForInbox(row, c))
+      .sort((a, b) =>
+        String(b.last_message_at || "").localeCompare(
+          String(a.last_message_at || ""),
+        ),
+      );
+    return jsonOk({
+      ...c,
+      conversations: shapedTrails,
+      mode: listed.mode,
+      source: "next_dual_run",
+    });
   }
 
   if (path === "integrations/whatsapp/campaign-draft" && m === "POST") {

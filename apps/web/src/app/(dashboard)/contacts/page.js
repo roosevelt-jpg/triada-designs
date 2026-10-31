@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ContactProfileDrawer } from "@/components/crm/ContactProfileDrawer";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -43,6 +44,37 @@ function shopifySyncOf(contact) {
   return meta.shopify_customer_sync || {};
 }
 
+function contactPhoto(contact) {
+  const meta =
+    contact?.metadata && typeof contact.metadata === "object"
+      ? contact.metadata
+      : {};
+  const raw =
+    contact?.avatar_url ||
+    contact?.picture ||
+    meta.avatar_url ||
+    meta.profile_pic ||
+    meta.picture ||
+    null;
+  if (typeof raw !== "string") return null;
+  const url = raw.trim();
+  return /^https?:\/\//i.test(url) ? url : null;
+}
+
+function displayName(contact) {
+  return String(contact?.name || "").trim() || null;
+}
+
+function displayEmail(contact) {
+  return String(contact?.email || "").trim() || null;
+}
+
+function displayPhone(contact) {
+  return (
+    String(contact?.phone_e164 || contact?.phone || "").trim() || null
+  );
+}
+
 export default function ContactsPage() {
   const [items, setItems] = useState([]);
   const [shopify, setShopify] = useState(null);
@@ -57,7 +89,22 @@ export default function ContactsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileContact, setProfileContact] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [openContactId, setOpenContactId] = useState("");
+  const openedFromQuery = useRef("");
   const fileRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      setOpenContactId(params.get("open") || "");
+    } catch {
+      setOpenContactId("");
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,6 +125,38 @@ export default function ContactsPage() {
     load();
   }, [load]);
 
+  const openProfile = useCallback(async (contact) => {
+    if (!contact?.id) return;
+    setProfileOpen(true);
+    setProfileContact(contact);
+    setProfileLoading(true);
+    setProfileError("");
+    try {
+      const detail = await apiFetch(`/v1/contacts/${encodeURIComponent(contact.id)}`);
+      setProfileContact(detail);
+    } catch (err) {
+      setProfileError(err.message || "Failed to load contact profile");
+    } finally {
+      setProfileLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!openContactId || loading || openedFromQuery.current === openContactId) {
+      return;
+    }
+    const match = items.find((c) => String(c.id) === String(openContactId));
+    if (match) {
+      openedFromQuery.current = openContactId;
+      openProfile(match);
+      return;
+    }
+    if (items.length > 0 || !loading) {
+      openedFromQuery.current = openContactId;
+      openProfile({ id: openContactId });
+    }
+  }, [openContactId, items, loading, openProfile]);
+
   function openCreate() {
     setEditingId(null);
     setForm(EMPTY_FORM);
@@ -95,6 +174,12 @@ export default function ContactsPage() {
       marketing_opt_out: Boolean(contact.marketing_opt_out),
     });
     setShowForm(true);
+    setProfileOpen(false);
+  }
+
+  function closeProfile() {
+    setProfileOpen(false);
+    setProfileError("");
   }
 
   function updateField(name, value) {
@@ -129,6 +214,9 @@ export default function ContactsPage() {
       setEditingId(null);
       setForm(EMPTY_FORM);
       await load();
+      if (profileOpen && result?.id) {
+        await openProfile(result);
+      }
     } catch (err) {
       setError(err.message || "Save failed");
     } finally {
@@ -217,7 +305,7 @@ export default function ContactsPage() {
   return (
     <DashboardShell
       title="Contacts"
-      description="CRM contacts for WhatsApp and Shopify customers. Create/edit auto-upserts Shopify customers when Connected."
+      description="CRM contacts for WhatsApp and Shopify customers. Create/edit auto-upserts Shopify customers when Connected. Click a row for the full profile."
       actions={
         <div className="flex w-full max-w-3xl flex-col gap-2 sm:flex-row sm:items-end">
           <div className="w-full max-w-xs">
@@ -389,6 +477,7 @@ export default function ContactsPage() {
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-line bg-stone/40 text-[13px] text-muted">
               <tr>
+                <th className="px-4 py-3 font-medium">Photo</th>
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Phone (E.164)</th>
@@ -402,13 +491,45 @@ export default function ContactsPage() {
               {items.map((contact) => {
                 const sync = shopifySyncOf(contact);
                 const shopifyId = contact.metadata?.shopify_customer_id;
+                const photo = contactPhoto(contact);
+                const name = displayName(contact);
+                const email = displayEmail(contact);
+                const phone = displayPhone(contact);
                 return (
-                  <tr key={contact.id} className="border-b border-line/70">
-                    <td className="px-4 py-3 font-medium">{contact.name || "—"}</td>
-                    <td className="px-4 py-3 text-muted">{contact.email || "—"}</td>
-                    <td className="px-4 py-3 text-muted">
-                      {contact.phone_e164 || contact.phone || "—"}
+                  <tr
+                    key={contact.id}
+                    className="cursor-pointer border-b border-line/70 transition-colors hover:bg-stone/25"
+                    onClick={() => openProfile(contact)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openProfile(contact);
+                      }
+                    }}
+                    tabIndex={0}
+                    aria-label={`Open profile for ${name || "contact"}`}
+                  >
+                    <td className="px-4 py-3">
+                      {photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={photo}
+                          alt=""
+                          className="h-9 w-9 rounded-full object-cover ring-1 ring-line"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-stone font-display text-sm text-ink ring-1 ring-line"
+                          aria-hidden
+                        >
+                          {(name || "?").charAt(0).toUpperCase()}
+                        </div>
+                      )}
                     </td>
+                    <td className="px-4 py-3 font-medium">{name || "—"}</td>
+                    <td className="px-4 py-3 text-muted">{email || "—"}</td>
+                    <td className="px-4 py-3 text-muted">{phone || "—"}</td>
                     <td className="px-4 py-3">
                       {contact.whatsapp_ready ? (
                         <Badge tone="success">ready</Badge>
@@ -424,7 +545,14 @@ export default function ContactsPage() {
                     </td>
                     <td className="px-4 py-3 capitalize">{contact.lifecycle_status || "—"}</td>
                     <td className="px-4 py-3">
-                      <Button size="sm" variant="secondary" onClick={() => openEdit(contact)}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openEdit(contact);
+                        }}
+                      >
                         Edit
                       </Button>
                     </td>
@@ -435,6 +563,15 @@ export default function ContactsPage() {
           </table>
         </div>
       ) : null}
+
+      <ContactProfileDrawer
+        open={profileOpen}
+        contact={profileContact}
+        loading={profileLoading}
+        error={profileError}
+        onClose={closeProfile}
+        onEdit={openEdit}
+      />
     </DashboardShell>
   );
 }
