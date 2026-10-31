@@ -181,12 +181,13 @@
   }
 
   .nav-section-toggle:hover {
-    background: color-mix(in srgb, var(--color-stone) 70%, transparent);
+    background: var(--color-white);
+    color: var(--color-brand-ink);
   }
 
   .nav-section-toggle--active {
     color: var(--color-brand-ink);
-    background: color-mix(in srgb, var(--color-brand-sand) 55%, transparent);
+    background: var(--color-brand-sand);
   }
 
   .nav-section-toggle:focus-visible {
@@ -199,6 +200,29 @@
     padding: 0.15rem 0 0.35rem;
     list-style: none;
     border-top: 1px solid var(--border-default);
+  }
+
+  /* Nav page links — idle / hover / active must read clearly on matching grey shell */
+  .nav-link--idle {
+    border-color: transparent;
+    background: transparent;
+    font-weight: 400;
+    color: color-mix(in srgb, var(--color-brand-ink) 62%, transparent);
+  }
+
+  .nav-link--idle:hover {
+    border-color: color-mix(in srgb, var(--color-brand-brown) 45%, transparent);
+    background: var(--color-white);
+    color: var(--color-brand-ink);
+    box-shadow: inset 0 0 0 1px var(--border-default);
+  }
+
+  .nav-link--active {
+    border-color: var(--color-brand-brown);
+    background: var(--color-white);
+    font-weight: 600;
+    color: var(--color-brand-ink);
+    box-shadow: inset 0 0 0 1px var(--border-strong);
   }
 
   /* Legacy static band (kept for any leftover markup) */

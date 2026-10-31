@@ -165,10 +165,8 @@ export function SidebarNav({ sections, pathname, onNavigate }) {
                       href={item.href}
                       onClick={onNavigate}
                       className={cn(
-                        "block rounded-sm border-l-2 px-2.5 py-[7px] text-[13px] leading-snug transition-[background-color,color,border-color] duration-150",
-                        active
-                          ? "border-brown bg-sand/80 font-medium text-ink"
-                          : "border-transparent font-normal text-ink/70 hover:bg-stone/70 hover:text-ink",
+                        "nav-link block rounded-sm border-l-2 px-2.5 py-[7px] text-[13px] leading-snug transition-[background-color,color,border-color,box-shadow] duration-150",
+                        active ? "nav-link--active" : "nav-link--idle",
                       )}
                     >
                       {item.label}

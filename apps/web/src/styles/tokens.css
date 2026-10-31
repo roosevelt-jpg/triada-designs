@@ -32,8 +32,8 @@
   --surface-page: var(--color-brand-ivory);
   --surface-card: var(--color-white);
   --surface-field: var(--color-field);
-  /* Deeper grey than the main content plane */
-  --surface-sidebar: #c6c5c2;
+  /* Same grey as the main dashboard content plane — not deeper */
+  --surface-sidebar: var(--color-brand-ivory);
   --surface-header: color-mix(in srgb, var(--color-brand-ivory) 55%, white);
   --text-primary: var(--color-brand-ink);
   --text-secondary: var(--color-muted);
