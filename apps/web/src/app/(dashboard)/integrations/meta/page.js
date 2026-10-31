@@ -13,6 +13,16 @@ import { MediaUploadField } from "@/components/ui/MediaUploadField";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { connectionLabel } from "@/lib/integrations/brand-labels";
+import {
+  normalizeTemplateCategory,
+  templateCategoryLabel,
+} from "@/lib/templates/categories";
+import {
+  publishModeLabel,
+  templateDisplayName,
+  templateNameFieldValue,
+  templateStatusLabel,
+} from "@/lib/templates/labels";
 
 const CHANNELS = [
   {
@@ -52,11 +62,12 @@ export default function MetaIntegrationsPage() {
   });
   const [waTemplates, setWaTemplates] = useState(null);
   const [waForm, setWaForm] = useState({
-    name: "jewellery_piece_ready",
+    name: "Jewellery piece ready",
     body: "Hi {{1}}, your Triada Designs jewellery piece is ready to view. Reply INTERESTED to continue.",
     category: "MARKETING",
   });
   const [waEditId, setWaEditId] = useState("");
+  const [waEditApiName, setWaEditApiName] = useState("");
   const [waEditForm, setWaEditForm] = useState({
     name: "",
     body: "",
@@ -179,7 +190,7 @@ export default function MetaIntegrationsPage() {
     setNotice("");
     try {
       const result = await apiFetch("/v1/integrations/whatsapp/templates/sync", { method: "POST" });
-      setNotice(`Synced ${result.synced || 0} WhatsApp templates (${result.mode}).`);
+      setNotice(`Synced ${result.synced || 0} WhatsApp templates.`);
       const wa = await apiFetch("/v1/integrations/whatsapp/templates");
       setWaTemplates(wa);
     } catch (err) {
@@ -291,7 +302,7 @@ export default function MetaIntegrationsPage() {
       });
       setNotice(
         result.message ||
-          `Seeded ${result.seeded || 0} automation templates · submitted ${result.submitted || 0} (${result.mode}).`,
+          `Seeded ${result.seeded || 0} automation templates · submitted ${result.submitted || 0}.`,
       );
       if (result.failed > 0) {
         setError(
@@ -322,7 +333,9 @@ export default function MetaIntegrationsPage() {
       if (!result.ok) {
         setError(result.error || "Template submit failed");
       } else {
-        setNotice(`WhatsApp template submitted (${result.mode}). Status: ${result.template?.status}.`);
+        setNotice(
+          `WhatsApp template submitted · ${templateStatusLabel(result.template?.status)}`,
+        );
       }
       const wa = await apiFetch("/v1/integrations/whatsapp/templates");
       setWaTemplates(wa);
@@ -335,8 +348,9 @@ export default function MetaIntegrationsPage() {
 
   function beginEditWaTemplate(tpl) {
     setWaEditId(tpl.id);
+    setWaEditApiName(String(tpl.name || ""));
     setWaEditForm({
-      name: tpl.name || "",
+      name: templateNameFieldValue(tpl.name || ""),
       body: tpl.body || "",
       category: (tpl.category || "marketing").toUpperCase(),
     });
@@ -348,15 +362,23 @@ export default function MetaIntegrationsPage() {
     setBusy("wa-edit");
     setNotice("");
     try {
+      const nameUnchanged =
+        templateDisplayName(waEditApiName) === String(waEditForm.name || "").trim();
       const result = await apiFetch(`/v1/integrations/whatsapp/templates/${waEditId}`, {
         method: "PATCH",
-        body: waEditForm,
+        body: {
+          ...waEditForm,
+          name: nameUnchanged ? waEditApiName : waEditForm.name,
+        },
       });
       if (!result.ok) {
         setError(result.error || "Template update failed");
       } else {
-        setNotice(`WhatsApp template updated / re-submitted (${result.mode}). Status: ${result.template?.status}.`);
+        setNotice(
+          `WhatsApp template updated · ${templateStatusLabel(result.template?.status)}`,
+        );
         setWaEditId("");
+        setWaEditApiName("");
       }
       const wa = await apiFetch("/v1/integrations/whatsapp/templates");
       setWaTemplates(wa);
@@ -548,7 +570,9 @@ export default function MetaIntegrationsPage() {
               {(waTemplates?.data || []).slice(0, 16).map((tpl) => (
                 <div key={tpl.id} className="rounded-md border border-line px-3 py-3">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="font-medium text-ink">{tpl.name}</p>
+                    <p className="font-medium text-ink">
+                      {templateDisplayName(tpl.name)}
+                    </p>
                     <Badge
                       tone={healthTone(
                         tpl.status === "approved" || tpl.status === "published"
@@ -572,17 +596,14 @@ export default function MetaIntegrationsPage() {
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm text-muted line-clamp-3">{tpl.body}</p>
-                  <p className="mt-2 text-xs uppercase tracking-wide text-muted">
-                    {tpl.category}
+                  <p className="mt-2 text-xs tracking-wide text-muted">
+                    {templateCategoryLabel(
+                      normalizeTemplateCategory(tpl.category, "marketing"),
+                    )}
                     {tpl.metadata?.campaign_type
-                      ? ` · ${tpl.metadata.campaign_type}`
+                      ? ` · ${templateDisplayName(tpl.metadata.campaign_type)}`
                       : ""}{" "}
-                    ·{" "}
-                    {tpl.publish_mode === "live"
-                      ? "Live"
-                      : tpl.publish_mode === "local_sim"
-                        ? "Local"
-                        : "Draft"}
+                    · {publishModeLabel(tpl.publish_mode) || "Draft"}
                   </p>
                   <div className="mt-3">
                     <Button variant="ghost" onClick={() => beginEditWaTemplate(tpl)}>
@@ -608,9 +629,9 @@ export default function MetaIntegrationsPage() {
                     value={waEditForm.category}
                     onChange={(e) => setWaEditForm((prev) => ({ ...prev, category: e.target.value }))}
                   >
-                    <option value="MARKETING">MARKETING</option>
-                    <option value="UTILITY">UTILITY</option>
-                    <option value="AUTHENTICATION">AUTHENTICATION</option>
+                    <option value="MARKETING">Marketing</option>
+                    <option value="UTILITY">Utility</option>
+                    <option value="AUTHENTICATION">Authentication</option>
                   </select>
                 </label>
                 <div className="md:col-span-2">
@@ -645,9 +666,9 @@ export default function MetaIntegrationsPage() {
                   value={waForm.category}
                   onChange={(e) => setWaForm((prev) => ({ ...prev, category: e.target.value }))}
                 >
-                  <option value="MARKETING">MARKETING</option>
-                  <option value="UTILITY">UTILITY</option>
-                  <option value="AUTHENTICATION">AUTHENTICATION</option>
+                  <option value="MARKETING">Marketing</option>
+                  <option value="UTILITY">Utility</option>
+                  <option value="AUTHENTICATION">Authentication</option>
                 </select>
               </label>
               <div className="md:col-span-2">
@@ -677,14 +698,30 @@ export default function MetaIntegrationsPage() {
                 value={waMediaForm.to}
                 onChange={(e) => setWaMediaForm((prev) => ({ ...prev, to: e.target.value }))}
               />
-              <Input
-                label="Template name"
-                name="wa-media-template"
-                value={waMediaForm.template_name}
-                onChange={(e) =>
-                  setWaMediaForm((prev) => ({ ...prev, template_name: e.target.value }))
-                }
-              />
+              <label className="text-sm">
+                <span className="mb-1 block text-muted">Template</span>
+                <select
+                  className="ops-field px-3 py-2"
+                  name="wa-media-template"
+                  value={waMediaForm.template_name}
+                  onChange={(e) =>
+                    setWaMediaForm((prev) => ({ ...prev, template_name: e.target.value }))
+                  }
+                >
+                  {(waTemplates?.data || []).map((tpl) => (
+                    <option key={tpl.id || tpl.name} value={tpl.name}>
+                      {templateDisplayName(tpl.name)}
+                    </option>
+                  ))}
+                  {(waTemplates?.data || []).some((tpl) => tpl.name === waMediaForm.template_name)
+                    ? null
+                    : (
+                      <option value={waMediaForm.template_name}>
+                        {templateDisplayName(waMediaForm.template_name)}
+                      </option>
+                    )}
+                </select>
+              </label>
               <label className="text-sm">
                 <span className="mb-1 block text-muted">Media type</span>
                 <select

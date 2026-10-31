@@ -15,18 +15,14 @@ import {
   normalizeTemplateCategory,
   templateCategoryLabel,
 } from "@/lib/templates/categories";
-
-const PLATFORMS = [
-  "facebook",
-  "instagram",
-  "whatsapp",
-  "tiktok",
-  "linkedin",
-  "email",
-  "webchat",
-  "telegram",
-  "shopify",
-];
+import {
+  TEMPLATE_PLATFORMS,
+  platformLabel,
+  publishModeLabel,
+  templateDisplayName,
+  templateNameFieldValue,
+  templateStatusLabel,
+} from "@/lib/templates/labels";
 
 function tone(status) {
   if (status === "published" || status === "approved") return "success";
@@ -100,7 +96,7 @@ export default function ChannelTemplatesPage() {
     if (selected) {
       setForm({
         platform: selected.platform,
-        name: selected.name,
+        name: templateNameFieldValue(selected.name),
         category: normalizeTemplateCategory(selected.category, "general"),
         body: selected.body || "",
       });
@@ -117,12 +113,14 @@ export default function ChannelTemplatesPage() {
         method: "POST",
         body: form,
       });
-      const mode = result.mode ? ` (${result.mode})` : "";
-      const status = result.template?.status ? ` · ${result.template.status}` : "";
+      const label = templateDisplayName(result.template?.name || form.name);
+      const status = result.template?.status
+        ? ` · ${templateStatusLabel(result.template.status)}`
+        : "";
       setNotice(
         form.platform === "whatsapp"
-          ? `WhatsApp template submitted${mode}${status}`
-          : `Created ${result.template?.name || form.name}${status}`,
+          ? `WhatsApp template submitted${status}`
+          : `Created ${label}${status}`,
       );
       setForm(emptyForm);
       setSelectedId(result.template?.id || null);
@@ -138,15 +136,20 @@ export default function ChannelTemplatesPage() {
     if (!selected) return;
     setBusy("save");
     try {
+      // Preserve Meta / technical API name when the admin only sees the label.
+      const nameUnchanged =
+        templateDisplayName(selected.name) === String(form.name || "").trim();
       const result = await apiFetch(`/v1/channel-templates/${selected.id}`, {
         method: "PUT",
         body: {
-          name: form.name,
+          name: nameUnchanged ? selected.name : form.name,
           category: form.category,
           body: form.body,
         },
       });
-      setNotice(`Saved ${result.template.name} (${result.template.status})`);
+      setNotice(
+        `Saved ${templateDisplayName(result.template.name)} · ${templateStatusLabel(result.template.status)}`,
+      );
       await load();
     } catch (err) {
       setError(err.message);
@@ -164,8 +167,9 @@ export default function ChannelTemplatesPage() {
         method: "POST",
         body: path === "reject" ? { reason: "Needs revision" } : {},
       });
-      const mode = result.mode ? ` via ${result.mode}` : "";
-      setNotice(`${label}${mode}. Status: ${result.template.status}`);
+      setNotice(
+        `${label}. Status: ${templateStatusLabel(result.template.status)}`,
+      );
       await load();
       setSelectedId(result.template.id);
     } catch (err) {
@@ -210,9 +214,9 @@ export default function ChannelTemplatesPage() {
                   onChange={(e) => setPlatformFilter(e.target.value)}
                 >
                   <option value="">All</option>
-                  {PLATFORMS.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
+                  {TEMPLATE_PLATFORMS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
                     </option>
                   ))}
                 </select>
@@ -229,34 +233,41 @@ export default function ChannelTemplatesPage() {
               />
             ) : (
               <ul className="surface-card divide-y divide-line overflow-hidden">
-                {items.map((tpl) => (
-                  <li key={tpl.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedId(tpl.id)}
-                      className={`flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors duration-150 hover:bg-stone/40 ${
-                        selectedId === tpl.id ? "bg-sand/40" : ""
-                      }`}
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-ink">{tpl.name}</span>
-                        <Badge tone="brand">{tpl.platform}</Badge>
-                        {tpl.category ? (
-                          <Badge tone="neutral">
-                            {templateCategoryLabel(
-                              normalizeTemplateCategory(tpl.category, "general"),
-                            )}
+                {items.map((tpl) => {
+                  const modeLabel = publishModeLabel(tpl.publish_mode);
+                  return (
+                    <li key={tpl.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(tpl.id)}
+                        className={`flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors duration-150 hover:bg-stone/40 ${
+                          selectedId === tpl.id ? "bg-sand/40" : ""
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-ink">
+                            {templateDisplayName(tpl.name)}
+                          </span>
+                          <Badge tone="brand">{platformLabel(tpl.platform)}</Badge>
+                          {tpl.category ? (
+                            <Badge tone="neutral">
+                              {templateCategoryLabel(
+                                normalizeTemplateCategory(tpl.category, "general"),
+                              )}
+                            </Badge>
+                          ) : null}
+                          <Badge tone={tone(tpl.status)}>
+                            {templateStatusLabel(tpl.status)}
                           </Badge>
-                        ) : null}
-                        <Badge tone={tone(tpl.status)}>{tpl.status}</Badge>
-                        {tpl.publish_mode ? (
-                          <Badge tone="neutral">{tpl.publish_mode}</Badge>
-                        ) : null}
-                      </div>
-                      <p className="line-clamp-2 text-sm text-muted">{tpl.body}</p>
-                    </button>
-                  </li>
-                ))}
+                          {modeLabel ? (
+                            <Badge tone="neutral">{modeLabel}</Badge>
+                          ) : null}
+                        </div>
+                        <p className="line-clamp-2 text-sm text-muted">{tpl.body}</p>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>
@@ -266,7 +277,8 @@ export default function ChannelTemplatesPage() {
               <div className="surface-card space-y-3 p-4">
                 <h2 className="font-display text-xl text-ink">Edit template</h2>
                 <p className="text-xs text-muted">
-                  {selected.platform} · {selected.slug}
+                  {platformLabel(selected.platform)} ·{" "}
+                  {templateStatusLabel(selected.status)}
                 </p>
                 <Input
                   label="Name"
@@ -329,9 +341,9 @@ export default function ChannelTemplatesPage() {
                   value={form.platform}
                   onChange={(e) => setForm((f) => ({ ...f, platform: e.target.value }))}
                 >
-                  {PLATFORMS.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
+                  {TEMPLATE_PLATFORMS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
                     </option>
                   ))}
                 </select>

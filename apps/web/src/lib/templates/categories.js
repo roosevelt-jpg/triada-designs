@@ -68,6 +68,15 @@ export function mapTemplateCategoryToMeta(value) {
 
 /** @param {string} value */
 export function templateCategoryLabel(value) {
-  const hit = TEMPLATE_CATEGORIES.find((c) => c.value === value);
-  return hit?.label || value;
+  const normalized = normalizeTemplateCategory(value, "");
+  const hit = TEMPLATE_CATEGORIES.find((c) => c.value === normalized || c.value === value);
+  if (hit) return hit.label;
+  const raw = String(value || "").trim();
+  if (!raw) return "General";
+  // Never echo snake_case / ALL_CAPS Meta keys in the admin UI.
+  return raw
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
