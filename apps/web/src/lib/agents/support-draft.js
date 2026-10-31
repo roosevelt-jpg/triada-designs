@@ -129,7 +129,7 @@ async function draftInboundSupportReplyUnformatted(input) {
 
   // 1) First contact → always English greeting + language preference ask.
   if (needsFirstContactLanguageAsk(conversation, { contact })) {
-    const ask = draftFirstContactLanguageAsk({ customerName });
+    const ask = await draftFirstContactLanguageAsk({ customerName });
     if (!dryRun && conversation.id && ask.conversation_patch) {
       await persistLanguagePreferenceState({
         conversation,
@@ -157,7 +157,7 @@ async function draftInboundSupportReplyUnformatted(input) {
     }
 
     if (isLanguageChoiceOnly(message) || isSimpleSupportGreeting(message)) {
-      const ack = draftLanguageLockedAck({
+      const ack = await draftLanguageLockedAck({
         language: resolved.code,
         customerName,
       });
@@ -225,7 +225,7 @@ async function draftInboundSupportReplyUnformatted(input) {
   }
 
   if (isSimpleSupportGreeting(message)) {
-    return draftFastSupportReply({
+    return await draftFastSupportReply({
       message,
       customerName,
       languageHint: replyLang.preferred_language || replyLang.code,

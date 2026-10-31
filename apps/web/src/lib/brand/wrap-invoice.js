@@ -8,6 +8,7 @@ import {
   brandLogoUrl,
   warmGreeting,
 } from "./identity";
+import { getBrandContactSync } from "./brand-contact-settings";
 import { wrapEmailMessage } from "./wrap-email";
 
 /**
@@ -53,11 +54,13 @@ export function wrapInvoiceDocument(input = {}) {
     : input.customerName
       ? `Prepared for <strong>${escapeHtml(input.customerName)}</strong>`
       : "Prepared for our valued client";
+  const brandContact = getBrandContactSync();
   const addressLine =
-    String(input.addressLine || "").trim() || BRAND.address.singleLine;
-  const opsEmail = String(input.opsEmail || "").trim() || BRAND.opsEmail;
+    String(input.addressLine || "").trim() || brandContact.address_line;
+  const opsEmail =
+    String(input.opsEmail || "").trim() || brandContact.ops_email;
   const phonesDisplay =
-    String(input.phones || "").trim() || BRAND.phones.join(" · ");
+    String(input.phones || "").trim() || brandContact.phones;
 
   const rowsHtml =
     lines.length > 0
@@ -142,6 +145,9 @@ export function wrapInvoiceDocument(input = {}) {
     customerName: input.customerName,
     bodyHtml: `<p>Please find your ${title.toLowerCase()} <strong>${escapeHtml(number)}</strong> for ${escapeHtml(formatMoney(total, currency))} ${escapeHtml(currency)}.</p>`,
     bodyText: `Please find your ${title.toLowerCase()} ${number} for ${formatMoney(total, currency)} ${currency}.`,
+    addressLine,
+    opsEmail,
+    phones: phonesDisplay,
   });
 
   return {

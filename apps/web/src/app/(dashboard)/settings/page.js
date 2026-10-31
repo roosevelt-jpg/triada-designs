@@ -23,6 +23,9 @@ export default function SettingsPage() {
   const [handoffEnabled, setHandoffEnabled] = useState(true);
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [callNumber, setCallNumber] = useState("");
+  const [addressLine, setAddressLine] = useState("");
+  const [opsEmail, setOpsEmail] = useState("");
+  const [phones, setPhones] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -45,6 +48,10 @@ export default function SettingsPage() {
       setHandoffEnabled(hh.enabled !== false);
       setWhatsappNumber(hh.whatsapp_number || "");
       setCallNumber(hh.call_number || "");
+      const bc = data.brand_contact || {};
+      setAddressLine(bc.address_line || "");
+      setOpsEmail(bc.ops_email || "");
+      setPhones(bc.phones || "");
       setSystemNow(formatDateTime(nowDate()));
     } catch (err) {
       setError(err.message || "Failed to load settings");
@@ -111,6 +118,33 @@ export default function SettingsPage() {
       setNotice("Live support contacts saved.");
     } catch (err) {
       setError(err.message || "Failed to save live support contacts");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveBrandContact(e) {
+    e.preventDefault();
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      const data = await apiFetch("/v1/settings/brand-contact", {
+        method: "PUT",
+        body: {
+          address_line: addressLine.trim(),
+          ops_email: opsEmail.trim(),
+          phones: phones.trim(),
+        },
+      });
+      if (data.brand_contact) {
+        setAddressLine(data.brand_contact.address_line || "");
+        setOpsEmail(data.brand_contact.ops_email || "");
+        setPhones(data.brand_contact.phones || "");
+      }
+      setNotice("Brand address and contact saved for invoices and AI replies.");
+    } catch (err) {
+      setError(err.message || "Failed to save brand address");
     } finally {
       setBusy(false);
     }
@@ -246,10 +280,10 @@ export default function SettingsPage() {
           <section id="brand" className="surface-card scroll-mt-24 p-5">
             <div className="ops-card-header">
               <div className="min-w-0">
-                <h2 className="font-display text-2xl">Brand on outbound</h2>
+                <h2 className="font-display text-2xl">Brand address & contact</h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted">
-                  WhatsApp, email, invoices, receipts, and channel templates include the Triada logo
-                  header, address footer, and warm greetings. Logo sourced from{" "}
+                  Shared footer for AI replies on Instagram, Messenger, WhatsApp and other channels,
+                  plus blank invoice address fields. Logo and warm greetings stay branded from{" "}
                   <a
                     href="https://triada-designs.com"
                     className="text-brown-dark underline"
@@ -258,15 +292,49 @@ export default function SettingsPage() {
                   >
                     triada-designs.com
                   </a>
-                  . Edit invoice content in plain text while keeping that brand chrome.
+                  . Saving an invoice with a custom address also updates this contact.
                 </p>
               </div>
             </div>
-            <div className="ops-actions">
-              <Link href="/orders/invoices">
-                <Button variant="secondary">Invoice editor</Button>
-              </Link>
-            </div>
+            <form className="mt-4 max-w-xl space-y-4" onSubmit={saveBrandContact}>
+              <label className="block text-sm text-ink">
+                <span className="mb-1.5 block font-medium">Address line</span>
+                <textarea
+                  name="address_line"
+                  rows={2}
+                  value={addressLine}
+                  onChange={(e) => setAddressLine(e.target.value)}
+                  className="ops-field w-full"
+                  placeholder="Street, city, postal code, country"
+                />
+              </label>
+              <Input
+                label="Ops email"
+                name="ops_email"
+                type="email"
+                value={opsEmail}
+                onChange={(e) => setOpsEmail(e.target.value)}
+                placeholder="info@triada-designs.com"
+              />
+              <Input
+                label="Phones"
+                name="phones"
+                value={phones}
+                onChange={(e) => setPhones(e.target.value)}
+                placeholder="+40 … · +49 …"
+                hint="Use · between numbers. Shown in AI reply and invoice footers."
+              />
+              <div className="ops-actions">
+                <Button type="submit" disabled={busy} size="sm">
+                  Save brand address
+                </Button>
+                <Link href="/orders/invoices">
+                  <Button type="button" variant="secondary" size="sm">
+                    Invoice editor
+                  </Button>
+                </Link>
+              </div>
+            </form>
           </section>
 
           <section id="emergency" className="surface-card scroll-mt-24 p-5">

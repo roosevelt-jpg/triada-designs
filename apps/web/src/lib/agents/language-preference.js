@@ -280,7 +280,7 @@ export function isLanguageChoiceOnly(text) {
  * English first-contact greeting + language preference ask (fast path, no LLM).
  * @param {{ customerName?: string | null }} [input]
  */
-export function draftFirstContactLanguageAsk(input = {}) {
+export async function draftFirstContactLanguageAsk(input = {}) {
   const started = Date.now();
   const core = [
     "Thanks for writing Triada Designs. How can we help with Salt & Spirit or a custom piece today?",
@@ -290,7 +290,7 @@ export function draftFirstContactLanguageAsk(input = {}) {
     AI_DISCLOSE.en,
   ].join("\n");
 
-  const branded = ensureBrandedOutboundText(core, {
+  const branded = await ensureBrandedOutboundText(core, {
     greetingKind: "first_touch",
     customerName: input.customerName || undefined,
     language: "en",
@@ -327,7 +327,7 @@ export function draftFirstContactLanguageAsk(input = {}) {
  *   customerName?: string | null,
  * }} input
  */
-export function draftLanguageLockedAck(input) {
+export async function draftLanguageLockedAck(input) {
   const started = Date.now();
   const code = normalizeLangCode(input.language) || "en";
   const meta = languageMeta(code);
@@ -337,7 +337,7 @@ export function draftLanguageLockedAck(input) {
     AI_DISCLOSE[code] || AI_DISCLOSE.en,
   ].join("\n");
 
-  const branded = ensureBrandedOutboundText(body, {
+  const branded = await ensureBrandedOutboundText(body, {
     greetingKind: "default",
     customerName: input.customerName || undefined,
     language: code,

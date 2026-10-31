@@ -173,6 +173,10 @@ import {
   getHumanHandoffSettings,
   saveHumanHandoffSettings,
 } from "@/lib/agents/human-handoff-settings";
+import {
+  getBrandContactSettings,
+  saveBrandContactSettings,
+} from "@/lib/brand/brand-contact-settings";
 import { normalizeWebchatInbound } from "@/lib/channels/normalize-inbound";
 import { mapParallel } from "@/lib/runtime/parallel-map";
 import { collectLiveDashboardMetrics } from "@/lib/api/dashboard-metrics";
@@ -552,10 +556,14 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "settings" && m === "GET") {
-    const humanHandoff = await getHumanHandoffSettings();
+    const [humanHandoff, brandContact] = await Promise.all([
+      getHumanHandoffSettings(),
+      getBrandContactSettings(),
+    ]);
     return jsonOk({
       workspace: { ...WORKSPACE, timezone: runtimeState.timezone },
       human_handoff: humanHandoff,
+      brand_contact: brandContact,
       source: "next_dual_run",
     });
   }
@@ -577,6 +585,25 @@ export async function dispatchV1(method, segments, request, body) {
         : {};
     const humanHandoff = await saveHumanHandoffSettings(patch);
     return jsonOk({ human_handoff: humanHandoff, ok: true });
+  }
+
+  if (path === "settings/brand-contact" && m === "GET") {
+    const brandContact = await getBrandContactSettings();
+    return jsonOk({ brand_contact: brandContact, ok: true });
+  }
+
+  if (
+    path === "settings/brand-contact" &&
+    (m === "PATCH" || m === "PUT" || m === "POST")
+  ) {
+    const patch =
+      body && typeof body === "object"
+        ? body.brand_contact && typeof body.brand_contact === "object"
+          ? body.brand_contact
+          : body
+        : {};
+    const brandContact = await saveBrandContactSettings(patch);
+    return jsonOk({ brand_contact: brandContact, ok: true });
   }
 
   if (path === "settings" && (m === "PATCH" || m === "PUT" || m === "POST")) {
@@ -623,9 +650,32 @@ export async function dispatchV1(method, segments, request, body) {
       });
     }
 
+    let brandContact = await getBrandContactSettings();
+    if (
+      body &&
+      typeof body === "object" &&
+      body.brand_contact &&
+      typeof body.brand_contact === "object"
+    ) {
+      brandContact = await saveBrandContactSettings(body.brand_contact);
+    } else if (
+      body &&
+      typeof body === "object" &&
+      (Object.prototype.hasOwnProperty.call(body, "address_line") ||
+        Object.prototype.hasOwnProperty.call(body, "ops_email") ||
+        Object.prototype.hasOwnProperty.call(body, "phones"))
+    ) {
+      brandContact = await saveBrandContactSettings({
+        address_line: body.address_line,
+        ops_email: body.ops_email,
+        phones: body.phones,
+      });
+    }
+
     return jsonOk({
       workspace: { ...WORKSPACE, timezone: runtimeState.timezone },
       human_handoff: humanHandoff,
+      brand_contact: brandContact,
       ok: true,
     });
   }
@@ -4329,6 +4379,8 @@ export async function dispatchV1(method, segments, request, body) {
   if (path === "brand/preview" && m === "POST") {
     const channel = String(body?.channel || "whatsapp").toLowerCase();
     const raw = String(body?.body || body?.message || "Thank you for choosing Triada Designs.");
+    // Warm Settings brand contact so footers match invoices / AI Meta replies.
+    await getBrandContactSettings();
     if (channel === "email") {
       return jsonOk(
         wrapEmailMessage({
@@ -4336,6 +4388,9 @@ export async function dispatchV1(method, segments, request, body) {
           bodyText: raw,
           customerName: body?.customer_name,
           greetingKind: body?.greeting_kind,
+          addressLine: body?.address_line || body?.addressLine,
+          opsEmail: body?.ops_email || body?.opsEmail,
+          phones: body?.phones,
         }),
       );
     }
@@ -4377,7 +4432,7 @@ export async function dispatchV1(method, segments, request, body) {
       );
     }
     return jsonOk(
-      ensureBrandedOutboundText(raw, {
+      await ensureBrandedOutboundText(raw, {
         greetingKind: body?.greeting_kind,
         customerName: body?.customer_name,
       }),

@@ -336,8 +336,7 @@ export async function broadcastQuoteInspiration(input = {}) {
   const captionRaw = String(
     content.creative_brief?.caption || quote || "Inspiration from Triada Designs",
   );
-  const branded = ensureBrandedOutboundText(captionRaw, {
-    channel: "whatsapp",
+  const branded = await ensureBrandedOutboundText(captionRaw, {
     greetingKind: "default",
   });
   const caption = branded.text || captionRaw;

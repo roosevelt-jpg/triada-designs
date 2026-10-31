@@ -1,7 +1,8 @@
 /**
  * Admin-editable invoice / receipt content (plain-text fields).
  * Brand chrome (logo header, warm greeting defaults) stays in wrap-invoice.
- * Address / ops email / phones may be overridden per invoice (blank = brand defaults).
+ * Address / ops email / phones may be overridden per invoice (blank = Settings brand contact).
+ * Saving non-blank address/contact also syncs the shared brand contact used by AI Meta replies.
  * Persists to Supabase when keyed, else local mock under .triada-local.
  */
 
@@ -10,6 +11,10 @@ import { hasSupabaseAdminCredentials } from "@/lib/supabase/config";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getLocalDataDir } from "@/lib/local-data-dir";
+import {
+  getBrandContactSettings,
+  syncBrandContactFromInvoice,
+} from "@/lib/brand/brand-contact-settings";
 import { wrapInvoiceDocument } from "@/lib/brand/wrap-invoice";
 
 const TABLE = "invoice_docs";
@@ -311,6 +316,9 @@ async function writeLocal(rows) {
  * @returns {Promise<{ data: InvoiceDoc[], storage: string }>}
  */
 export async function listInvoiceDocs() {
+  // Warm shared brand contact so blank invoice footers match Settings / AI replies.
+  await getBrandContactSettings().catch(() => null);
+
   if (hasSupabaseAdminCredentials()) {
     const supabase = createAdminSupabaseClient();
     if (supabase) {
@@ -352,6 +360,9 @@ export async function upsertInvoiceDoc(input) {
     updated_at: nowIso(),
     source: input.source || "manual",
   });
+
+  // Keep AI reply footers aligned with the invoice address the admin just saved.
+  await syncBrandContactFromInvoice(doc).catch(() => null);
 
   if (hasSupabaseAdminCredentials()) {
     const supabase = createAdminSupabaseClient();

@@ -199,7 +199,7 @@ export default function InvoiceEditorPage() {
           ? " · Shopify draft order synced"
           : "";
       setNotice(
-        `Saved ${inv?.invoice_number || payload.number}.${financeNote} Logo header stays branded; address and contact use your text or Triada defaults.`,
+        `Saved ${inv?.invoice_number || payload.number}.${financeNote} Logo header stays branded; address and contact use your text or Settings brand defaults (also used on AI replies).`,
       );
       if (inv) {
         setForm(invoiceToForm(inv));
@@ -360,10 +360,10 @@ export default function InvoiceEditorPage() {
                     className="ops-field min-h-[56px] px-3 py-2"
                     value={form.address_line}
                     onChange={(e) => setForm((f) => ({ ...f, address_line: e.target.value }))}
-                    placeholder="Leave blank for Triada Timisoara address"
+                    placeholder="Leave blank for Settings brand address"
                   />
                   <span className="block text-sm text-muted">
-                    Footer address line. Blank keeps the branded Timisoara address; alignment stays the same.
+                    Footer address line. Blank uses Settings brand address (also used on AI Meta replies). Saving a custom address updates that shared contact.
                   </span>
                 </label>
 
@@ -372,15 +372,15 @@ export default function InvoiceEditorPage() {
                     label="Ops email (plain text)"
                     value={form.ops_email}
                     onChange={(e) => setForm((f) => ({ ...f, ops_email: e.target.value }))}
-                    placeholder="Leave blank for Triada ops email"
-                    hint="Blank keeps brand ops email in the footer"
+                    placeholder="Leave blank for Settings brand ops email"
+                    hint="Blank keeps Settings brand ops email in the footer"
                   />
                   <Input
                     label="Phones (plain text)"
                     value={form.phones}
                     onChange={(e) => setForm((f) => ({ ...f, phones: e.target.value }))}
                     placeholder="+40 … · +49 …"
-                    hint="Blank keeps brand phones; use · between numbers"
+                    hint="Blank keeps Settings brand phones; use · between numbers"
                   />
                 </div>
 
@@ -509,7 +509,7 @@ export default function InvoiceEditorPage() {
             <div className="border-b border-line px-5 py-3.5">
               <h2 className="ops-section-title">Branded preview</h2>
               <p className="mt-1 text-sm text-muted">
-                Logo header stays branded. Address and contact footer use your plain text or Triada defaults — same alignment.
+                Logo header stays branded. Address and contact footer use your plain text or Settings brand defaults — same source as AI Meta replies.
               </p>
               {previewGreeting ? (
                 <p className="mt-2 text-sm text-brown-dark">{previewGreeting}</p>

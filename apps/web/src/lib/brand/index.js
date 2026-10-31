@@ -7,6 +7,15 @@ export {
   warmGreeting,
 } from "./identity";
 export {
+  brandContactOneLine,
+  brandContactPlain,
+  defaultBrandContactSettings,
+  getBrandContactSettings,
+  getBrandContactSync,
+  saveBrandContactSettings,
+  syncBrandContactFromInvoice,
+} from "./brand-contact-settings";
+export {
   brandedWhatsAppTemplateComponents,
   ensureBrandedOutboundText,
   wrapWhatsAppMessage,

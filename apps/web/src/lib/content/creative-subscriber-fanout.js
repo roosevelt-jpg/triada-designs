@@ -121,7 +121,7 @@ export function resolveCreativeFanoutMedia(contentId, content = null) {
  * @param {Record<string, unknown> | null | undefined} content
  * @param {ReturnType<typeof resolveCreativeFanoutMedia>} media
  */
-function buildCaption(content, media) {
+async function buildCaption(content, media) {
   const title = String(content?.title || "").trim();
   const body = String(content?.body || content?.caption || "").trim();
   const brief =
@@ -148,8 +148,7 @@ function buildCaption(content, media) {
   parts.push(viewUrl || PRODUCTION_APP_URL);
 
   const raw = parts.filter(Boolean).join("\n\n") || `${BRAND.name} just shared a new piece.`;
-  const branded = ensureBrandedOutboundText(raw, {
-    channel: "whatsapp",
+  const branded = await ensureBrandedOutboundText(raw, {
     greetingKind: "default",
   });
   return branded.text || raw;
@@ -429,7 +428,7 @@ export async function fanOutCreativeToSubscribers(input) {
   }
 
   const media = resolveCreativeFanoutMedia(String(content.id), content);
-  const caption = buildCaption(content, media);
+  const caption = await buildCaption(content, media);
   const emailBodies = buildEmailBodies(media, caption, content);
 
   const listed = await listContacts({});

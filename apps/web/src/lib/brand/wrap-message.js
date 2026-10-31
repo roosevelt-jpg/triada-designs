@@ -2,15 +2,22 @@
  * Brand wrappers for WhatsApp / chat-style outbound text.
  * Logo cannot embed in plain WhatsApp text — header uses brand name + greeting;
  * Meta templates may attach HEADER IMAGE separately via Graph components.
+ *
+ * Footers resolve from admin Settings brand contact (shared with invoices),
+ * not Meta business-profile address or static-only hardcoded identity.
  */
 
 import {
   BRAND,
-  brandAddressOneLine,
-  brandAddressPlain,
   brandLogoUrl,
   warmGreeting,
 } from "./identity";
+import {
+  brandContactOneLine,
+  brandContactPlain,
+  getBrandContactSettings,
+  getBrandContactSync,
+} from "./brand-contact-settings";
 
 /**
  * @typedef {{
@@ -21,6 +28,7 @@ import {
  *   includeGreeting?: boolean,
  *   includeFooter?: boolean,
  *   compactFooter?: boolean,
+ *   contact?: import("./brand-contact-settings").BrandContactSettings | Record<string, unknown> | null,
  * }} WrapWhatsAppOpts
  */
 
@@ -33,6 +41,7 @@ export function wrapWhatsAppMessage(opts) {
   const body = String(opts.body || "").trim();
   const includeGreeting = opts.includeGreeting !== false;
   const includeFooter = opts.includeFooter !== false;
+  const contact = opts.contact || getBrandContactSync();
   const greeting = includeGreeting
     ? warmGreeting(opts.greetingKind || "default", {
         customerName: opts.customerName,
@@ -41,8 +50,8 @@ export function wrapWhatsAppMessage(opts) {
     : "";
   const footer = includeFooter
     ? opts.compactFooter
-      ? brandAddressOneLine()
-      : brandAddressPlain()
+      ? brandContactOneLine(contact)
+      : brandContactPlain(contact)
     : "";
 
   const parts = [];
@@ -62,21 +71,28 @@ export function wrapWhatsAppMessage(opts) {
     /** Meta Cloud HEADER IMAGE component when submitting templates. */
     header_image_url: brandLogoUrl(),
     branded: true,
+    brand_contact: {
+      address_line: contact.address_line || getBrandContactSync().address_line,
+      ops_email: contact.ops_email || getBrandContactSync().ops_email,
+      phones: contact.phones || getBrandContactSync().phones,
+    },
   };
 }
 
 /**
  * Build Meta WhatsApp template components with brand TEXT HEADER + branded BODY + FOOTER.
  * IMAGE headers require a Meta Resumable Upload handle (not a public logo URL).
- * @param {{ body: string, greetingKind?: string, customerName?: string, language?: string, variables?: string[] }} opts
+ * @param {{ body: string, greetingKind?: string, customerName?: string, language?: string, variables?: string[], contact?: import("./brand-contact-settings").BrandContactSettings | null }} opts
  */
 export function brandedWhatsAppTemplateComponents(opts) {
+  const contact = opts.contact || getBrandContactSync();
   const wrapped = wrapWhatsAppMessage({
     body: opts.body,
     greetingKind: opts.greetingKind,
     customerName: opts.customerName,
     includeFooter: false,
     includeGreeting: true,
+    contact,
   });
   const text = wrapped.text;
   const variables = Array.isArray(opts.variables) ? opts.variables.map(String) : [];
@@ -99,6 +115,7 @@ export function brandedWhatsAppTemplateComponents(opts) {
     }
     bodyComponent.example = { body_text: [samples] };
   }
+  const footerLine = brandContactOneLine(contact);
   return {
     language: opts.language || "en_US",
     components: [
@@ -110,33 +127,42 @@ export function brandedWhatsAppTemplateComponents(opts) {
       bodyComponent,
       {
         type: "FOOTER",
-        text: brandAddressOneLine().slice(0, 60),
+        text: footerLine.slice(0, 60),
       },
     ],
-    preview_text: `${text}\n\n${brandAddressOneLine()}`,
+    preview_text: `${text}\n\n${footerLine}`,
     logo_url: brandLogoUrl(),
   };
 }
 
 /**
- * Ensure an outbound plain string carries Triada greeting + footer when missing.
+ * Ensure an outbound plain string carries Triada greeting + Settings brand footer.
+ * Warms brand contact from shared Settings/invoice source before wrapping.
  * @param {string} text
- * @param {{ greetingKind?: string, customerName?: string, language?: string }} [opts]
+ * @param {{ greetingKind?: string, customerName?: string, language?: string, contact?: import("./brand-contact-settings").BrandContactSettings | null }} [opts]
  */
-export function ensureBrandedOutboundText(text, opts = {}) {
+export async function ensureBrandedOutboundText(text, opts = {}) {
+  const contact = opts.contact || (await getBrandContactSettings());
   const raw = String(text || "").trim();
+  const opsEmail = String(contact.ops_email || "").trim();
+  const addressBit = String(contact.address_line || "")
+    .trim()
+    .slice(0, 24);
   const already =
     /triada designs/i.test(raw) &&
     (/warm greetings|salutări calde|herzliche grüße|chaleureuses salutations|тёплые приветствия|saludos cordiales|saudações calorosas|تحيات دافئة/i.test(
       raw,
     ) ||
-      /info@triada-designs\.com/i.test(raw));
+      (opsEmail && raw.toLowerCase().includes(opsEmail.toLowerCase())) ||
+      /info@triada-designs\.com/i.test(raw) ||
+      (addressBit.length >= 8 && raw.includes(addressBit)));
   if (already) {
     return {
       text: raw,
       branded: true,
       already_branded: true,
       logo_url: brandLogoUrl(),
+      brand_contact: contact,
     };
   }
   return wrapWhatsAppMessage({
@@ -144,5 +170,6 @@ export function ensureBrandedOutboundText(text, opts = {}) {
     greetingKind: opts.greetingKind,
     customerName: opts.customerName,
     language: opts.language,
+    contact,
   });
 }

@@ -44,7 +44,7 @@ export function isSimpleSupportGreeting(text) {
  *   languageOverride?: string,
  * }} input
  */
-export function draftFastSupportReply(input) {
+export async function draftFastSupportReply(input) {
   const started = Date.now();
   const message = String(input.message || "").trim() || "Hi";
   const detected = detectCustomerLanguage(message, {
@@ -56,7 +56,7 @@ export function draftFastSupportReply(input) {
     .toLowerCase() || "en";
   const cores = FAST_GREETING_CORE[lang] || FAST_GREETING_CORE.en;
   const body = `${cores}\n\n${FAST_HUMAN[lang] || FAST_HUMAN.en}`;
-  const branded = ensureBrandedOutboundText(body, {
+  const branded = await ensureBrandedOutboundText(body, {
     greetingKind: "default",
     customerName: input.customerName || undefined,
     language: lang,

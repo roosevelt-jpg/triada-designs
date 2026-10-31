@@ -168,7 +168,7 @@ export async function composeHumanHandoffReply(input) {
     call_number: settings.enabled ? settings.call_number : "",
     wa_link: settings.enabled ? whatsappMeLink(settings.whatsapp_number) : null,
   });
-  const branded = ensureBrandedOutboundText(body, {
+  const branded = await ensureBrandedOutboundText(body, {
     greetingKind: "default",
     language: lang,
   });

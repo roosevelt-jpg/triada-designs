@@ -7,6 +7,7 @@ import {
   brandLogoUrl,
   warmGreeting,
 } from "./identity";
+import { getBrandContactSync } from "./brand-contact-settings";
 
 /**
  * @typedef {{
@@ -16,6 +17,9 @@ import {
  *   greetingKind?: string,
  *   customerName?: string,
  *   includeGreeting?: boolean,
+ *   addressLine?: string,
+ *   opsEmail?: string,
+ *   phones?: string,
  * }} WrapEmailOpts
  */
 
@@ -34,6 +38,13 @@ export function wrapEmailMessage(opts) {
   const brown = BRAND.colors.brown;
   const ivory = BRAND.colors.ivory;
   const line = BRAND.colors.line;
+  const brandContact = getBrandContactSync();
+  const addressLine =
+    String(opts.addressLine || "").trim() || brandContact.address_line;
+  const opsEmail =
+    String(opts.opsEmail || "").trim() || brandContact.ops_email;
+  const phonesDisplay =
+    String(opts.phones || "").trim() || brandContact.phones;
 
   const bodyHtml =
     opts.bodyHtml ||
@@ -67,9 +78,9 @@ export function wrapEmailMessage(opts) {
         <tr>
           <td style="padding:20px 32px 28px;border-top:1px solid ${line};font-size:12px;line-height:1.5;color:${brown};">
             <strong style="color:${ink};">${escapeHtml(BRAND.name)}</strong><br/>
-            ${escapeHtml(BRAND.address.singleLine)}<br/>
-            <a href="mailto:${escapeAttr(BRAND.opsEmail)}" style="color:${brown};">${escapeHtml(BRAND.opsEmail)}</a>
-            · ${escapeHtml(BRAND.phones.join(" · "))}<br/>
+            ${escapeHtml(addressLine)}<br/>
+            <a href="mailto:${escapeAttr(opsEmail)}" style="color:${brown};">${escapeHtml(opsEmail)}</a>
+            · ${escapeHtml(phonesDisplay)}<br/>
             <a href="${escapeAttr(BRAND.siteUrl)}" style="color:${brown};">${escapeHtml(BRAND.siteUrl)}</a>
           </td>
         </tr>
@@ -87,9 +98,9 @@ export function wrapEmailMessage(opts) {
     [
       "—",
       BRAND.name,
-      BRAND.address.singleLine,
-      BRAND.opsEmail,
-      BRAND.phones.join(" · "),
+      addressLine,
+      opsEmail,
+      phonesDisplay,
       BRAND.siteUrl,
     ].join("\n"),
   );

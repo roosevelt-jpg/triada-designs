@@ -9,7 +9,11 @@
 import { completeAnthropic } from "./anthropic-client";
 import { getAnthropicStatus } from "@/lib/integrations/anthropic-credentials";
 import { retrieveTrainingDocs } from "@/lib/training/training-docs-store";
-import { BRAND, warmGreeting, brandAddressPlain } from "@/lib/brand/identity";
+import { BRAND, warmGreeting } from "@/lib/brand/identity";
+import {
+  brandContactPlain,
+  getBrandContactSettings,
+} from "@/lib/brand/brand-contact-settings";
 import { ensureBrandedOutboundText } from "@/lib/brand/wrap-message";
 import { buildAgents } from "@/lib/api/seed-data";
 import { findAgent } from "./agent-store";
@@ -67,9 +71,10 @@ export async function runAgentOrchestration(input = {}) {
   });
 
   const trainingLimit = fast ? 2 : 4;
-  const [training, status] = await Promise.all([
+  const [training, status, brandContact] = await Promise.all([
     retrieveTrainingDocs(message || purpose, { limit: trainingLimit }),
     getAnthropicStatus(),
+    getBrandContactSettings(),
   ]);
   const system = buildSystemPrompt({
     agent,
@@ -79,6 +84,7 @@ export async function runAgentOrchestration(input = {}) {
     sharedMemory: typeof input.context?.shared_memory === "string" ? input.context.shared_memory : "",
     assignedTasks: typeof input.context?.assigned_tasks === "string" ? input.context.assigned_tasks : "",
     detectedLanguage: detected,
+    brandContact,
   });
   const userPrompt = [
     `Purpose: ${purpose}`,
@@ -128,13 +134,14 @@ export async function runAgentOrchestration(input = {}) {
     };
   }
 
-  const branded = ensureBrandedOutboundText(text, {
+  const branded = await ensureBrandedOutboundText(text, {
     greetingKind: purpose.includes("after") ? "after_sale" : "default",
     customerName:
       typeof input.context?.customer_name === "string"
         ? input.context.customer_name
         : undefined,
     language: detected.code,
+    contact: brandContact,
   });
 
   return {
@@ -212,8 +219,8 @@ Hard rules:
 - Never mention internal tooling or implementation details in customer or dashboard-facing copy.
 ${languageBlock}
 ${roleFocus}
-Brand contact footer (use when closing):
-${brandAddressPlain()}
+Brand contact footer (use when closing — admin Settings / invoice address, not Meta defaults):
+${brandContactPlain(opts.brandContact)}
 
 ${policy ? `Agent policy:\n${policy}\n` : ""}
 ${opts.assignedTasks ? `Assigned tasks:\n${opts.assignedTasks}\n` : ""}

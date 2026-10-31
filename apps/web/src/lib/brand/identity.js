@@ -1,6 +1,10 @@
 /**
  * Triada Designs brand identity for outbound messages, invoices, and receipts.
  * Logo sourced from https://triada-designs.com — prefer live URL with local fallback.
+ *
+ * Address / ops email / phones below are fallback defaults only. Runtime AI reply
+ * footers, Meta channel wraps, and invoice blanks resolve via
+ * `brand-contact-settings` (Settings editor + invoice address sync).
  */
 
 export const BRAND = {
@@ -143,7 +147,10 @@ export function brandLogoUrl(opts = {}) {
   return BRAND.logoUrlLive;
 }
 
-/** Plain-text address block for WhatsApp / SMS-style footers. */
+/**
+ * Fallback plain-text address block (BRAND constants only).
+ * Prefer `brandContactPlain` / warmed Settings contact for outbound AI footers.
+ */
 export function brandAddressPlain() {
   return [
     BRAND.name,
@@ -154,7 +161,10 @@ export function brandAddressPlain() {
   ].join("\n");
 }
 
-/** Short one-line footer for Meta template BODY length limits. */
+/**
+ * Fallback one-line footer (BRAND constants only).
+ * Prefer `brandContactOneLine` for Meta template / AI footers.
+ */
 export function brandAddressOneLine() {
   return `${BRAND.name} · ${BRAND.address.singleLine} · ${BRAND.opsEmail} · ${BRAND.siteUrl}`;
 }
