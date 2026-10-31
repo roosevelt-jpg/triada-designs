@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { VisitorCaptureBeacon } from "@/components/crm/VisitorCaptureBeacon";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { PUBLIC_SITE_URL } from "@/lib/constants";
@@ -63,6 +64,7 @@ export default function LoginPage() {
 
   return (
     <div className="auth-stage relative min-h-screen overflow-hidden">
+      <VisitorCaptureBeacon source="website" />
       <LogoBubbles className="z-[1] opacity-70" />
 
       <div className="relative z-[2] mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center px-4 py-10 sm:px-6 lg:px-8">

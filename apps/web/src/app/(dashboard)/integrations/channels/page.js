@@ -193,7 +193,7 @@ export default function ChannelsIntegrationsPage() {
             <h2 className="ops-section-title">Website chat widget</h2>
             <p className="mt-2 text-sm text-muted">
               Embed <code>/widget/chat.js</code> with the public widget token. Rate-limited endpoint:{" "}
-              <code>POST /api/v1/webchat/messages</code>.
+              <code>POST /api/v1/webchat/messages</code>. Chat opens also create CRM leads via the visitor tracker.
             </p>
             <p className="mt-2 text-sm">
               Token: <code>{status.webchat_widget?.public_token || "not issued"}</code>
@@ -206,6 +206,25 @@ export default function ChannelsIntegrationsPage() {
             >
               Ensure widget token
             </Button>
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="ops-section-title">Website visitor leads</h2>
+            <p className="mt-2 text-sm text-muted">
+              First-party tracker for triada-designs.com (and public ops pages). Creates CRM leads with page,
+              referrer, UTM, and email when a form or chat captures one.
+            </p>
+            <pre className="mt-3 overflow-x-auto rounded-sm bg-shell px-3 py-2 text-[12px] leading-relaxed text-ink">
+{`<script
+  src="https://dashboard.triada-designs.com/widget/visitor.js"
+  data-api="https://dashboard.triada-designs.com/api/v1/visitors/capture"
+  data-token="${status.webchat_widget?.public_token || "wc_…"}"
+  defer></script>`}
+            </pre>
+            <p className="mt-2 text-sm text-muted">
+              Optional: <code>{`TriadaVisitor.identify({ email })`}</code> from popups. Endpoint:{" "}
+              <code>POST /api/v1/visitors/capture</code>.
+            </p>
           </Card>
         </div>
       ) : null}

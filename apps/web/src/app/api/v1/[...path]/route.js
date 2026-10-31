@@ -49,6 +49,14 @@ async function handle(request, context) {
     );
   }
 
+  // Public visitor → CRM lead capture — dedicated handler at /api/v1/visitors/capture.
+  if (segments[0] === "visitors" && segments[1] === "capture") {
+    return NextResponse.json(
+      { message: "Use dedicated visitors capture route handler." },
+      { status: 404 },
+    );
+  }
+
   const membership = await requireMembership(request);
   if (!membership.ok) {
     return NextResponse.json(

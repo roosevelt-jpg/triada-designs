@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { normalizeWebchatInbound } from "@/lib/channels/normalize-inbound";
 import { handleInboundSupportChannel } from "@/lib/agents/support-channel";
+import { captureVisitorAsLead } from "@/lib/crm/visitor-leads";
+import { extractEmail } from "@/lib/crm/extract-contact-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +45,33 @@ export async function POST(request) {
     token,
     body: inboundBody,
   });
+
+  // Non-blocking CRM lead from webchat (page / referrer / utm / email when present).
+  const payload =
+    body && typeof body === "object"
+      ? /** @type {Record<string, unknown>} */ (body)
+      : {};
+  void captureVisitorAsLead({
+    visitor_id: normalized.external_user_id,
+    page: payload.page || payload.page_url || null,
+    referrer: payload.referrer || null,
+    email:
+      extractEmail(payload.email) ||
+      extractEmail(inboundBody) ||
+      null,
+    name: normalized.contact_name || payload.name || null,
+    source: "webchat",
+    source_channel: "webchat",
+    utm_source: payload.utm_source,
+    utm_medium: payload.utm_medium,
+    utm_campaign: payload.utm_campaign,
+    utm_term: payload.utm_term,
+    utm_content: payload.utm_content,
+    metadata: {
+      webchat_token_present: Boolean(token),
+      conversation_hint: normalized.external_conversation_id,
+    },
+  }).catch(() => {});
 
   const handled = await handleInboundSupportChannel({
     channel: "webchat",

@@ -2648,6 +2648,32 @@ export async function dispatchV1(method, segments, request, body) {
       token,
       body: inboundBody,
     });
+    // Mirror dedicated webchat route: visitor → CRM lead (non-blocking).
+    try {
+      const { captureVisitorAsLead } = await import("@/lib/crm/visitor-leads");
+      const { extractEmail } = await import("@/lib/crm/extract-contact-fields");
+      const payload =
+        body && typeof body === "object"
+          ? /** @type {Record<string, unknown>} */ (body)
+          : {};
+      void captureVisitorAsLead({
+        visitor_id: normalized.external_user_id,
+        page: payload.page || payload.page_url || null,
+        referrer: payload.referrer || null,
+        email:
+          extractEmail(payload.email) || extractEmail(inboundBody) || null,
+        name: normalized.contact_name || payload.name || null,
+        source: "webchat",
+        source_channel: "webchat",
+        utm_source: payload.utm_source,
+        utm_medium: payload.utm_medium,
+        utm_campaign: payload.utm_campaign,
+        utm_term: payload.utm_term,
+        utm_content: payload.utm_content,
+      }).catch(() => {});
+    } catch {
+      /* non-blocking */
+    }
     const handled = await handleInboundSupportChannel({
       channel: "webchat",
       body: normalized.body,

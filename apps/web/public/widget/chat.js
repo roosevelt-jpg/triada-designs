@@ -21,9 +21,72 @@
   }
 
   var visitorId =
+    localStorage.getItem("triada_visitor_id") ||
     localStorage.getItem("triada_wc_vid") ||
     "v_" + Math.random().toString(36).slice(2, 10);
   localStorage.setItem("triada_wc_vid", visitorId);
+  try {
+    localStorage.setItem("triada_visitor_id", visitorId);
+  } catch (e) {
+    /* ignore */
+  }
+
+  var visitorApi =
+    script.getAttribute("data-visitor-api") ||
+    window.TRIADA_VISITOR_API ||
+    (api.indexOf("/webchat/messages") >= 0
+      ? api.replace(/\/webchat\/messages\/?$/, "/visitors/capture")
+      : "/api/v1/visitors/capture");
+
+  function pageContext() {
+    var params;
+    try {
+      params = new URLSearchParams(window.location.search || "");
+    } catch (err) {
+      params = null;
+    }
+    return {
+      page: String(window.location.href || ""),
+      referrer: String(document.referrer || "") || null,
+      utm_source: params ? params.get("utm_source") || undefined : undefined,
+      utm_medium: params ? params.get("utm_medium") || undefined : undefined,
+      utm_campaign: params
+        ? params.get("utm_campaign") || undefined
+        : undefined,
+      utm_term: params ? params.get("utm_term") || undefined : undefined,
+      utm_content: params ? params.get("utm_content") || undefined : undefined,
+    };
+  }
+
+  function captureVisitorLead(extra) {
+    var payload = Object.assign(
+      {
+        visitor_id: visitorId,
+        token: token,
+        source: "webchat",
+      },
+      pageContext(),
+      extra || {},
+    );
+    try {
+      fetch(visitorApi, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+        mode: "cors",
+        credentials: "omit",
+        keepalive: true,
+      }).catch(function () {});
+    } catch (err) {
+      /* non-blocking */
+    }
+  }
+
+  // Page open via chat widget → CRM lead (deduped server-side by visitor_id).
+  captureVisitorLead();
 
   var root = document.createElement("div");
   root.setAttribute("data-triada-webchat", "1");
@@ -82,14 +145,34 @@
     addBubble(body, "You");
     input.value = "";
 
+    var emailMatch = body.match(
+      /[a-z0-9][a-z0-9._%+-]*@[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/i,
+    );
+    if (emailMatch) {
+      try {
+        localStorage.setItem("triada_visitor_email", emailMatch[0]);
+      } catch (e2) {
+        /* ignore */
+      }
+      captureVisitorLead({ email: emailMatch[0] });
+    } else {
+      captureVisitorLead();
+    }
+
     fetch(api, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        token: token,
-        body: body,
-        visitor_id: visitorId,
-      }),
+      body: JSON.stringify(
+        Object.assign(
+          {
+            token: token,
+            body: body,
+            visitor_id: visitorId,
+          },
+          pageContext(),
+          emailMatch ? { email: emailMatch[0] } : {},
+        ),
+      ),
     })
       .then(function (res) {
         return res.json().then(function (json) {
