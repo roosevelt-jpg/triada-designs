@@ -137,8 +137,22 @@ export function InboxChatWorkspace({ selectedId = null }) {
   const [threadLoading, setThreadLoading] = useState(Boolean(selectedId));
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [adminAvatarUrl, setAdminAvatarUrl] = useState("");
   const threadEndRef = useRef(null);
   const composerRef = useRef(null);
+
+  useEffect(() => {
+    apiFetch("/v1/settings/profile")
+      .then((data) => {
+        const url = data?.admin_profile?.avatar_url;
+        if (typeof url === "string" && url.trim()) {
+          setAdminAvatarUrl(url.trim());
+        }
+      })
+      .catch(() => {
+        /* header/settings remain source of truth */
+      });
+  }, []);
 
   const loadList = useCallback(async () => {
     setListLoading(true);
@@ -475,12 +489,16 @@ export function InboxChatWorkspace({ selectedId = null }) {
                     {group.messages.map((message) => {
                       const mine = message.direction === "outbound";
                       const stamp = formatChatClock(message.created_at);
+                      const isAgent = message.sender_type === "agent";
                       const senderLabel =
                         message.sender_type === "bot"
                           ? "AI"
-                          : message.sender_type === "agent"
+                          : isAgent
                             ? "You"
                             : "Customer";
+                      const agentPhoto =
+                        isAgent &&
+                        (message.sender_avatar_url || adminAvatarUrl || "");
                       return (
                         <div
                           key={message.id}
@@ -489,6 +507,13 @@ export function InboxChatWorkspace({ selectedId = null }) {
                             mine ? "is-mine" : "is-theirs",
                           )}
                         >
+                          {agentPhoto ? (
+                            <ContactAvatar
+                              name={senderLabel}
+                              avatar_url={agentPhoto}
+                              size="sm"
+                            />
+                          ) : null}
                           <div
                             className={cn(
                               "inbox-chat__bubble",

@@ -1,6 +1,7 @@
 /**
  * Deliver an admin/human Unified Inbox reply live on the conversation's channel.
  * Uses the same send adapters as AI Support (WA Cloud, Page Messaging, Support text).
+ * When admin has a profile photo: Messenger gets persona_id; WA/IG stay account-level.
  */
 
 import {
@@ -10,6 +11,7 @@ import {
   getConversation,
   patchConversation,
 } from "@/lib/crm/conversations-store";
+import { getAdminProfileSettings } from "@/lib/agents/admin-profile-settings";
 import { sendWhatsAppTextMessage } from "@/lib/integrations/whatsapp-cloud-text";
 import { sendPageMessagingText } from "@/lib/integrations/meta-page-text";
 import { sendSupportChannelText } from "@/lib/integrations/support-channel-send";
@@ -51,6 +53,22 @@ export async function sendHumanInboxReply(input) {
     typeof meta.contact_name === "string" ? meta.contact_name : undefined;
   const externalUserId = String(conversation.external_user_id || "").trim();
 
+  let adminProfile = null;
+  try {
+    adminProfile = await getAdminProfileSettings();
+  } catch {
+    adminProfile = null;
+  }
+  const senderAvatarUrl =
+    adminProfile?.avatar_url && String(adminProfile.avatar_url).trim()
+      ? String(adminProfile.avatar_url).trim()
+      : null;
+  const messengerPersonaId =
+    adminProfile?.messenger_persona_id &&
+    String(adminProfile.messenger_persona_id).trim()
+      ? String(adminProfile.messenger_persona_id).trim()
+      : null;
+
   /** @type {Record<string, unknown>} */
   let send;
 
@@ -59,13 +77,20 @@ export async function sendHumanInboxReply(input) {
       externalUserId ||
       (typeof meta.wa_id === "string" ? meta.wa_id : "") ||
       "";
+    // WhatsApp Cloud session send has no per-message avatar — customers see
+    // the business profile picture (synced separately when admin saves photo).
     send = await sendWhatsAppTextMessage({ to: String(to).trim(), body });
   } else if (SUPPORT_PAGE_MESSAGING_CHANNELS.includes(channel)) {
+    const usePersona =
+      (channel === "messenger" || channel === "facebook") && messengerPersonaId
+        ? messengerPersonaId
+        : null;
     send = await sendPageMessagingText({
       channel,
       recipient_id: externalUserId,
       body,
       page_or_account_id: String(conversation.page_or_account_id || "").trim(),
+      persona_id: usePersona,
     });
   } else if (SUPPORT_TEXT_CHANNELS.includes(channel)) {
     send = await sendSupportChannelText({
@@ -110,6 +135,7 @@ export async function sendHumanInboxReply(input) {
     send_mode: send?.mode || null,
     send_ok: true,
     send_error: null,
+    sender_avatar_url: senderAvatarUrl,
   });
 
   return {

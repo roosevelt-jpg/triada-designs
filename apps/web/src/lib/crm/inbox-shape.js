@@ -20,6 +20,11 @@ export function shapeMessageForInbox(message) {
   if (direction === "outbound") {
     senderType = agentKey === "human" ? "agent" : "bot";
   }
+  const senderAvatar =
+    typeof message.sender_avatar_url === "string" &&
+    message.sender_avatar_url.trim()
+      ? String(message.sender_avatar_url).trim()
+      : null;
   return {
     id: String(message.id || ""),
     body: formatChatMessageBody(message.body),
@@ -28,6 +33,7 @@ export function shapeMessageForInbox(message) {
     created_at: String(message.created_at || message.at || ""),
     agent_key: agentKey,
     provider_message_id: message.provider_message_id || null,
+    sender_avatar_url: senderAvatar,
   };
 }
 

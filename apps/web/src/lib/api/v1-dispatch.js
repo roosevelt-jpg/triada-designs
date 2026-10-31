@@ -177,6 +177,11 @@ import {
   getBrandContactSettings,
   saveBrandContactSettings,
 } from "@/lib/brand/brand-contact-settings";
+import {
+  getAdminProfileSettings,
+  saveAdminProfileSettings,
+} from "@/lib/agents/admin-profile-settings";
+import { syncAdminProfileToChannels } from "@/lib/agents/admin-profile-channel-sync";
 import { normalizeWebchatInbound } from "@/lib/channels/normalize-inbound";
 import { mapParallel } from "@/lib/runtime/parallel-map";
 import { collectLiveDashboardMetrics } from "@/lib/api/dashboard-metrics";
@@ -556,14 +561,16 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "settings" && m === "GET") {
-    const [humanHandoff, brandContact] = await Promise.all([
+    const [humanHandoff, brandContact, adminProfile] = await Promise.all([
       getHumanHandoffSettings(),
       getBrandContactSettings(),
+      getAdminProfileSettings(),
     ]);
     return jsonOk({
       workspace: { ...WORKSPACE, timezone: runtimeState.timezone },
       human_handoff: humanHandoff,
       brand_contact: brandContact,
+      admin_profile: adminProfile,
       source: "next_dual_run",
     });
   }
@@ -604,6 +611,46 @@ export async function dispatchV1(method, segments, request, body) {
         : {};
     const brandContact = await saveBrandContactSettings(patch);
     return jsonOk({ brand_contact: brandContact, ok: true });
+  }
+
+  if (path === "settings/profile" && m === "GET") {
+    const adminProfile = await getAdminProfileSettings();
+    return jsonOk({ admin_profile: adminProfile, ok: true });
+  }
+
+  if (
+    path === "settings/profile" &&
+    (m === "PATCH" || m === "PUT" || m === "POST")
+  ) {
+    const patch =
+      body && typeof body === "object"
+        ? body.admin_profile && typeof body.admin_profile === "object"
+          ? body.admin_profile
+          : body
+        : {};
+    const syncChannels = patch.sync_channels !== false;
+    /** @type {Record<string, unknown>} */
+    const profilePatch = {};
+    if (Object.prototype.hasOwnProperty.call(patch, "display_name")) {
+      profilePatch.display_name = patch.display_name;
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "avatar_url")) {
+      profilePatch.avatar_url = patch.avatar_url;
+    }
+    const saved = await saveAdminProfileSettings(profilePatch);
+    if (!syncChannels) {
+      return jsonOk({
+        admin_profile: saved,
+        channel_sync: saved.channel_sync,
+        ok: true,
+      });
+    }
+    const synced = await syncAdminProfileToChannels(saved);
+    return jsonOk({
+      admin_profile: synced.admin_profile,
+      channel_sync: synced.channel_sync,
+      ok: true,
+    });
   }
 
   if (path === "settings" && (m === "PATCH" || m === "PUT" || m === "POST")) {
@@ -672,10 +719,37 @@ export async function dispatchV1(method, segments, request, body) {
       });
     }
 
+    let adminProfile = await getAdminProfileSettings();
+    let channelSync = adminProfile.channel_sync;
+    if (
+      body &&
+      typeof body === "object" &&
+      body.admin_profile &&
+      typeof body.admin_profile === "object"
+    ) {
+      const synced = await syncAdminProfileToChannels(body.admin_profile);
+      adminProfile = synced.admin_profile;
+      channelSync = synced.channel_sync;
+    } else if (
+      body &&
+      typeof body === "object" &&
+      (Object.prototype.hasOwnProperty.call(body, "avatar_url") ||
+        Object.prototype.hasOwnProperty.call(body, "display_name"))
+    ) {
+      const synced = await syncAdminProfileToChannels({
+        avatar_url: body.avatar_url,
+        display_name: body.display_name,
+      });
+      adminProfile = synced.admin_profile;
+      channelSync = synced.channel_sync;
+    }
+
     return jsonOk({
       workspace: { ...WORKSPACE, timezone: runtimeState.timezone },
       human_handoff: humanHandoff,
       brand_contact: brandContact,
+      admin_profile: adminProfile,
+      channel_sync: channelSync,
       ok: true,
     });
   }

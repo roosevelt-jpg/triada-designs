@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
+import { MediaUploadField } from "@/components/ui/MediaUploadField";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { TimezoneSelect } from "@/components/ui/TimezoneSelect";
 import { apiFetch } from "@/lib/api-client";
@@ -23,6 +24,9 @@ export default function SettingsPage() {
   const [handoffEnabled, setHandoffEnabled] = useState(true);
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [callNumber, setCallNumber] = useState("");
+  const [displayName, setDisplayName] = useState("Triada Admin");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [channelSync, setChannelSync] = useState(null);
   const [addressLine, setAddressLine] = useState("");
   const [opsEmail, setOpsEmail] = useState("");
   const [phones, setPhones] = useState("");
@@ -48,6 +52,10 @@ export default function SettingsPage() {
       setHandoffEnabled(hh.enabled !== false);
       setWhatsappNumber(hh.whatsapp_number || "");
       setCallNumber(hh.call_number || "");
+      const profile = data.admin_profile || {};
+      setDisplayName(profile.display_name || "Triada Admin");
+      setAvatarUrl(profile.avatar_url || "");
+      setChannelSync(profile.channel_sync || null);
       const bc = data.brand_contact || {};
       setAddressLine(bc.address_line || "");
       setOpsEmail(bc.ops_email || "");
@@ -123,6 +131,31 @@ export default function SettingsPage() {
     }
   }
 
+  async function saveProfile(e) {
+    e.preventDefault();
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      const data = await apiFetch("/v1/settings/profile", {
+        method: "PUT",
+        body: {
+          display_name: displayName.trim() || "Triada Admin",
+          avatar_url: avatarUrl || null,
+        },
+      });
+      const profile = data.admin_profile || {};
+      setDisplayName(profile.display_name || "Triada Admin");
+      setAvatarUrl(profile.avatar_url || "");
+      setChannelSync(data.channel_sync || profile.channel_sync || null);
+      setNotice("Profile photo saved. Header and Inbox use it immediately.");
+    } catch (err) {
+      setError(err.message || "Failed to save profile photo");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveBrandContact(e) {
     e.preventDefault();
     setBusy(true);
@@ -153,7 +186,7 @@ export default function SettingsPage() {
   return (
     <DashboardShell
       title="Settings"
-      description="Workspace defaults, live support contacts for human handoff, timezone for scheduling displays, and emergency controls."
+      description="Profile photo for admin replies, brand address, live support contacts, timezone, and emergency controls."
     >
       {loading ? <Skeleton className="h-40" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -161,6 +194,81 @@ export default function SettingsPage() {
 
       {!loading && workspace ? (
         <div className="space-y-5">
+          <section id="profile" className="surface-card scroll-mt-24 p-5">
+            <div className="ops-card-header">
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl">Profile photo</h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted">
+                  Shown in the header account button and on your Unified Inbox
+                  replies. Where Meta allows, the same photo is used when
+                  customers see your message on Messenger, WhatsApp, or Instagram.
+                </p>
+              </div>
+            </div>
+            <form className="mt-4 max-w-xl space-y-4" onSubmit={saveProfile}>
+              <Input
+                label="Display name on replies"
+                name="display_name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Triada Admin"
+                hint="Used for Messenger Personas attribution when the photo syncs."
+              />
+              <MediaUploadField
+                label="Profile photo"
+                value={avatarUrl}
+                mediaType="image"
+                purpose="general"
+                folder="profile"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={busy}
+                onUploaded={(payload) => {
+                  setAvatarUrl(payload.url || payload.media_url || "");
+                }}
+                onClear={() => setAvatarUrl("")}
+                hint="JPEG, PNG, or WebP. Direct upload only — no URL paste."
+              />
+              <div className="ops-actions">
+                <Button type="submit" disabled={busy} size="sm">
+                  Save profile photo
+                </Button>
+              </div>
+            </form>
+            {channelSync ? (
+              <ul className="mt-4 space-y-1.5 text-sm text-muted">
+                <li>
+                  Messenger:{" "}
+                  {channelSync.messenger?.ok
+                    ? channelSync.messenger.simulated
+                      ? "ready (sim) — live Personas need Page token"
+                      : channelSync.messenger.reused
+                        ? "persona ready"
+                        : "persona synced"
+                    : channelSync.messenger?.skipped
+                      ? channelSync.messenger.note ||
+                        "needs a public https photo URL for Personas"
+                      : channelSync.messenger?.error || "not synced"}
+                </li>
+                <li>
+                  WhatsApp:{" "}
+                  {channelSync.whatsapp?.ok
+                    ? channelSync.whatsapp.simulated
+                      ? "ready (sim) — account-level business profile"
+                      : "business profile synced (account-level)"
+                    : channelSync.whatsapp?.skipped
+                      ? channelSync.whatsapp.note ||
+                        "needs a public https photo URL"
+                      : channelSync.whatsapp?.error ||
+                        "not synced — customers see the WABA profile photo"}
+                </li>
+                <li>
+                  Instagram: account photo only — Messaging has no per-reply
+                  avatar API.
+                </li>
+              </ul>
+            ) : null}
+          </section>
+
           <section id="workspace" className="surface-card scroll-mt-24 p-5">
             <div className="ops-card-header">
               <div className="min-w-0">

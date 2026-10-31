@@ -33,15 +33,21 @@ async function resolveSendGate(channel) {
 
 /**
  * Send a Messenger / Facebook Page text reply.
+ * Optional persona_id attributes the bubble to a Page Persona (name + photo).
  * @param {{
  *   recipient_id: string,
  *   body: string,
  *   page_id?: string,
+ *   persona_id?: string | null,
  * }} input
  */
 export async function sendMessengerTextMessage(input) {
   const recipientId = String(input.recipient_id || "").trim();
   const body = formatChatMessageBody(input.body);
+  const personaId =
+    typeof input.persona_id === "string" && input.persona_id.trim()
+      ? String(input.persona_id).trim()
+      : "";
 
   if (!recipientId) {
     return {
@@ -68,6 +74,7 @@ export async function sendMessengerTextMessage(input) {
     recipient: { id: recipientId },
     messaging_type: "RESPONSE",
     message: { text: body.slice(0, 2000) },
+    ...(personaId ? { persona_id: personaId } : {}),
   };
 
   const { live, creds } = await resolveSendGate("messenger");
@@ -219,11 +226,13 @@ export async function sendInstagramTextMessage(input) {
 
 /**
  * Route a page-messaging text send by channel.
+ * persona_id applies to Messenger/Facebook only (Instagram has no Personas).
  * @param {{
  *   channel: string,
  *   recipient_id: string,
  *   body: string,
  *   page_or_account_id?: string,
+ *   persona_id?: string | null,
  * }} input
  */
 export async function sendPageMessagingText(input) {
@@ -241,5 +250,6 @@ export async function sendPageMessagingText(input) {
     recipient_id: input.recipient_id,
     body,
     page_id: input.page_or_account_id,
+    persona_id: input.persona_id,
   });
 }

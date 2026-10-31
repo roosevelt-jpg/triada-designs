@@ -131,6 +131,9 @@ function shapeRecord(row = {}) {
       provider_message_id: m.provider_message_id
         ? String(m.provider_message_id)
         : null,
+      sender_avatar_url: m.sender_avatar_url
+        ? String(m.sender_avatar_url)
+        : null,
     })),
   };
 }
@@ -565,6 +568,7 @@ export async function findConversationByExternal(input) {
  *   send_mode?: string | null,
  *   send_ok?: boolean,
  *   send_error?: string | null,
+ *   sender_avatar_url?: string | null,
  * }} input
  */
 export async function appendOutboundReply(id, input) {
@@ -580,6 +584,9 @@ export async function appendOutboundReply(id, input) {
     at,
     agent_key: input.agent_key || "social_media_manager",
     provider_message_id: input.provider_message_id || null,
+    sender_avatar_url: input.sender_avatar_url
+      ? String(input.sender_avatar_url)
+      : null,
   });
   const providerIds = Array.isArray(existing.provider_message_ids)
     ? [...existing.provider_message_ids]

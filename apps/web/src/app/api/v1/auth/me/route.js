@@ -6,6 +6,7 @@ import {
   readBearerToken,
 } from "@/lib/auth/supabase-auth";
 import { resolveMembershipForUser } from "@/lib/team/team-store";
+import { getAdminProfileSettings } from "@/lib/agents/admin-profile-settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,14 +36,39 @@ export async function GET(request) {
     /* keep defaults */
   }
 
-  return NextResponse.json(
-    meResponsePayload(result.user, {
-      role: membership.role?.slug || (membership.isAdmin ? "admin" : "member"),
-      permissions: membership.permissions,
-      member: membership.member,
-      isAdmin: membership.isAdmin,
-      authProvider: isLocalSeedToken(token) ? "local_seed" : "supabase",
-    }),
-    { status: 200 },
-  );
+  let adminProfile = null;
+  try {
+    adminProfile = await getAdminProfileSettings();
+  } catch {
+    adminProfile = null;
+  }
+
+  const payload = meResponsePayload(result.user, {
+    role: membership.role?.slug || (membership.isAdmin ? "admin" : "member"),
+    permissions: membership.permissions,
+    member: membership.member,
+    isAdmin: membership.isAdmin,
+    authProvider: isLocalSeedToken(token) ? "local_seed" : "supabase",
+  });
+
+  if (adminProfile?.avatar_url) {
+    payload.user = {
+      ...payload.user,
+      avatar_url: adminProfile.avatar_url,
+    };
+  }
+  if (adminProfile?.display_name && payload.user) {
+    // Keep auth name; expose profile display name separately for header.
+    payload.admin_profile = {
+      display_name: adminProfile.display_name,
+      avatar_url: adminProfile.avatar_url,
+    };
+  } else if (adminProfile) {
+    payload.admin_profile = {
+      display_name: adminProfile.display_name,
+      avatar_url: adminProfile.avatar_url,
+    };
+  }
+
+  return NextResponse.json(payload, { status: 200 });
 }
