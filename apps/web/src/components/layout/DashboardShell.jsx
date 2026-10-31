@@ -19,8 +19,22 @@ import {
   filterNavByPermissions,
 } from "@/lib/team/permissions";
 
-/** @param {{ children: import("react").ReactNode, title: string, description?: string, actions?: import("react").ReactNode }} props */
-export function DashboardShell({ children, title, description, actions }) {
+/**
+ * @param {{
+ *   children: import("react").ReactNode,
+ *   title: string,
+ *   description?: string,
+ *   actions?: import("react").ReactNode,
+ *   contentClassName?: string,
+ * }} props
+ */
+export function DashboardShell({
+  children,
+  title,
+  description,
+  actions,
+  contentClassName,
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -158,7 +172,12 @@ export function DashboardShell({ children, title, description, actions }) {
             </div>
           </header>
 
-          <main className="flex-1 px-4 py-6 md:px-7 md:py-8">
+          <main
+            className={cn(
+              "flex flex-1 flex-col px-4 py-6 md:px-7 md:py-8",
+              contentClassName,
+            )}
+          >
             <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0 fade-rise">
                 <span className="ops-rule-accent mb-3" aria-hidden />
@@ -176,7 +195,7 @@ export function DashboardShell({ children, title, description, actions }) {
               ) : null}
             </div>
             <div className="ops-divider mb-6" role="presentation" />
-            <div className="ops-reveal">{children}</div>
+            <div className="ops-reveal flex min-h-0 flex-1 flex-col">{children}</div>
           </main>
         </div>
       </div>
