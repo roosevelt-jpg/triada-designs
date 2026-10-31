@@ -211,8 +211,9 @@ export default function ChannelsIntegrationsPage() {
           <Card className="p-5">
             <h2 className="ops-section-title">Website visitor leads</h2>
             <p className="mt-2 text-sm text-muted">
-              First-party tracker for triada-designs.com (and public ops pages). Creates CRM leads with page,
-              referrer, UTM, and email when a form or chat captures one.
+              Embed this snippet on triada-designs.com (WordPress theme footer / Site Kit / custom HTML). Creates
+              CRM leads with page, referrer, UTM, and email when a form or chat captures one. Marketing site is
+              outside this repo — paste once into WP; ops cannot auto-deploy the script without WordPress credentials.
             </p>
             <pre className="mt-3 overflow-x-auto rounded-sm bg-shell px-3 py-2 text-[12px] leading-relaxed text-ink">
 {`<script
@@ -221,9 +222,42 @@ export default function ChannelsIntegrationsPage() {
   data-token="${status.webchat_widget?.public_token || "wc_…"}"
   defer></script>`}
             </pre>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={!status.webchat_widget?.public_token}
+                onClick={async () => {
+                  const token = status.webchat_widget?.public_token || "wc_…";
+                  const snippet = `<script
+  src="https://dashboard.triada-designs.com/widget/visitor.js"
+  data-api="https://dashboard.triada-designs.com/api/v1/visitors/capture"
+  data-token="${token}"
+  defer></script>`;
+                  try {
+                    await navigator.clipboard.writeText(snippet);
+                    setNotice("Visitor embed snippet copied.");
+                  } catch {
+                    setError("Could not copy snippet — select the block manually.");
+                  }
+                }}
+              >
+                Copy embed snippet
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={busy === "widget"}
+                onClick={ensureWidget}
+              >
+                Refresh widget token
+              </Button>
+            </div>
             <p className="mt-2 text-sm text-muted">
               Optional: <code>{`TriadaVisitor.identify({ email })`}</code> from popups. Endpoint:{" "}
-              <code>POST /api/v1/visitors/capture</code>.
+              <code>POST /api/v1/visitors/capture</code>. Pair with the Website chat widget token above.
             </p>
           </Card>
         </div>

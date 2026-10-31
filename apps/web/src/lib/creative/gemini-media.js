@@ -27,8 +27,22 @@ export function getGeminiQuotaWarning() {
   };
 }
 
-/** Top Gemini image models (Nano Banana family) — Interactions API first. */
-export const GEMINI_IMAGE_MODELS = [
+/**
+ * Top Gemini image models — paid/best first when GEMINI_PREFER_PAID is on (default).
+ * Nano Banana remains the Free Tier consumer default; Pro/Flash Image are billed tiers.
+ */
+export const GEMINI_IMAGE_MODELS_PAID = [
+  "gemini-3-pro-image",
+  "gemini-3-pro-image-preview",
+  "gemini-nano-banana-2.1",
+  "gemini-3.1-flash-image",
+  "gemini-3.1-flash-image-preview",
+  "gemini-3.1-flash-lite-image",
+  "gemini-2.5-flash-image",
+];
+
+/** Free-tier-friendly cascade (Nano Banana first). */
+export const GEMINI_IMAGE_MODELS_FREE = [
   "gemini-nano-banana-2.1",
   "gemini-3-pro-image",
   "gemini-3.1-flash-image",
@@ -36,8 +50,45 @@ export const GEMINI_IMAGE_MODELS = [
   "gemini-2.5-flash-image",
 ];
 
+/** @deprecated Prefer resolveGeminiImageCascade() — kept for older imports. */
+export const GEMINI_IMAGE_MODELS = GEMINI_IMAGE_MODELS_PAID;
+
 /** Current top Gemini video model (Veo / Imagen media paths retired). */
 export const GEMINI_VIDEO_MODELS = ["gemini-omni-1.1-flash"];
+
+/**
+ * Prefer paid/best image models unless explicitly forced to free cascade.
+ * Set GEMINI_PREFER_PAID=0 to put Nano Banana first (Free Tier).
+ */
+export function preferPaidGeminiModels() {
+  const raw = (process.env.GEMINI_PREFER_PAID || "1").trim().toLowerCase();
+  return !(raw === "0" || raw === "false" || raw === "free" || raw === "off");
+}
+
+/** @returns {string[]} */
+export function resolveGeminiImageCascade() {
+  return preferPaidGeminiModels()
+    ? GEMINI_IMAGE_MODELS_PAID
+    : GEMINI_IMAGE_MODELS_FREE;
+}
+
+/**
+ * Admin billing enablement checklist (no secrets). Surface in internal reports /
+ * creative status when Free Tier media quota blocks pixels.
+ */
+export function geminiBillingEnablementNotes() {
+  return {
+    required: [
+      "Open Google AI Studio (aistudio.google.com) for the project owning Production GEMINI_API_KEY.",
+      "Enable billing / upgrade off Free Tier (pay-as-you-go) so image + video TPM is non-zero.",
+      "Confirm IMAGE_MODEL / VIDEO_MODEL point at Gemini media ids (nano-banana / pro-image / omni) — never Claude.",
+      "Optional: keep GEMINI_PREFER_PAID=1 (default) so Pro image is tried before Free Tier Nano Banana.",
+      "Re-test Content Studio generate → expect mode=gemini and image/png or video/mp4 (not SVG).",
+    ],
+    blocker:
+      "Free Tier media quota (limit 0 TPM) returns HTTP 429; code already targets paid/best models but cannot mint pixels until billing is enabled.",
+  };
+}
 
 /**
  * @returns {string}
@@ -167,17 +218,29 @@ async function listGeminiModels(apiKey) {
  */
 function pickImageModels(available) {
   const set = new Set(available.map((m) => m.toLowerCase()));
-  const preferred = [
-    "gemini-nano-banana-2.1",
-    "nano-banana-pro-preview",
-    "gemini-3-pro-image",
-    "gemini-3-pro-image-preview",
-    "gemini-3.1-flash-image",
-    "gemini-3.1-flash-image-preview",
-    "gemini-3.1-flash-lite-image",
-    "gemini-2.5-flash-image",
-    "gemini-2.5-flash-image-preview",
-  ];
+  const preferred = preferPaidGeminiModels()
+    ? [
+        "gemini-3-pro-image",
+        "gemini-3-pro-image-preview",
+        "nano-banana-pro-preview",
+        "gemini-nano-banana-2.1",
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-image-preview",
+        "gemini-3.1-flash-lite-image",
+        "gemini-2.5-flash-image",
+        "gemini-2.5-flash-image-preview",
+      ]
+    : [
+        "gemini-nano-banana-2.1",
+        "nano-banana-pro-preview",
+        "gemini-3-pro-image",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-image-preview",
+        "gemini-3.1-flash-lite-image",
+        "gemini-2.5-flash-image",
+        "gemini-2.5-flash-image-preview",
+      ];
   const ranked = preferred.filter((m) => set.has(m.toLowerCase()));
   // Also include any other image-named Gemini models the key can see.
   for (const name of available) {
@@ -502,7 +565,8 @@ export async function generateGeminiImage(input) {
   }
 
   const listed = await listGeminiModels(apiKey);
-  const discovered = listed.ok ? pickImageModels(listed.models) : GEMINI_IMAGE_MODELS;
+  const defaultCascade = resolveGeminiImageCascade();
+  const discovered = listed.ok ? pickImageModels(listed.models) : defaultCascade;
   if (!listed.ok) {
     errors.push(`models.list: ${listed.error}`);
   }
@@ -510,16 +574,18 @@ export async function generateGeminiImage(input) {
   // Prefer preview ids the key actually lists (e.g. gemini-3-pro-image-preview).
   const cascade = modelList(
     preferred,
-    listed.ok ? discovered : GEMINI_IMAGE_MODELS.slice(0, 3),
+    listed.ok ? discovered : defaultCascade.slice(0, 4),
     "image",
   );
   const workingBase = listed.base || DEFAULT_BASE;
   const timeoutMs = resolveTimeoutMs(process.env.IMAGE_TIMEOUT, 120000);
-  // Keep the cascade short — avoid burning quota / Vercel duration across many ids.
-  const shortCascade = cascade.slice(0, 3);
+  // Paid path: try Pro + Nano Banana (+ one Flash). Free path stays short.
+  const shortCascade = cascade.slice(0, preferPaidGeminiModels() ? 4 : 3);
+  let quotaBlocked = false;
+  let quotaDetail = "";
 
   for (const model of shortCascade) {
-    // generateContent first (reliable for Nano Banana on AI Studio keys).
+    // generateContent first (reliable for Nano Banana / Pro Image on AI Studio keys).
     const gc = await callGenerateContentImage({
       apiKey,
       model,
@@ -537,14 +603,12 @@ export async function generateGeminiImage(input) {
       };
     }
     errors.push(`gc:${model}: ${gc.error}`);
-    if (/429|quota|billing/i.test(String(gc.error || ""))) {
+    if (/429|quota|billing|free tier/i.test(String(gc.error || ""))) {
+      quotaBlocked = true;
+      quotaDetail = String(gc.error || "");
       recordGeminiQuotaHit(gc.error);
-      return {
-        ok: false,
-        error: `Gemini image quota exceeded for ${model}. Enable billing / raise limits on the Google AI Studio key used as GEMINI_API_KEY. (${gc.error})`,
-        mode: "error",
-        attempts: errors.length,
-      };
+      // Continue cascade so a billed Pro model can succeed after a Free Tier Nano Banana 429.
+      continue;
     }
 
     // Interactions (Gemini apps path) when generateContent is unavailable for the id.
@@ -566,6 +630,22 @@ export async function generateGeminiImage(input) {
       };
     }
     errors.push(`${model}: ${result.error}`);
+    if (/429|quota|billing|free tier/i.test(String(result.error || ""))) {
+      quotaBlocked = true;
+      quotaDetail = String(result.error || "");
+      recordGeminiQuotaHit(result.error);
+    }
+  }
+
+  if (quotaBlocked) {
+    const billing = geminiBillingEnablementNotes();
+    return {
+      ok: false,
+      error: `Gemini image quota/billing blocked paid+free cascade. ${billing.blocker} Last: ${quotaDetail}`,
+      mode: "error",
+      attempts: errors.length,
+      billing_required: true,
+    };
   }
 
   const availableHint = listed.ok

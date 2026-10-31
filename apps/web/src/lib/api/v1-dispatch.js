@@ -986,6 +986,8 @@ export async function dispatchV1(method, segments, request, body) {
       title: saved.transfer.title,
       note: saved.transfer.note,
       kind: saved.transfer.kind,
+      from_location: saved.transfer.from_location,
+      to_location: saved.transfer.to_location,
       shopify_transfer_id: saved.transfer.shopify_sync?.external_id || null,
       line_items: saved.transfer.line_items,
     });
@@ -1031,6 +1033,8 @@ export async function dispatchV1(method, segments, request, body) {
       title: saved.transfer.title,
       note: saved.transfer.note,
       kind: saved.transfer.kind,
+      from_location: saved.transfer.from_location,
+      to_location: saved.transfer.to_location,
       shopify_transfer_id: saved.transfer.shopify_sync?.external_id || null,
       line_items: saved.transfer.line_items,
     });
@@ -1861,7 +1865,12 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "creative/status" && m === "GET") {
-    const { getGeminiQuotaWarning } = await import("@/lib/creative/gemini-media");
+    const {
+      getGeminiQuotaWarning,
+      preferPaidGeminiModels,
+      resolveGeminiImageCascade,
+      geminiBillingEnablementNotes,
+    } = await import("@/lib/creative/gemini-media");
     const keyed = hasGeminiEnv();
     const quota = getGeminiQuotaWarning();
     // Soft-warn: key present but recent Free Tier / billing 429 — do not claim Live AI.
@@ -1870,11 +1879,16 @@ export async function dispatchV1(method, segments, request, body) {
     const warn = quota
       ? "Media generation hit a provider limit. Pixels stay local until billing/quota is raised."
       : null;
+    const billing = geminiBillingEnablementNotes();
     return jsonOk({
       mode,
       mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
       has_gemini: keyed,
       quota_warning: quota,
+      prefer_paid_models: preferPaidGeminiModels(),
+      image_model_cascade: resolveGeminiImageCascade().slice(0, 5),
+      billing_required: Boolean(quota),
+      billing_notes: quota ? billing.required : undefined,
       image: {
         mode: live ? "gemini" : "local_sim",
         mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),

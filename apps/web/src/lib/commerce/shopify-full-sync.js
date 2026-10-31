@@ -24,7 +24,9 @@ export const SHOPIFY_AREA_SCOPES = {
   products: ["write_products", "read_products"],
   collections: ["write_products", "write_product_listings"],
   inventory: ["write_inventory", "read_inventory"],
-  transfers: ["write_inventory_transfers", "write_fulfillments", "write_merchant_managed_fulfillment_orders"],
+  // Inventory Transfer GraphQL needs write_inventory_transfers specifically.
+  // Fulfillment scopes alone do not authorize inventoryTransferCreate.
+  transfers: ["write_inventory_transfers"],
   customers: ["write_customers", "read_customers"],
   growth: ["write_marketing_events", "read_marketing_events"],
   discounts: ["write_price_rules", "write_discounts", "read_price_rules", "read_discounts"],
@@ -929,6 +931,134 @@ export async function upsertShopifyDraftOrderFromInvoice(invoice) {
 /** Empty constant retained for older imports; never surface plan/API jargon in UI. */
 export const SHOPIFY_BASIC_PO_GAP = "";
 
+/**
+ * Resolve Shopify inventory_item_id for transfer lines missing it (by SKU / product_id).
+ * @param {Array<{ sku?: string|null, product_id?: string|null, inventory_item_id?: string|null, quantity?: number, title?: string|null }>} items
+ */
+export async function resolveTransferLineInventoryItems(items = []) {
+  const rows = Array.isArray(items) ? items.map((i) => ({ ...i })) : [];
+  if (!rows.length) return rows;
+  if (rows.every((i) => i.inventory_item_id)) return rows;
+
+  const needSku = new Set(
+    rows
+      .filter((i) => !i.inventory_item_id && i.sku)
+      .map((i) => String(i.sku).trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const needProduct = new Set(
+    rows
+      .filter((i) => !i.inventory_item_id && i.product_id)
+      .map((i) => String(i.product_id).trim())
+      .filter(Boolean),
+  );
+
+  /** @type {Map<string, string>} */
+  const skuToItem = new Map();
+  /** @type {Map<string, string>} */
+  const productToItem = new Map();
+
+  if (needProduct.size) {
+    for (const productId of needProduct) {
+      const res = await shopifyAdminRequest(
+        "GET",
+        `products/${encodeURIComponent(productId)}.json?fields=id,variants`,
+      );
+      if (!res.ok) continue;
+      const variants = res.json?.product?.variants || [];
+      const first = variants.find((v) => v?.inventory_item_id) || variants[0];
+      if (first?.inventory_item_id) {
+        productToItem.set(productId, String(first.inventory_item_id));
+      }
+      for (const v of variants) {
+        if (v?.sku && v?.inventory_item_id) {
+          skuToItem.set(String(v.sku).trim().toLowerCase(), String(v.inventory_item_id));
+        }
+      }
+    }
+  }
+
+  if (needSku.size) {
+    // Cursor through products until SKUs resolve (REST page= is deprecated).
+    let sinceId = "";
+    for (let hop = 0; hop < 6 && needSku.size; hop += 1) {
+      const qs = new URLSearchParams({
+        limit: "50",
+        fields: "id,variants",
+      });
+      if (sinceId) qs.set("since_id", sinceId);
+      const res = await shopifyAdminRequest("GET", `products.json?${qs.toString()}`);
+      if (!res.ok) break;
+      const products = Array.isArray(res.json?.products) ? res.json.products : [];
+      if (!products.length) break;
+      for (const product of products) {
+        sinceId = String(product.id || sinceId);
+        for (const v of product.variants || []) {
+          if (!v?.sku || !v?.inventory_item_id) continue;
+          const key = String(v.sku).trim().toLowerCase();
+          skuToItem.set(key, String(v.inventory_item_id));
+          needSku.delete(key);
+        }
+      }
+    }
+  }
+
+  return rows.map((row) => {
+    if (row.inventory_item_id) return row;
+    const bySku =
+      row.sku != null
+        ? skuToItem.get(String(row.sku).trim().toLowerCase())
+        : null;
+    const byProduct =
+      row.product_id != null ? productToItem.get(String(row.product_id).trim()) : null;
+    return {
+      ...row,
+      inventory_item_id: bySku || byProduct || null,
+    };
+  });
+}
+
+/**
+ * Pick origin + destination location GIDs for inventoryTransferCreate.
+ * @param {{ from_location?: string|null, to_location?: string|null }} input
+ */
+async function resolveTransferLocationGids(input = {}) {
+  const res = await shopifyAdminRequest("GET", "locations.json");
+  if (!res.ok) {
+    return { originLocationId: null, destinationLocationId: null };
+  }
+  const locations = Array.isArray(res.json?.locations) ? res.json.locations : [];
+  const active = locations.filter((l) => l && l.active !== false);
+  if (active.length < 1) {
+    return { originLocationId: null, destinationLocationId: null };
+  }
+
+  const match = (needle) => {
+    const n = String(needle || "")
+      .trim()
+      .toLowerCase();
+    if (!n) return null;
+    const hit =
+      active.find((l) => String(l.id) === n) ||
+      active.find((l) => String(l.name || "").toLowerCase() === n) ||
+      active.find((l) => String(l.name || "").toLowerCase().includes(n));
+    return hit?.id != null ? String(hit.id) : null;
+  };
+
+  const originId = match(input.from_location) || String(active[0].id);
+  const destId =
+    match(input.to_location) ||
+    String((active.find((l) => String(l.id) !== originId) || active[0]).id);
+
+  const toGid = (id) =>
+    String(id).startsWith("gid://") ? String(id) : `gid://shopify/Location/${id}`;
+
+  return {
+    originLocationId: toGid(originId),
+    destinationLocationId: toGid(destId),
+  };
+}
+
 export async function upsertShopifyInventoryTransfer(input = {}) {
   const runtime = await getShopifyRuntime();
   const existingId = input.shopify_transfer_id
@@ -958,6 +1088,7 @@ export async function upsertShopifyInventoryTransfer(input = {}) {
   }
 
   // Explicit purchase_order kind: keep local/pending honesty without plan jargon.
+  // (Shopify Admin GraphQL purchaseOrders unavailable on Basic — internal only.)
   if (String(input.kind || "").toLowerCase() === "purchase_order") {
     return stamp({
       ...shopifySyncState({
@@ -979,8 +1110,26 @@ export async function upsertShopifyInventoryTransfer(input = {}) {
         }
       }
     `;
-    // Without concrete inventory item GIDs from manufacturer payload, stay honest.
-    const items = Array.isArray(input.line_items) ? input.line_items : [];
+    const rawItems = Array.isArray(input.line_items) ? input.line_items : [];
+    const items = await resolveTransferLineInventoryItems(rawItems);
+    // Persist SKU → inventory_item_id resolution onto the durable transfer row.
+    if (
+      recordId &&
+      items.some(
+        (item, idx) =>
+          item.inventory_item_id &&
+          String(item.inventory_item_id) !==
+            String(rawItems[idx]?.inventory_item_id || ""),
+      )
+    ) {
+      const { upsertTransfer } = await import("./transfers-store.js");
+      const existing = await import("./transfers-store.js").then((m) =>
+        m.getTransfer(recordId),
+      );
+      if (existing) {
+        await upsertTransfer({ ...existing, line_items: items }).catch(() => {});
+      }
+    }
     if (!items.length || !items.every((i) => i.inventory_item_id)) {
       return stamp({
         ...shopifySyncState({
@@ -992,17 +1141,35 @@ export async function upsertShopifyInventoryTransfer(input = {}) {
       });
     }
 
-    const result = await shopifyAdminGraphql(mutation, {
-      input: {
-        note: String(input.note || input.title || `Triada transfer ${input.id || ""}`),
-        lineItems: items.map((i) => ({
-          inventoryItemId: String(i.inventory_item_id).startsWith("gid://")
-            ? String(i.inventory_item_id)
-            : `gid://shopify/InventoryItem/${i.inventory_item_id}`,
-          quantity: Math.max(1, Number(i.quantity) || 1),
-        })),
-      },
+    const locations = await resolveTransferLocationGids({
+      from_location: input.from_location,
+      to_location: input.to_location,
     });
+    if (!locations.originLocationId || !locations.destinationLocationId) {
+      return stamp({
+        ...shopifySyncState({
+          status: "pending_publish",
+          mode: runtime.mode,
+          message: "Waiting credentials.",
+        }),
+        limitation: null,
+      });
+    }
+
+    /** @type {Record<string, unknown>} */
+    const transferInput = {
+      note: String(input.note || input.title || `Triada transfer ${input.id || ""}`),
+      originLocationId: locations.originLocationId,
+      destinationLocationId: locations.destinationLocationId,
+      lineItems: items.map((i) => ({
+        inventoryItemId: String(i.inventory_item_id).startsWith("gid://")
+          ? String(i.inventory_item_id)
+          : `gid://shopify/InventoryItem/${i.inventory_item_id}`,
+        quantity: Math.max(1, Number(i.quantity) || 1),
+      })),
+    };
+
+    const result = await shopifyAdminGraphql(mutation, { input: transferInput });
 
     if (!result.ok || result.access_denied) {
       return stamp({

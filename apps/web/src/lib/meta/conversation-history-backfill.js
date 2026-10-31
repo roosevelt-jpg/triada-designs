@@ -89,15 +89,42 @@ async function resolveBackfillGate() {
  * @param {string} pageAccessToken
  * @param {string} [preferredIgUserId]
  */
+function envMetaPageId() {
+  return (
+    (process.env.META_PAGE_ID || "").trim() ||
+    (process.env.META_FACEBOOK_PAGE_ID || "").trim() ||
+    (process.env.FACEBOOK_PAGE_ID || "").trim() ||
+    ""
+  );
+}
+
+function envMetaIgUserId() {
+  return (
+    (process.env.META_IG_USER_ID || "").trim() ||
+    (process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || "").trim() ||
+    ""
+  );
+}
+
+/**
+ * @param {unknown} err
+ */
+function isExpiredGraphToken(err) {
+  const code = /** @type {{ code?: number, subcode?: number }} */ (err || {});
+  return code.code === 190 || code.subcode === 463 || code.subcode === 460;
+}
+
 async function resolvePageContext(pageAccessToken, preferredIgUserId = "") {
-  /** @type {{ pageId: string, pageName: string | null, igUserId: string | null, igUsername: string | null }} */
+  /** @type {{ pageId: string, pageName: string | null, igUserId: string | null, igUsername: string | null, token_expired?: boolean }} */
   const ctx = {
     pageId: "",
     pageName: null,
-    igUserId: preferredIgUserId || null,
+    igUserId: preferredIgUserId || envMetaIgUserId() || null,
     igUsername: null,
   };
 
+  /** @type {Error | null} */
+  let meError = null;
   try {
     const me = await graphGet(pageAccessToken, "me", {
       fields: "id,name",
@@ -106,7 +133,12 @@ async function resolvePageContext(pageAccessToken, preferredIgUserId = "") {
       ctx.pageId = String(me.id);
       ctx.pageName = me.name ? String(me.name) : null;
     }
-  } catch {
+  } catch (err) {
+    meError = err instanceof Error ? err : new Error(String(err));
+    if (isExpiredGraphToken(err)) {
+      ctx.token_expired = true;
+      // Still allow META_PAGE_ID fallback for a clearer import error path.
+    }
     // Page tokens sometimes only list via /me/accounts
   }
 
@@ -132,29 +164,51 @@ async function resolvePageContext(pageAccessToken, preferredIgUserId = "") {
         ctx.igUsername = ig.username ? String(ig.username) : null;
       }
     }
-  } catch {
+  } catch (err) {
     // Page access tokens cannot call /me/accounts (field does not exist).
     // Keep me-derived page id and resolve IG from the Page node below.
+    if (isExpiredGraphToken(err)) ctx.token_expired = true;
+  }
+
+  // Env / stored Page id when Graph /me is unavailable (common after token rotate lag).
+  if (!ctx.pageId) {
+    const envPage = envMetaPageId();
+    if (envPage) ctx.pageId = envPage;
   }
 
   // Page tokens: IG Professional link lives on the Page node, not /me/accounts.
-  if (!ctx.igUserId && ctx.pageId) {
+  if (ctx.pageId) {
     try {
       const page = await graphGet(pageAccessToken, ctx.pageId, {
-        fields: "instagram_business_account{id,username}",
+        fields: "id,name,instagram_business_account{id,username}",
       });
+      if (page?.id) ctx.pageId = String(page.id);
+      if (page?.name) ctx.pageName = String(page.name);
       const ig = page?.instagram_business_account || {};
       if (ig?.id) {
         ctx.igUserId = String(ig.id);
         ctx.igUsername = ig.username ? String(ig.username) : ctx.igUsername;
       }
-    } catch {
+    } catch (err) {
+      if (isExpiredGraphToken(err)) ctx.token_expired = true;
       // Leave ig unset; preferredIgUserId / env may still apply.
+      if (!ctx.pageId && meError && isExpiredGraphToken(meError)) {
+        throw meError;
+      }
     }
   }
 
   if (!ctx.igUserId && preferredIgUserId) {
     ctx.igUserId = preferredIgUserId;
+  }
+  if (!ctx.igUserId) {
+    const envIg = envMetaIgUserId();
+    if (envIg) ctx.igUserId = envIg;
+  }
+
+  // If we still have no page id and /me failed with expiry, surface that clearly.
+  if (!ctx.pageId && meError && isExpiredGraphToken(meError)) {
+    throw meError;
   }
   return ctx;
 }
@@ -405,10 +459,20 @@ export async function backfillMetaConversationHistory(opts = {}) {
 
   summary.page_id_present = Boolean(pageCtx.pageId);
   summary.ig_user_id_present = Boolean(pageCtx.igUserId);
+  if (pageCtx.token_expired) {
+    summary.session_expired = true;
+  }
   if (!pageCtx.pageId) {
     summary.ok = false;
+    summary.message = summary.session_expired
+      ? "Page access token expired. Refresh Meta Page token, then import again."
+      : "Page id missing from Graph. Confirm the Page access token includes Messaging (or set META_PAGE_ID).";
+    return summary;
+  }
+  if (summary.session_expired) {
+    summary.ok = false;
     summary.message =
-      "Page id missing from Graph. Confirm the Page access token includes Messaging.";
+      "Page access token expired. Refresh Meta Page token, then import again.";
     return summary;
   }
 
