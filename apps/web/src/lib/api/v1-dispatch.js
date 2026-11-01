@@ -170,6 +170,10 @@ import { handleInboundWhatsApp } from "@/lib/agents/support-whatsapp";
 import { handleInboundPageMessaging } from "@/lib/agents/support-page-messaging";
 import { handleInboundSupportChannel } from "@/lib/agents/support-channel";
 import {
+  getMetaWebhookSubscriptionStatus,
+  subscribeMetaMessagingWebhooks,
+} from "@/lib/meta/page-webhook-subscribe";
+import {
   getHumanHandoffSettings,
   saveHumanHandoffSettings,
 } from "@/lib/agents/human-handoff-settings";
@@ -2403,6 +2407,30 @@ export async function dispatchV1(method, segments, request, body) {
         });
       }
     }
+    if (path === "integrations/meta/webhook/subscribe") {
+      try {
+        const result = await subscribeMetaMessagingWebhooks({
+          channel:
+            body && typeof body === "object" && body.channel
+              ? String(body.channel)
+              : "instagram",
+          subscribed:
+            body && typeof body === "object" ? body.subscribed !== false : true,
+        });
+        return jsonOk({
+          ...result,
+          mode: result.mode || "next_dual_run",
+          verify_token_hint: "triada-meta-verify-2026",
+        });
+      } catch (err) {
+        return jsonErr(
+          err instanceof Error
+            ? err.message
+            : "Meta webhook subscribe failed",
+          502,
+        );
+      }
+    }
     return jsonOk({
       ok: true,
       mode: "next_dual_run",
@@ -2412,10 +2440,19 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "integrations/meta/webhook" && m === "GET") {
-    return jsonOk({
-      callback_url: "https://dashboard.triada-designs.com/api/webhooks/meta",
-      verify_token_configured: true,
-    });
+    try {
+      const status = await getMetaWebhookSubscriptionStatus();
+      return jsonOk({
+        callback_url: "https://dashboard.triada-designs.com/api/webhooks/meta",
+        verify_token_configured: true,
+        ...status,
+      });
+    } catch {
+      return jsonOk({
+        callback_url: "https://dashboard.triada-designs.com/api/webhooks/meta",
+        verify_token_configured: true,
+      });
+    }
   }
 
   if (path === "integrations/whatsapp/templates" && m === "GET") {

@@ -111,12 +111,19 @@ export default function MetaIntegrationsPage() {
   async function toggleSubscribe(channel, subscribed) {
     setBusy(`sub-${channel}`);
     try {
-      await apiFetch("/v1/integrations/meta/webhook/subscribe", {
+      const result = await apiFetch("/v1/integrations/meta/webhook/subscribe", {
         method: "POST",
         body: { channel, subscribed },
       });
       await load();
-      setNotice(`${channel} webhook ${subscribed ? "subscribed" : "unsubscribed"} in Triada.`);
+      const detail =
+        result?.message ||
+        `${channel} webhook ${subscribed ? "subscribed" : "unsubscribed"} via Meta Graph.`;
+      const hint =
+        Array.isArray(result?.next_steps) && result.next_steps[0]
+          ? ` ${result.next_steps[0]}`
+          : "";
+      setNotice(`${detail}${hint}`);
     } catch (err) {
       setError(err.message);
     } finally {
