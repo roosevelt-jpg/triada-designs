@@ -52,7 +52,6 @@ const EMPTY_FORM = {
   components: [],
   metal_price_silver: "",
   metal_price_gold: "",
-  price_tba: false,
 };
 
 function channelTone(status) {
@@ -226,10 +225,18 @@ export default function ProductsPage() {
       components: bundle?.components || [],
       metal_price_silver: silver != null ? String(silver) : "",
       metal_price_gold: gold != null ? String(gold) : "",
-      price_tba: Boolean(bundle?.price_tba) || item.price == null,
     });
     setShowForm(true);
     setNotice("");
+  }
+
+  /** Bundle with no sell price yet — save as local draft; do not sync blank price. */
+  function isBundleUnpriced(state = form) {
+    if (state.mode !== "bundle") return false;
+    if (String(state.price ?? "").trim() !== "") return false;
+    if (String(state.metal_price_silver ?? "").trim() !== "") return false;
+    if (String(state.metal_price_gold ?? "").trim() !== "") return false;
+    return true;
   }
 
   function updateField(name, value) {
@@ -260,10 +267,15 @@ export default function ProductsPage() {
           compare_at_price: compare,
           category: prev.category === "Jewellery" ? "Bundles" : prev.category,
           collection: prev.collection || "Bundles",
-          publish: prev.price_tba ? false : prev.publish,
+          publish:
+            prev.price === "" &&
+            prev.metal_price_silver === "" &&
+            prev.metal_price_gold === ""
+              ? false
+              : prev.publish,
         };
       }
-      return { ...prev, mode, components: [], price_tba: false };
+      return { ...prev, mode, components: [] };
     });
   }
 
@@ -287,15 +299,6 @@ export default function ProductsPage() {
     });
   }
 
-  function onPriceTbaChange(checked) {
-    setForm((prev) => ({
-      ...prev,
-      price_tba: checked,
-      publish: checked ? false : prev.publish,
-      price: checked ? "" : prev.price,
-    }));
-  }
-
   async function submitForm(event) {
     event.preventDefault();
     setBusy("save");
@@ -303,7 +306,6 @@ export default function ProductsPage() {
     setNotice("");
 
     const isBundle = form.mode === "bundle";
-    const priceTba = isBundle && Boolean(form.price_tba);
     const metalVariants = [];
     if (isBundle && form.metal_price_silver !== "") {
       metalVariants.push({
@@ -317,25 +319,11 @@ export default function ProductsPage() {
         price: Number(form.metal_price_gold),
       });
     }
+    const priceTba = isBundleUnpriced(form);
 
     if (isBundle && !form.components.length) {
       setBusy("");
       setError("Add at least one catalog piece to this set.");
-      return;
-    }
-    if (
-      isBundle &&
-      !priceTba &&
-      form.price === "" &&
-      metalVariants.every((v) => v.price == null || !Number.isFinite(v.price))
-    ) {
-      setBusy("");
-      setError("Set a bundle price, metal prices, or mark price as TBA.");
-      return;
-    }
-    if (priceTba && form.publish) {
-      setBusy("");
-      setError("TBA sets save as draft until a price is set.");
       return;
     }
 
@@ -631,22 +619,6 @@ export default function ProductsPage() {
                   : "Leave blank to auto-assign TD-{TITLE}-{code}."
               }
             />
-            {form.mode === "bundle" ? (
-              <label className="flex items-start gap-2 text-sm text-ink md:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={form.price_tba}
-                  onChange={(e) => onPriceTbaChange(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 accent-black"
-                />
-                <span>
-                  Price TBA — save as draft without a sell price
-                  {shopifyConnected
-                    ? ". Shopify waits until a price is set."
-                    : "."}
-                </span>
-              </label>
-            ) : null}
             <Input
               label={form.mode === "bundle" ? "Bundle price" : "Price"}
               name="price"
@@ -654,14 +626,10 @@ export default function ProductsPage() {
               step="0.01"
               min="0"
               value={form.price}
-              disabled={form.mode === "bundle" && form.price_tba}
-              onChange={(e) => {
-                updateField("price", e.target.value);
-                if (e.target.value !== "") updateField("price_tba", false);
-              }}
+              onChange={(e) => updateField("price", e.target.value)}
               hint={
-                form.mode === "bundle" && !form.price_tba
-                  ? "Sell price for the set — usually below the parts total."
+                form.mode === "bundle"
+                  ? "Sell price for the set — usually below the parts total. Leave blank to save as draft."
                   : undefined
               }
             />
@@ -695,7 +663,6 @@ export default function ProductsPage() {
                   step="0.01"
                   min="0"
                   value={form.metal_price_silver}
-                  disabled={form.price_tba}
                   onChange={(e) =>
                     updateField("metal_price_silver", e.target.value)
                   }
@@ -709,7 +676,6 @@ export default function ProductsPage() {
                   step="0.01"
                   min="0"
                   value={form.metal_price_gold}
-                  disabled={form.price_tba}
                   onChange={(e) =>
                     updateField("metal_price_gold", e.target.value)
                   }
@@ -823,16 +789,16 @@ export default function ProductsPage() {
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
-              checked={form.publish}
-              disabled={form.mode === "bundle" && form.price_tba}
+              checked={form.publish && !isBundleUnpriced()}
+              disabled={isBundleUnpriced()}
               onChange={(e) => updateField("publish", e.target.checked)}
               className="h-4 w-4 accent-black"
             />
             Publish live (active on Shopify
             {channelStatus.wordpress?.connected ? " + WordPress" : ""}
             {shopifyConnected
-              ? form.mode === "bundle" && form.price_tba
-                ? "; TBA drafts stay local until priced)"
+              ? isBundleUnpriced()
+                ? "; add a price before syncing)"
                 : "; drafts still sync to Shopify as draft)"
               : ")"}
           </label>
@@ -841,14 +807,14 @@ export default function ProductsPage() {
               {busy === "save"
                 ? "Saving…"
                 : editingId
-                  ? shopifyConnected && !(form.mode === "bundle" && form.price_tba)
+                  ? shopifyConnected && !isBundleUnpriced()
                     ? "Save & sync Shopify"
-                    : form.publish
+                    : form.publish && !isBundleUnpriced()
                       ? "Save & publish"
                       : "Save draft"
-                  : shopifyConnected && !(form.mode === "bundle" && form.price_tba)
+                  : shopifyConnected && !isBundleUnpriced()
                     ? "Create & sync Shopify"
-                    : form.publish
+                    : form.publish && !isBundleUnpriced()
                       ? "Create & publish"
                       : "Create draft"}
             </Button>
@@ -927,15 +893,13 @@ export default function ProductsPage() {
                   </p>
                 )}
                 <div className="mt-4 ops-actions items-center">
-                  {displayPrice == null && bundle?.price_tba ? (
-                    <Badge tone="warning">Price TBA</Badge>
-                  ) : (
+                  {displayPrice != null ? (
                     <SalePriceBadge
                       price={displayPrice}
                       compareAt={compareAt}
                       currency={item.currency || "USD"}
                     />
-                  )}
+                  ) : null}
                   <Badge tone="info">{item.availability_status}</Badge>
                   <Badge
                     tone={

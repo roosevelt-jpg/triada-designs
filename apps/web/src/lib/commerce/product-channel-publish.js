@@ -257,7 +257,7 @@ export async function saveAndMaybePublishProduct(input, opts = {}) {
   }
 
   // Always attempt Shopify on save when Connected (even if caller omitted it),
-  // except TBA bundles with no price — those stay local until priced.
+  // except unpriced bundles — those stay local until priced.
   const allowShopify =
     shopifyReady && shouldSyncProductToShopify(saved.product);
   if (allowShopify && !channels.includes("shopify")) {

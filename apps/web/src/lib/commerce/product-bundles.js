@@ -285,12 +285,12 @@ export function isBundlePriceTba(product) {
 
 /**
  * Whether Shopify auto-sync should run for this product save.
- * TBA drafts without a price stay local so Shopify never gets 0.00.
+ * Unpriced bundle drafts stay local so Shopify never gets 0.00.
  * @param {Record<string, unknown> | null | undefined} product
  */
 export function shouldSyncProductToShopify(product) {
   if (!product) return false;
-  // TBA drafts without a sell price stay local so Shopify never gets 0.00.
+  // Unpriced bundle drafts stay local so Shopify never gets 0.00.
   if (isBundlePriceTba(product)) return false;
   return true;
 }

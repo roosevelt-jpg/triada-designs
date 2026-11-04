@@ -98,7 +98,7 @@ describe("mergeBundleIntoMetadata / extractProductBundle", () => {
   });
 });
 
-describe("TBA sync gate", () => {
+describe("unpriced bundle sync gate", () => {
   it("blocks Shopify for draft bundles without price", () => {
     const product = {
       price: null,
