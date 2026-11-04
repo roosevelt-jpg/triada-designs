@@ -15,7 +15,6 @@ import {
   hasSupabaseEnv,
   hasTelegramEnv,
   hasWhatsAppMessagingEnv,
-  hasWordpressEnv,
   hasZohoBooksOrg,
   hasZohoEnv,
   integrationRuntimeMode,
@@ -265,7 +264,6 @@ export function buildIntegrationsList(opts = {}) {
     opts.shopifyHasCredentials !== undefined
       ? Boolean(opts.shopifyHasCredentials)
       : hasShopifyEnv();
-  const wordpressReady = hasWordpressEnv();
   const telegramReady = hasTelegramEnv();
   const zohoReady = hasZohoEnv();
   const anthropicModel =
@@ -274,20 +272,6 @@ export function buildIntegrationsList(opts = {}) {
     "claude-sonnet-4-20250514";
 
   const rows = [
-    {
-      id: "int-wordpress",
-      provider: "wordpress",
-      display_name: "WordPress CMS",
-      status: wordpressReady ? "connected" : "awaiting_credentials",
-      status_label: connectionLabel(
-        wordpressReady ? "connected" : "awaiting_credentials",
-      ),
-      external_account_id: "wordpress-primary",
-      last_health_check_at: nowIso(),
-      last_error_code: null,
-      capabilities: ["posts.read", "posts.draft", "products.publish", "webhooks"],
-      metadata: { site_hint: "https://triada-designs.com" },
-    },
     {
       id: "int-zoho",
       provider: "zoho",
@@ -630,15 +614,6 @@ export function buildIntegrationsHealth(opts = {}) {
     mode: integrationRuntimeMode(liveCredentials),
     mode_label: integrationRuntimeMode(liveCredentials) === "live" ? "Live" : "Local",
     credentials: presence,
-    wordpress: {
-      status: hasWordpressEnv() ? "connected" : "awaiting_credentials",
-      status_label: connectionLabel(
-        hasWordpressEnv() ? "connected" : "awaiting_credentials",
-      ),
-      message: hasWordpressEnv()
-        ? "WordPress is Connected."
-        : "Waiting credentials.",
-    },
     shopify: {
       connected: shopifyConnected,
       status: shopifyConnected ? "connected" : "awaiting_credentials",
@@ -753,20 +728,6 @@ export function buildIntegrationsHealth(opts = {}) {
           : `${providerNickname(llmProvider)} connected · ${modelNickname(llmModel)}`
         : "Waiting credentials.",
     },
-    wordpress_posts: [
-      {
-        id: "wp-seed-1",
-        title: "Quiet materials, considered care",
-        status: "draft",
-        link: "https://triada-designs.com/",
-      },
-      {
-        id: "wp-seed-2",
-        title: "Salt & Spirit — Priest Ring detail",
-        status: "publish",
-        link: "https://triada-designs.com/",
-      },
-    ],
     zoho_leads: [],
   };
 }

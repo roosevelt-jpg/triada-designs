@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
@@ -62,8 +61,6 @@ export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [draftTitle, setDraftTitle] = useState("Quiet materials, considered care");
-  const [draftStatus, setDraftStatus] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -85,24 +82,6 @@ export default function IntegrationsPage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  async function createDraft(event) {
-    event.preventDefault();
-    setDraftStatus("");
-    try {
-      const result = await apiFetch("/v1/integrations/wordpress/drafts", {
-        method: "POST",
-        body: {
-          title: draftTitle,
-          excerpt: "Draft prepared from Triada Content Studio for WordPress.",
-          content: "<p>Editorial draft awaiting human review before publish.</p>",
-        },
-      });
-      setDraftStatus(`Draft created: ${result.id}`);
-    } catch (err) {
-      setDraftStatus(err.message);
-    }
-  }
 
   const llmLabel =
     health?.llm?.status_label ||
@@ -329,95 +308,51 @@ export default function IntegrationsPage() {
             </section>
           ) : null}
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="ops-section-title">WordPress</h2>
-                  <p className="mt-1 text-sm text-muted">
-                    CMS drafts and product publishing.
-                  </p>
-                </div>
-                <StatusPill
-                  status={health?.wordpress?.status}
-                  label={
-                    health?.wordpress?.status_label ||
-                    connectionLabel(health?.wordpress?.status)
-                  }
-                />
+          <Card>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="ops-section-title">Zoho CRM + Books</h2>
+                <p className="mt-1 text-sm text-muted">
+                  Contacts, leads, and invoice PDF.
+                </p>
               </div>
-              <p className="mt-3 text-sm text-muted">{health?.wordpress?.message}</p>
-              <ul className="mt-4 space-y-2">
-                {(health?.wordpress_posts || []).map((post) => (
-                  <li
-                    key={post.id}
-                    className="rounded-md border border-line px-3 py-2.5 text-sm transition-colors duration-150 hover:bg-stone/40"
-                  >
-                    <p className="font-medium text-ink">{post.title}</p>
-                    <p className="text-muted">{post.excerpt}</p>
-                  </li>
-                ))}
-              </ul>
-              <form className="mt-5 space-y-3" onSubmit={createDraft}>
-                <Input
-                  label="Create WordPress draft"
-                  name="title"
-                  value={draftTitle}
-                  onChange={(e) => setDraftTitle(e.target.value)}
-                />
-                <Button type="submit" size="sm">
-                  Create draft
-                </Button>
-                {draftStatus ? <p className="text-sm text-muted">{draftStatus}</p> : null}
-              </form>
-            </Card>
-
-            <Card>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="ops-section-title">Zoho CRM + Books</h2>
-                  <p className="mt-1 text-sm text-muted">
-                    Contacts, leads, and invoice PDF.
+              <StatusPill
+                status={health?.zoho?.status}
+                hasCredentials={health?.zoho?.credentials?.has_credentials}
+                label={
+                  health?.zoho?.status_label ||
+                  connectionLabel(health?.zoho?.status, {
+                    hasCredentials: health?.zoho?.credentials?.has_credentials,
+                  })
+                }
+              />
+            </div>
+            <p className="mt-3 text-sm text-muted">
+              {health?.zoho?.has_credentials || health?.zoho?.credentials?.has_credentials
+                ? health?.zoho?.message || "Zoho CRM is connected."
+                : "Waiting credentials."}
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              Books:{" "}
+              {health?.zoho_books?.status_label ||
+                health?.zoho?.books?.status_label ||
+                connectionLabel(health?.zoho_books?.status || health?.zoho?.books?.status) ||
+                "—"}
+            </p>
+            <ul className="mt-4 space-y-2">
+              {(health?.zoho_leads || []).map((lead) => (
+                <li
+                  key={lead.id}
+                  className="rounded-md border border-line px-3 py-2.5 text-sm transition-colors duration-150 hover:bg-stone/40"
+                >
+                  <p className="font-medium text-ink">{lead.name}</p>
+                  <p className="text-muted">
+                    {lead.email || "—"} · {lead.stage || "—"}
                   </p>
-                </div>
-                <StatusPill
-                  status={health?.zoho?.status}
-                  hasCredentials={health?.zoho?.credentials?.has_credentials}
-                  label={
-                    health?.zoho?.status_label ||
-                    connectionLabel(health?.zoho?.status, {
-                      hasCredentials: health?.zoho?.credentials?.has_credentials,
-                    })
-                  }
-                />
-              </div>
-              <p className="mt-3 text-sm text-muted">
-                {health?.zoho?.has_credentials || health?.zoho?.credentials?.has_credentials
-                  ? health?.zoho?.message || "Zoho CRM is connected."
-                  : "Waiting credentials."}
-              </p>
-              <p className="mt-1 text-xs text-muted">
-                Books:{" "}
-                {health?.zoho_books?.status_label ||
-                  health?.zoho?.books?.status_label ||
-                  connectionLabel(health?.zoho_books?.status || health?.zoho?.books?.status) ||
-                  "—"}
-              </p>
-              <ul className="mt-4 space-y-2">
-                {(health?.zoho_leads || []).map((lead) => (
-                  <li
-                    key={lead.id}
-                    className="rounded-md border border-line px-3 py-2.5 text-sm transition-colors duration-150 hover:bg-stone/40"
-                  >
-                    <p className="font-medium text-ink">{lead.name}</p>
-                    <p className="text-muted">
-                      {lead.email || "—"} · {lead.stage || "—"}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
 
           <section className="surface-card overflow-hidden">
             <div className="border-b border-line px-5 py-3.5">
@@ -428,7 +363,11 @@ export default function IntegrationsPage() {
             </div>
             <div className="divide-y divide-line">
               {integrations
-                .filter((item) => item.provider !== "messenger")
+                .filter(
+                  (item) =>
+                    item.provider !== "messenger" &&
+                    item.provider !== "wordpress",
+                )
                 .map((item) => (
                   <div
                     key={item.id}

@@ -270,18 +270,12 @@ export async function processDueContentPublish() {
 
   const results = [];
   for (const item of due) {
-    const adapter =
-      item.channel === "wordpress" || item.channel === "blog" ? "wordpress" : "meta_page";
-    // Honest local_sim until channel publish adapters are invoked with live tokens
-    // (Meta/WP publish paths exist on product/content approve flows).
+    // WordPress publish removed from Triada Ops — schedule cron uses Meta page only.
+    const adapter = "meta_page";
     const hasMeta =
       Boolean(process.env.META_PAGE_ACCESS_TOKEN?.trim()) ||
       Boolean(process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim());
-    const hasWp =
-      Boolean(process.env.WORDPRESS_APP_PASSWORD?.trim()) &&
-      Boolean(process.env.WORDPRESS_SITE_URL?.trim());
-    const liveCapable =
-      (adapter === "meta_page" && hasMeta) || (adapter === "wordpress" && hasWp);
+    const liveCapable = hasMeta;
     const mode = liveCapable ? "live" : "local_sim";
 
     const pub = {

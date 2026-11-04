@@ -521,13 +521,6 @@ export default function CalendarPage() {
                     </Button>
                     <Button
                       size="sm"
-                      disabled={busyId === `${item.id}-wordpress`}
-                      onClick={() => publish(item, "wordpress")}
-                    >
-                      Publish WP
-                    </Button>
-                    <Button
-                      size="sm"
                       variant="secondary"
                       disabled={busyId === `${item.id}-meta_page`}
                       onClick={() => publish(item, "meta_page")}

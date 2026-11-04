@@ -115,22 +115,6 @@ export function hasShopifyShopDomain() {
   return envPresentAny("SHOPIFY_SHOP_DOMAIN", "SHOPIFY_STORE_DOMAIN");
 }
 
-/**
- * WordPress Application Password path for marketing site posts.
- * Requires base URL + username + application password.
- */
-export function hasWordpressEnv() {
-  return (
-    envPresentAny("WORDPRESS_BASE_URL", "WP_BASE_URL") &&
-    envPresentAny("WORDPRESS_USERNAME", "WP_USERNAME") &&
-    envPresentAny(
-      "WORDPRESS_APPLICATION_PASSWORD",
-      "WP_APPLICATION_PASSWORD",
-      "WORDPRESS_APP_PASSWORD",
-    )
-  );
-}
-
 export function hasZohoEnv() {
   return (
     envPresent("ZOHO_CLIENT_ID") &&

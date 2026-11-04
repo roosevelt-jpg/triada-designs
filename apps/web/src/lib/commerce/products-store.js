@@ -70,13 +70,14 @@ function emptyChannelSync() {
       mode: "local",
       message: "Waiting credentials.",
     },
+    // Historical field only — never shown or refreshed in Triada Ops.
     wordpress: {
-      status: "awaiting_credentials",
+      status: "ignored",
       external_id: null,
       link: null,
       synced_at: null,
       mode: "local",
-      message: "Waiting credentials.",
+      message: null,
     },
   };
 }

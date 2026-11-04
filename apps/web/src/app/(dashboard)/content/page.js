@@ -686,13 +686,6 @@ export default function ContentPage() {
                       </Button>
                       <Button
                         variant="secondary"
-                        disabled={busyId === `publish-${item.id}-wordpress`}
-                        onClick={() => publish(item, "wordpress")}
-                      >
-                        Publish WordPress
-                      </Button>
-                      <Button
-                        variant="secondary"
                         disabled={busyId === `publish-${item.id}-meta_page`}
                         onClick={() => publish(item, "meta_page")}
                       >
@@ -733,13 +726,6 @@ export default function ContentPage() {
                         onClick={() => publish(item, "all_channels")}
                       >
                         Share all channels
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        disabled={busyId === `publish-${item.id}-wordpress`}
-                        onClick={() => publish(item, "wordpress")}
-                      >
-                        Publish now (WP)
                       </Button>
                       <Button
                         variant="secondary"

@@ -211,9 +211,8 @@ export default function ChannelsIntegrationsPage() {
           <Card className="p-5">
             <h2 className="ops-section-title">Website visitor leads</h2>
             <p className="mt-2 text-sm text-muted">
-              Embed this snippet on triada-designs.com (WordPress theme footer / Site Kit / custom HTML). Creates
-              CRM leads with page, referrer, UTM, and email when a form or chat captures one. Marketing site is
-              outside this repo — paste once into WP; ops cannot auto-deploy the script without WordPress credentials.
+              Embed this snippet on triada-designs.com. Creates CRM leads with page, referrer, UTM, and email when
+              a form or chat captures one.
             </p>
             <pre className="mt-3 overflow-x-auto rounded-sm bg-shell px-3 py-2 text-[12px] leading-relaxed text-ink">
 {`<script

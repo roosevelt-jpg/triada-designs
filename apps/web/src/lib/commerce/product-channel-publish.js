@@ -1,6 +1,7 @@
 /**
- * Publish / sync a Triada catalog product to Shopify + WordPress.
- * When credentials are missing, channel rows stay clear `awaiting_credentials`.
+ * Publish / sync a Triada catalog product to Shopify.
+ * When credentials are missing, Shopify rows stay clear `awaiting_credentials`.
+ * Historical WordPress channel_sync fields are preserved and ignored.
  */
 
 import {
@@ -27,20 +28,15 @@ import {
   listShopifyRemoteProducts,
   upsertShopifyProduct,
 } from "./shopify-admin.js";
-import {
-  upsertWordpressProductPost,
-  wordpressRuntime,
-} from "./wordpress-products.js";
 
 /**
  * @param {import("./products-store.js").ProductRecord} product
- * @param {{ channels?: Array<'shopify'|'wordpress'|'all'>, mark_published?: boolean }} [opts]
+ * @param {{ channels?: Array<'shopify'|'all'>, mark_published?: boolean }} [opts]
  */
 export async function publishProductToChannels(product, opts = {}) {
   const channels = opts.channels || ["all"];
   const wantAll = channels.includes("all");
   const wantShopify = wantAll || channels.includes("shopify");
-  const wantWordpress = wantAll || channels.includes("wordpress");
 
   let working = product;
   if (opts.mark_published && working.published_status !== "published") {
@@ -51,7 +47,7 @@ export async function publishProductToChannels(product, opts = {}) {
     working = saved.product;
   }
 
-  /** @type {Partial<{ shopify: import("./products-store.js").ChannelSyncState, wordpress: import("./products-store.js").ChannelSyncState }>} */
+  /** @type {Partial<{ shopify: import("./products-store.js").ChannelSyncState }>} */
   const syncPatch = {};
 
   if (wantShopify) {
@@ -69,9 +65,6 @@ export async function publishProductToChannels(product, opts = {}) {
     } else {
       syncPatch.shopify = await upsertShopifyProduct(working);
     }
-  }
-  if (wantWordpress) {
-    syncPatch.wordpress = await upsertWordpressProductPost(working);
   }
 
   // Persist Shopify CDN images onto local metadata when dashboard had none / relative only.
@@ -167,13 +160,8 @@ export async function publishProductToChannels(product, opts = {}) {
   }
 
   const shopify = productOut.channel_sync.shopify;
-  const wordpress = productOut.channel_sync.wordpress;
-  const anyError =
-    (wantShopify && shopify.status === "error") ||
-    (wantWordpress && wordpress.status === "error");
-  const anyAwaiting =
-    (wantShopify && shopify.status === "awaiting_credentials") ||
-    (wantWordpress && wordpress.status === "awaiting_credentials");
+  const anyError = wantShopify && shopify.status === "error";
+  const anyAwaiting = wantShopify && shopify.status === "awaiting_credentials";
 
   return {
     ok: !anyError,
@@ -181,25 +169,20 @@ export async function publishProductToChannels(product, opts = {}) {
     product: productOut,
     channels: {
       shopify: wantShopify ? shopify : undefined,
-      wordpress: wantWordpress ? wordpress : undefined,
       collection: satellites?.collection,
       inventory: satellites?.inventory,
     },
     shopify_runtime: await getShopifyRuntime(),
-    wordpress_runtime: wordpressRuntime(),
     summary: buildSummary({
       shopify: wantShopify ? shopify : null,
-      wordpress: wantWordpress ? wordpress : null,
     }),
   };
 }
 
 /**
- * Create or update a product, then sync channels.
- * When Shopify is Connected, every add/edit pushes price + specs to Shopify.
- * WordPress still follows the explicit publish flag (or channels override).
+ * Create or update a product, then sync Shopify when Connected.
  * @param {Record<string, unknown>} input
- * @param {{ publish?: boolean, channels?: Array<'shopify'|'wordpress'|'all'> }} [opts]
+ * @param {{ publish?: boolean, channels?: Array<'shopify'|'all'> }} [opts]
  */
 export async function saveAndMaybePublishProduct(input, opts = {}) {
   const title = String(input.title || "").trim();
@@ -238,22 +221,17 @@ export async function saveAndMaybePublishProduct(input, opts = {}) {
 
   const shopifyRuntimeLive = await getShopifyRuntime();
   const shopifyReady = shopifyRuntimeLive.ready;
-  const wpReady = wordpressRuntime().ready;
 
-  /** @type {Array<'shopify'|'wordpress'>} */
+  /** @type {Array<'shopify'>} */
   let channels = [];
   if (Array.isArray(opts.channels) && opts.channels.length && !opts.channels.includes("all")) {
-    channels = opts.channels.filter(
-      (c) => c === "shopify" || c === "wordpress",
-    );
+    channels = opts.channels.filter((c) => c === "shopify");
   } else if (Array.isArray(input.channels) && input.channels.length && !input.channels.includes("all")) {
-    channels = /** @type {Array<'shopify'|'wordpress'>} */ (
-      input.channels.filter((c) => c === "shopify" || c === "wordpress")
+    channels = /** @type {Array<'shopify'>} */ (
+      input.channels.filter((c) => c === "shopify")
     );
-  } else {
-    // Default: Shopify auto-syncs whenever Connected; WordPress on publish.
-    if (shopifyReady || explicitPublish) channels.push("shopify");
-    if (explicitPublish) channels.push("wordpress");
+  } else if (shopifyReady || explicitPublish) {
+    channels.push("shopify");
   }
 
   // Always attempt Shopify on save when Connected (even if caller omitted it),
@@ -292,18 +270,6 @@ export async function saveAndMaybePublishProduct(input, opts = {}) {
                 ? "Saved. Publish to push to Shopify."
                 : "Waiting credentials.",
           },
-      wordpress: saved.product.channel_sync.wordpress.external_id
-        ? saved.product.channel_sync.wordpress
-        : {
-            status: wpReady ? "pending_publish" : "awaiting_credentials",
-            external_id: null,
-            link: null,
-            synced_at: null,
-            mode: wpReady ? wordpressRuntime().mode : "local",
-            message: wpReady
-              ? "Saved. Publish to push to WordPress."
-              : "Waiting credentials.",
-          },
     });
     return {
       ok: true,
@@ -340,7 +306,7 @@ export async function saveAndMaybePublishProduct(input, opts = {}) {
 /**
  * Publish an existing product by id.
  * @param {string} id
- * @param {{ channels?: Array<'shopify'|'wordpress'|'all'> }} [opts]
+ * @param {{ channels?: Array<'shopify'|'all'> }} [opts]
  */
 export async function publishProductById(id, opts = {}) {
   const product = await getProduct(id);
@@ -459,6 +425,7 @@ export async function syncShopifyCatalogInbound() {
               mode: remote.mode,
               message: "Pulled from Shopify Admin API.",
             },
+            // Preserve any historical WordPress sync row; never surface or refresh it.
             wordpress: existing?.channel_sync?.wordpress,
           },
         }),
@@ -499,14 +466,11 @@ export async function syncShopifyCatalogInbound() {
   };
 }
 
-/** @param {{ shopify: import("./products-store.js").ChannelSyncState | null, wordpress: import("./products-store.js").ChannelSyncState | null }} channels */
+/** @param {{ shopify: import("./products-store.js").ChannelSyncState | null }} channels */
 function buildSummary(channels) {
   const parts = [];
   if (channels.shopify) {
     parts.push(`Shopify: ${channels.shopify.status}`);
-  }
-  if (channels.wordpress) {
-    parts.push(`WordPress: ${channels.wordpress.status}`);
   }
   return parts.join(" · ") || "No channels selected";
 }

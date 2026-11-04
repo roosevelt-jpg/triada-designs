@@ -159,7 +159,6 @@ export default function ProductsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [channelStatus, setChannelStatus] = useState({
     shopify: null,
-    wordpress: null,
   });
 
   const load = useCallback(async () => {
@@ -171,7 +170,6 @@ export default function ProductsPage() {
       setItems(response.data || []);
       setChannelStatus({
         shopify: response.shopify || null,
-        wordpress: response.wordpress || null,
       });
     } catch (err) {
       setError(err.message || "Failed to load products");
@@ -494,9 +492,6 @@ export default function ProductsPage() {
   const shopifyLabel =
     channelStatus.shopify?.status_label ||
     (shopifyConnected ? "Connected" : "Waiting credentials");
-  const wordpressLabel =
-    channelStatus.wordpress?.status_label ||
-    (channelStatus.wordpress?.connected ? "Connected" : "Waiting credentials");
 
   return (
     <DashboardShell
@@ -521,9 +516,6 @@ export default function ProductsPage() {
       <div className="mb-6 ops-actions">
         <Badge tone={shopifyConnected ? "success" : "warning"}>
           Shopify · {shopifyLabel}
-        </Badge>
-        <Badge tone={channelStatus.wordpress?.connected ? "success" : "warning"}>
-          WordPress · {wordpressLabel}
         </Badge>
       </div>
 
@@ -795,7 +787,6 @@ export default function ProductsPage() {
               className="h-4 w-4 accent-black"
             />
             Publish live (active on Shopify
-            {channelStatus.wordpress?.connected ? " + WordPress" : ""}
             {shopifyConnected
               ? isBundleUnpriced()
                 ? "; add a price before syncing)"
@@ -847,7 +838,6 @@ export default function ProductsPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {items.map((item) => {
             const shopify = item.channel_sync?.shopify;
-            const wordpress = item.channel_sync?.wordpress;
             const metal = metaString(item, "metal");
             const weight = metaString(item, "weight_grams");
             const photos = productPhotoUrls(item);
@@ -913,22 +903,12 @@ export default function ProductsPage() {
                   <Badge tone={channelTone(shopify?.status)}>
                     Shopify · {channelLabel(shopify?.status)}
                   </Badge>
-                  <Badge tone={channelTone(wordpress?.status)}>
-                    WordPress · {channelLabel(wordpress?.status)}
-                  </Badge>
                 </div>
-                {(shopify?.message || wordpress?.message) &&
+                {shopify?.message &&
                 (shopify?.status === "awaiting_credentials" ||
-                  wordpress?.status === "awaiting_credentials" ||
                   shopify?.status === "error" ||
-                  wordpress?.status === "error" ||
                   shopify?.status === "synced") ? (
-                  <p className="mt-2 text-xs text-muted">
-                    {[shopify?.message, wordpress?.message]
-                      .filter(Boolean)
-                      .filter((v, i, a) => a.indexOf(v) === i)
-                      .join(" · ")}
-                  </p>
+                  <p className="mt-2 text-xs text-muted">{shopify.message}</p>
                 ) : null}
                 <div className="mt-4 ops-actions">
                   <Button size="sm" variant="secondary" onClick={() => openEdit(item)}>

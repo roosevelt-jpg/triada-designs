@@ -141,10 +141,6 @@ import {
   resolveCampaignPromoPayload,
 } from "@/lib/integrations/whatsapp-campaign-promo";
 import {
-  upsertWordpressProductPost,
-  wordpressStatusPayload,
-} from "@/lib/commerce/wordpress-products";
-import {
   importContactRows,
   listContacts,
   listWhatsAppCampaignRecipients,
@@ -1223,7 +1219,6 @@ export async function dispatchV1(method, segments, request, body) {
       ...paginate(listed.data),
       mode: listed.mode,
       shopify: await getShopifyStatusPayload(),
-      wordpress: wordpressStatusPayload(),
       source: "next_dual_run",
     });
   }
@@ -1337,7 +1332,6 @@ export async function dispatchV1(method, segments, request, body) {
       channels: result.channels,
       summary: result.summary,
       shopify_runtime: result.shopify_runtime,
-      wordpress_runtime: result.wordpress_runtime,
       source: "next_dual_run",
     });
   }
@@ -2001,66 +1995,11 @@ export async function dispatchV1(method, segments, request, body) {
     return jsonOk(buildIntegrationsHealth({ anthropic, meta, shopify, higgsfield }));
   }
 
-  if (path === "integrations/wordpress/status" && m === "GET") {
-    return jsonOk(wordpressStatusPayload());
-  }
-
   if (path === "integrations/google-places" && m === "GET") {
     // Browser key only on this dedicated route (HTTP-referrer restrict on Google Cloud).
     return jsonOk({
       ...googlePlacesStatus({ includeBrowserKey: true }),
       source: "next_dual_run",
-    });
-  }
-
-  if (path === "integrations/wordpress/drafts" && m === "POST") {
-    const wp = wordpressStatusPayload();
-    if (!wp.connected) {
-      return jsonOk(
-        {
-          id: `wp-draft-${Date.now()}`,
-          title: body?.title || "Untitled draft",
-          status: "awaiting_credentials",
-          source: "next_dual_run",
-          message: wp.message,
-        },
-        201,
-      );
-    }
-    const draftProduct = {
-      id: `draft-${Date.now()}`,
-      title: String(body?.title || "Untitled draft"),
-      description: String(body?.content || body?.excerpt || ""),
-      published_status: "draft",
-      channel_sync: { shopify: {}, wordpress: {} },
-    };
-    const result = await upsertWordpressProductPost(
-      /** @type {import("@/lib/commerce/products-store").ProductRecord} */ (
-        draftProduct
-      ),
-    );
-    return jsonOk(
-      {
-        id: result.external_id || `wp-draft-${Date.now()}`,
-        title: draftProduct.title,
-        status: result.status === "synced" ? "draft" : result.status,
-        link: result.link,
-        source: "next_dual_run",
-        message: result.message,
-      },
-      201,
-    );
-  }
-
-  if (path === "integrations/wordpress/posts" && m === "GET") {
-    const anthropic = await getAnthropicStatus();
-    const wp = wordpressStatusPayload();
-    return jsonOk({
-      mode: wp.mode,
-      status: wp.status,
-      status_label: wp.status_label,
-      message: wp.message,
-      data: buildIntegrationsHealth({ anthropic }).wordpress_posts,
     });
   }
 
