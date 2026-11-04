@@ -11,6 +11,10 @@ import {
   upsertProduct,
 } from "./products-store.js";
 import {
+  isBundlePriceTba,
+  shouldSyncProductToShopify,
+} from "./product-bundles.js";
+import {
   generateProductSku,
   mergeSpecsIntoMetadata,
   productPhotoUrl,
@@ -51,7 +55,20 @@ export async function publishProductToChannels(product, opts = {}) {
   const syncPatch = {};
 
   if (wantShopify) {
-    syncPatch.shopify = await upsertShopifyProduct(working);
+    if (!shouldSyncProductToShopify(working)) {
+      syncPatch.shopify = {
+        status: "pending_publish",
+        external_id: working.channel_sync?.shopify?.external_id || null,
+        link: working.channel_sync?.shopify?.link || null,
+        synced_at: working.channel_sync?.shopify?.synced_at || null,
+        mode: working.channel_sync?.shopify?.mode || "local",
+        message: isBundlePriceTba(working)
+          ? "Bundle draft saved. Add a price before syncing to Shopify."
+          : "Saved. Publish when ready.",
+      };
+    } else {
+      syncPatch.shopify = await upsertShopifyProduct(working);
+    }
   }
   if (wantWordpress) {
     syncPatch.wordpress = await upsertWordpressProductPost(working);
@@ -239,24 +256,41 @@ export async function saveAndMaybePublishProduct(input, opts = {}) {
     if (explicitPublish) channels.push("wordpress");
   }
 
-  // Always attempt Shopify on save when Connected (even if caller omitted it).
-  if (shopifyReady && !channels.includes("shopify")) {
+  // Always attempt Shopify on save when Connected (even if caller omitted it),
+  // except TBA bundles with no price — those stay local until priced.
+  const allowShopify =
+    shopifyReady && shouldSyncProductToShopify(saved.product);
+  if (allowShopify && !channels.includes("shopify")) {
     channels.push("shopify");
+  }
+  if (!allowShopify && channels.includes("shopify") && isBundlePriceTba(saved.product)) {
+    channels = channels.filter((c) => c !== "shopify");
   }
 
   if (!channels.length) {
+    const tbaHold = isBundlePriceTba(saved.product);
     const stamped = await updateProductChannelSync(saved.product.id, {
       shopify: saved.product.channel_sync.shopify.external_id
-        ? saved.product.channel_sync.shopify
+        ? {
+            ...saved.product.channel_sync.shopify,
+            status: tbaHold
+              ? "pending_publish"
+              : saved.product.channel_sync.shopify.status,
+            message: tbaHold
+              ? "Bundle draft saved. Add a price before syncing to Shopify."
+              : saved.product.channel_sync.shopify.message,
+          }
         : {
             status: shopifyReady ? "pending_publish" : "awaiting_credentials",
             external_id: null,
             link: null,
             synced_at: null,
             mode: shopifyReady ? shopifyRuntimeLive.mode : "local",
-            message: shopifyReady
-              ? "Saved. Publish to push to Shopify."
-              : "Waiting credentials.",
+            message: tbaHold
+              ? "Bundle draft saved. Add a price before syncing to Shopify."
+              : shopifyReady
+                ? "Saved. Publish to push to Shopify."
+                : "Waiting credentials.",
           },
       wordpress: saved.product.channel_sync.wordpress.external_id
         ? saved.product.channel_sync.wordpress
@@ -278,6 +312,9 @@ export async function saveAndMaybePublishProduct(input, opts = {}) {
       shopify_auto_synced: false,
       product: stamped.ok ? stamped.product : saved.product,
       mode: saved.mode,
+      summary: tbaHold
+        ? "Bundle draft saved. Add a price before syncing to Shopify."
+        : undefined,
     };
   }
 

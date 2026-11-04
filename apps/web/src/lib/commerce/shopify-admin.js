@@ -15,6 +15,11 @@ import {
   resolveShopifyAccessToken,
 } from "@/lib/integrations/shopify-credentials";
 import {
+  extractProductBundle,
+  metalSkuSuffix,
+  pricedMetalVariants,
+} from "./product-bundles.js";
+import {
   absoluteProductPhotoUrlForShopify,
   absoluteProductPhotoUrlsForShopify,
   extractProductSpecs,
@@ -158,6 +163,17 @@ export function buildShopifyBodyHtml(product, specs) {
     parts.push(`<p>${escapeHtml(product.description)}</p>`);
   }
 
+  const bundle = extractProductBundle(product);
+  if (bundle?.components?.length) {
+    const lis = bundle.components
+      .map((c) => {
+        const qty = c.qty > 1 ? ` ×${c.qty}` : "";
+        return `<li>${escapeHtml(c.title)}${qty}</li>`;
+      })
+      .join("");
+    parts.push(`<h3>Includes</h3><ul>${lis}</ul>`);
+  }
+
   const rows = specsDisplayRows(specs, product);
   if (rows.length) {
     const tr = rows
@@ -208,6 +224,11 @@ export function buildShopifyTags(product, specs) {
   push(specs.collection);
   push(specs.metal);
   push(specs.stone);
+  const bundle = extractProductBundle(product);
+  if (bundle?.is_bundle) {
+    push("Bundle");
+    for (const c of bundle.components || []) push(c.title);
+  }
   push(`currency:${productCurrency(product)}`);
   if (product.availability_status) {
     push(String(product.availability_status));
@@ -254,45 +275,116 @@ export function buildShopifyMetafields(product, specs) {
   add("availability", product.availability_status);
   if (product.product_url) add("product_url", String(product.product_url), "url");
 
+  const bundle = extractProductBundle(product);
+  if (bundle?.is_bundle) {
+    add("is_bundle", "true");
+    if (bundle.components_sum != null) {
+      add("components_sum", formatShopifyPrice(bundle.components_sum));
+    }
+    if (bundle.components?.length) {
+      add(
+        "components",
+        bundle.components
+          .map((c) => `${c.title}${c.qty > 1 ? ` x${c.qty}` : ""}`)
+          .join(" | "),
+      );
+    }
+  }
+
   return fields;
 }
 
 /**
  * Map Triada product → Shopify Admin product payload.
- * Pass variantId on updates so price/sku overwrite the existing variant.
+ * Pass variantId / variantIdsByMetal on updates so price/sku overwrite existing variants.
+ * Bundles with 2+ priced metal variants become one Shopify product (Metal option).
  * @param {import("./products-store.js").ProductRecord} product
- * @param {{ variantId?: string | number | null, includeMetafields?: boolean }} [opts]
+ * @param {{
+ *   variantId?: string | number | null,
+ *   variantIdsByMetal?: Record<string, string | number>,
+ *   includeMetafields?: boolean,
+ * }} [opts]
  */
 export function toShopifyProductPayload(product, opts = {}) {
   const specs = extractProductSpecs(product);
+  const bundle = extractProductBundle(product);
   const status =
     product.published_status === "published" || product.published_status === "active"
       ? "active"
       : "draft";
-  const price = formatShopifyPrice(product.price);
   const compareAt =
     specs.compare_at_price != null
       ? formatShopifyPrice(specs.compare_at_price)
-      : null;
+      : bundle?.components_sum != null
+        ? formatShopifyPrice(bundle.components_sum)
+        : null;
 
-  /** @type {Record<string, unknown>} */
-  const variant = {
-    price,
-    sku: product.sku ? String(product.sku) : undefined,
-    barcode: specs.barcode || undefined,
-    inventory_management: null,
-    requires_shipping: true,
-  };
-  if (opts.variantId != null && String(opts.variantId).trim()) {
-    variant.id = Number(opts.variantId) || opts.variantId;
-    // Explicit null on update clears a prior Shopify compare-at when sale ends.
-    variant.compare_at_price = compareAt;
-  } else if (compareAt != null) {
-    variant.compare_at_price = compareAt;
-  }
-  if (specs.weight_grams != null && Number.isFinite(specs.weight_grams)) {
-    variant.weight = specs.weight_grams;
-    variant.weight_unit = "g";
+  const metalRows = pricedMetalVariants(bundle?.metal_variants || []);
+  /** @type {Record<string, unknown>[]} */
+  let variants;
+  /** @type {Array<{ name: string, values: string[] }> | undefined} */
+  let options;
+
+  if (metalRows.length >= 2) {
+    options = [{ name: "Metal", values: metalRows.map((row) => row.metal) }];
+    variants = metalRows.map((row) => {
+      /** @type {Record<string, unknown>} */
+      const variant = {
+        option1: row.metal,
+        price: formatShopifyPrice(row.price),
+        sku: product.sku
+          ? `${String(product.sku)}-${metalSkuSuffix(row.metal)}`
+          : undefined,
+        barcode: specs.barcode || undefined,
+        inventory_management: null,
+        requires_shipping: true,
+      };
+      const priorId =
+        opts.variantIdsByMetal &&
+        (opts.variantIdsByMetal[row.metal] ??
+          opts.variantIdsByMetal[row.metal.toLowerCase()]);
+      if (priorId != null && String(priorId).trim()) {
+        variant.id = Number(priorId) || priorId;
+        variant.compare_at_price = compareAt;
+      } else if (compareAt != null) {
+        variant.compare_at_price = compareAt;
+      }
+      if (specs.weight_grams != null && Number.isFinite(specs.weight_grams)) {
+        variant.weight = specs.weight_grams;
+        variant.weight_unit = "g";
+      }
+      return variant;
+    });
+  } else {
+    const singlePrice =
+      metalRows.length === 1 && metalRows[0].price != null
+        ? metalRows[0].price
+        : product.price;
+    const price = formatShopifyPrice(singlePrice);
+    /** @type {Record<string, unknown>} */
+    const variant = {
+      price,
+      sku: product.sku ? String(product.sku) : undefined,
+      barcode: specs.barcode || undefined,
+      inventory_management: null,
+      requires_shipping: true,
+    };
+    if (metalRows.length === 1) {
+      variant.option1 = metalRows[0].metal;
+      options = [{ name: "Metal", values: [metalRows[0].metal] }];
+    }
+    if (opts.variantId != null && String(opts.variantId).trim()) {
+      variant.id = Number(opts.variantId) || opts.variantId;
+      // Explicit null on update clears a prior Shopify compare-at when sale ends.
+      variant.compare_at_price = compareAt;
+    } else if (compareAt != null) {
+      variant.compare_at_price = compareAt;
+    }
+    if (specs.weight_grams != null && Number.isFinite(specs.weight_grams)) {
+      variant.weight = specs.weight_grams;
+      variant.weight_unit = "g";
+    }
+    variants = [variant];
   }
 
   /** @type {Record<string, unknown>} */
@@ -303,16 +395,20 @@ export function toShopifyProductPayload(product, opts = {}) {
     product_type: specs.category || "Jewellery",
     status,
     tags: buildShopifyTags(product, specs),
-    variants: [variant],
+    variants,
   };
+  if (options?.length) productBody.options = options;
 
   // Attach all images on create (update path uses products/{id}/images.json).
   const photoHttpsList = absoluteProductPhotoUrlsForShopify(product);
-  if (photoHttpsList.length && !opts.variantId) {
+  const isUpdate =
+    (opts.variantId != null && String(opts.variantId).trim()) ||
+    opts.variantIdsByMetal != null;
+  if (photoHttpsList.length && !isUpdate) {
     productBody.images = photoHttpsList.map((src) => ({ src }));
   }
 
-  if (opts.includeMetafields !== false && !opts.variantId) {
+  if (opts.includeMetafields !== false && !isUpdate) {
     const metafields = buildShopifyMetafields(product, specs);
     if (metafields.length) productBody.metafields = metafields;
   }
@@ -431,6 +527,8 @@ export async function upsertShopifyProduct(product) {
   try {
     /** @type {string | number | null} */
     let variantId = null;
+    /** @type {Record<string, string | number>} */
+    const variantIdsByMetal = {};
     if (isRemoteId) {
       const current = await adminRequest(
         "GET",
@@ -441,11 +539,32 @@ export async function upsertShopifyProduct(product) {
         if (Array.isArray(variants) && variants[0]?.id != null) {
           variantId = variants[0].id;
         }
+        if (Array.isArray(variants)) {
+          for (const remoteVariant of variants) {
+            if (!remoteVariant || remoteVariant.id == null) continue;
+            const option =
+              remoteVariant.option1 != null
+                ? String(remoteVariant.option1).trim()
+                : "";
+            if (!option) continue;
+            variantIdsByMetal[option] = remoteVariant.id;
+            variantIdsByMetal[option.toLowerCase()] = remoteVariant.id;
+          }
+        }
       }
     }
 
+    const metalCount = pricedMetalVariants(
+      extractProductBundle(product)?.metal_variants || [],
+    ).length;
     const payload = toShopifyProductPayload(product, {
-      variantId,
+      variantId: isRemoteId && metalCount < 2 ? variantId : null,
+      variantIdsByMetal:
+        isRemoteId && metalCount >= 2 && Object.keys(variantIdsByMetal).length
+          ? variantIdsByMetal
+          : isRemoteId && metalCount >= 2
+            ? {}
+            : undefined,
       includeMetafields: !isRemoteId,
     });
 

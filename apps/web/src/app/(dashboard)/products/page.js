@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
+import { BundleComponentsField } from "@/components/ui/BundleComponentsField";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -13,6 +14,12 @@ import { ProductPhotosField } from "@/components/ui/ProductPhotosField";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import {
+  extractProductBundle,
+  mergeBundleIntoMetadata,
+  suggestBundleTitle,
+  sumBundleComponentPrices,
+} from "@/lib/commerce/product-bundles";
+import {
   extractProductSpecs,
   isSalePrice,
   productPhotoUrls,
@@ -21,6 +28,7 @@ import { formatCurrency } from "@/lib/formatters";
 import { DEFAULT_CURRENCY } from "@/lib/locale/preferred-currency";
 
 const EMPTY_FORM = {
+  mode: /** @type {"single" | "bundle"} */ ("single"),
   title: "",
   sku: "",
   description: "",
@@ -40,6 +48,11 @@ const EMPTY_FORM = {
   availability_status: "in_stock_snapshot",
   approved_claims: "",
   publish: true,
+  /** @type {Array<{ product_id: string, title: string, price: number | null, currency: string | null, qty: number }>} */
+  components: [],
+  metal_price_silver: "",
+  metal_price_gold: "",
+  price_tba: false,
 };
 
 function channelTone(status) {
@@ -180,8 +193,15 @@ export default function ProductsPage() {
   }
 
   function openEdit(item) {
+    const bundle = extractProductBundle(item);
+    const metalVariants = bundle?.metal_variants || [];
+    const silver =
+      metalVariants.find((v) => /silver/i.test(v.metal))?.price ?? null;
+    const gold =
+      metalVariants.find((v) => /gold/i.test(v.metal))?.price ?? null;
     setEditingId(item.id);
     setForm({
+      mode: bundle?.is_bundle ? "bundle" : "single",
       title: item.title || "",
       sku: item.sku || "",
       description: item.description || "",
@@ -203,6 +223,10 @@ export default function ProductsPage() {
         ? item.approved_claims.join(", ")
         : "",
       publish: item.published_status === "published",
+      components: bundle?.components || [],
+      metal_price_silver: silver != null ? String(silver) : "",
+      metal_price_gold: gold != null ? String(gold) : "",
+      price_tba: Boolean(bundle?.price_tba) || item.price == null,
     });
     setShowForm(true);
     setNotice("");
@@ -212,11 +236,108 @@ export default function ProductsPage() {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
+  const componentsSum = useMemo(
+    () => sumBundleComponentPrices(form.components),
+    [form.components],
+  );
+
+  function setBundleMode(nextMode) {
+    setForm((prev) => {
+      const mode = nextMode === "bundle" ? "bundle" : "single";
+      if (mode === "bundle") {
+        const suggested =
+          !prev.title.trim() && prev.components.length
+            ? suggestBundleTitle(prev.components)
+            : prev.title;
+        const compare =
+          prev.compare_at_price === "" && componentsSum != null
+            ? String(componentsSum)
+            : prev.compare_at_price;
+        return {
+          ...prev,
+          mode,
+          title: suggested,
+          compare_at_price: compare,
+          category: prev.category === "Jewellery" ? "Bundles" : prev.category,
+          collection: prev.collection || "Bundles",
+          publish: prev.price_tba ? false : prev.publish,
+        };
+      }
+      return { ...prev, mode, components: [], price_tba: false };
+    });
+  }
+
+  function onComponentsChange(next) {
+    setForm((prev) => {
+      const sum = sumBundleComponentPrices(next);
+      const autoTitle =
+        !prev.title.trim() ||
+        prev.title.trim() === suggestBundleTitle(prev.components);
+      return {
+        ...prev,
+        components: next,
+        title: autoTitle ? suggestBundleTitle(next) || prev.title : prev.title,
+        compare_at_price:
+          sum != null &&
+          (prev.compare_at_price === "" ||
+            prev.compare_at_price === String(componentsSum ?? ""))
+            ? String(sum)
+            : prev.compare_at_price,
+      };
+    });
+  }
+
+  function onPriceTbaChange(checked) {
+    setForm((prev) => ({
+      ...prev,
+      price_tba: checked,
+      publish: checked ? false : prev.publish,
+      price: checked ? "" : prev.price,
+    }));
+  }
+
   async function submitForm(event) {
     event.preventDefault();
     setBusy("save");
     setError("");
     setNotice("");
+
+    const isBundle = form.mode === "bundle";
+    const priceTba = isBundle && Boolean(form.price_tba);
+    const metalVariants = [];
+    if (isBundle && form.metal_price_silver !== "") {
+      metalVariants.push({
+        metal: "Silver",
+        price: Number(form.metal_price_silver),
+      });
+    }
+    if (isBundle && form.metal_price_gold !== "") {
+      metalVariants.push({
+        metal: "Gold",
+        price: Number(form.metal_price_gold),
+      });
+    }
+
+    if (isBundle && !form.components.length) {
+      setBusy("");
+      setError("Add at least one catalog piece to this set.");
+      return;
+    }
+    if (
+      isBundle &&
+      !priceTba &&
+      form.price === "" &&
+      metalVariants.every((v) => v.price == null || !Number.isFinite(v.price))
+    ) {
+      setBusy("");
+      setError("Set a bundle price, metal prices, or mark price as TBA.");
+      return;
+    }
+    if (priceTba && form.publish) {
+      setBusy("");
+      setError("TBA sets save as draft until a price is set.");
+      return;
+    }
 
     const priorMeta = editingId
       ? items.find((row) => row.id === editingId)?.metadata || {}
@@ -231,11 +352,38 @@ export default function ProductsPage() {
       : [];
     const photo_url = photo_urls[0] || null;
 
+    const suggestedCompare =
+      form.compare_at_price === "" && componentsSum != null
+        ? componentsSum
+        : form.compare_at_price === ""
+          ? null
+          : Number(form.compare_at_price);
+
+    const metalPrices = metalVariants
+      .map((v) => v.price)
+      .filter((n) => n != null && Number.isFinite(n));
+    const primaryMetalPrice =
+      metalPrices.length === 1
+        ? metalPrices[0]
+        : metalPrices.length > 1
+          ? Math.min(...metalPrices)
+          : null;
+    const resolvedPrice = priceTba
+      ? null
+      : form.price !== ""
+        ? Number(form.price)
+        : primaryMetalPrice;
+
+    const resolvedMetal =
+      form.metal.trim() ||
+      (metalVariants.length === 1 ? metalVariants[0].metal : null) ||
+      null;
+
     const specs = {
       ...priorSpecs,
-      category: form.category.trim() || "Jewellery",
+      category: form.category.trim() || (isBundle ? "Bundles" : "Jewellery"),
       collection: form.collection.trim() || null,
-      metal: form.metal.trim() || null,
+      metal: resolvedMetal,
       weight_grams:
         form.weight_grams === "" ? null : Number(form.weight_grams),
       stone: form.stone.trim() || null,
@@ -243,31 +391,43 @@ export default function ProductsPage() {
       barcode: form.barcode.trim() || null,
       inventory_quantity:
         form.inventory_quantity === "" ? null : Number(form.inventory_quantity),
-      compare_at_price:
-        form.compare_at_price === "" ? null : Number(form.compare_at_price),
+      compare_at_price: suggestedCompare,
       photo_url,
       photo_urls,
     };
+
+    let metadata = {
+      ...priorMeta,
+      ...specs,
+      specs,
+      photo_url,
+      photo_urls,
+    };
+    metadata = mergeBundleIntoMetadata(
+      metadata,
+      isBundle
+        ? {
+            is_bundle: true,
+            components: form.components,
+            metal_variants: metalVariants,
+            price_tba: priceTba,
+          }
+        : { is_bundle: false },
+    );
 
     const payload = {
       title: form.title.trim(),
       sku: form.sku.trim() || null,
       description: form.description.trim(),
-      price: form.price === "" ? null : Number(form.price),
+      price: resolvedPrice,
       currency: form.currency || DEFAULT_CURRENCY,
       product_url: form.product_url.trim() || "https://triada-designs.com/",
       availability_status: form.availability_status,
       approved_claims: form.approved_claims,
-      published_status: form.publish ? "published" : "draft",
-      publish: Boolean(form.publish),
+      published_status: form.publish && !priceTba ? "published" : "draft",
+      publish: Boolean(form.publish) && !priceTba,
       channels: ["all"],
-      metadata: {
-        ...priorMeta,
-        ...specs,
-        specs,
-        photo_url,
-        photo_urls,
-      },
+      metadata,
     };
 
     try {
@@ -284,7 +444,9 @@ export default function ProductsPage() {
         ? "Shopify synced"
         : result.channels?.shopify?.status === "awaiting_credentials"
           ? "Shopify waiting credentials"
-          : null;
+          : priceTba
+            ? "Draft held until priced"
+            : null;
       setNotice(
         [
           editingId ? "Updated" : "Created",
@@ -393,9 +555,57 @@ export default function ProductsPage() {
           onSubmit={submitForm}
           className="mb-8 space-y-4 border-b border-line pb-8"
         >
-          <h2 className="font-display text-2xl text-ink">
-            {editingId ? "Edit product" : "New product"}
-          </h2>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <h2 className="font-display text-2xl text-ink">
+              {editingId
+                ? form.mode === "bundle"
+                  ? "Edit set"
+                  : "Edit product"
+                : form.mode === "bundle"
+                  ? "New set"
+                  : "New product"}
+            </h2>
+            <div
+              className="inline-flex w-full overflow-hidden border border-line sm:w-auto"
+              role="group"
+              aria-label="Product mode"
+            >
+              <button
+                type="button"
+                className={`flex-1 px-3.5 py-2 text-[13px] font-medium transition sm:flex-none ${
+                  form.mode === "single"
+                    ? "bg-black text-gold"
+                    : "bg-white text-ink hover:bg-stone"
+                }`}
+                onClick={() => setBundleMode("single")}
+              >
+                Single piece
+              </button>
+              <button
+                type="button"
+                className={`flex-1 px-3.5 py-2 text-[13px] font-medium transition sm:flex-none ${
+                  form.mode === "bundle"
+                    ? "bg-black text-gold"
+                    : "bg-white text-ink hover:bg-stone"
+                }`}
+                onClick={() => setBundleMode("bundle")}
+              >
+                Bundle
+              </button>
+            </div>
+          </div>
+
+          {form.mode === "bundle" ? (
+            <BundleComponentsField
+              components={form.components}
+              catalog={items}
+              catalogLoading={loading}
+              excludeId={editingId}
+              currency={form.currency}
+              onChange={onComponentsChange}
+            />
+          ) : null}
+
           <div className="grid gap-4 md:grid-cols-2">
             <Input
               label="Title"
@@ -403,7 +613,11 @@ export default function ProductsPage() {
               required
               value={form.title}
               onChange={(e) => updateField("title", e.target.value)}
-              placeholder="The Priest Ring"
+              placeholder={
+                form.mode === "bundle"
+                  ? "Priest Ring Men + Ephod necklace"
+                  : "The Priest Ring"
+              }
             />
             <Input
               label="SKU"
@@ -417,14 +631,39 @@ export default function ProductsPage() {
                   : "Leave blank to auto-assign TD-{TITLE}-{code}."
               }
             />
+            {form.mode === "bundle" ? (
+              <label className="flex items-start gap-2 text-sm text-ink md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={form.price_tba}
+                  onChange={(e) => onPriceTbaChange(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-black"
+                />
+                <span>
+                  Price TBA — save as draft without a sell price
+                  {shopifyConnected
+                    ? ". Shopify waits until a price is set."
+                    : "."}
+                </span>
+              </label>
+            ) : null}
             <Input
-              label="Price"
+              label={form.mode === "bundle" ? "Bundle price" : "Price"}
               name="price"
               type="number"
               step="0.01"
               min="0"
               value={form.price}
-              onChange={(e) => updateField("price", e.target.value)}
+              disabled={form.mode === "bundle" && form.price_tba}
+              onChange={(e) => {
+                updateField("price", e.target.value);
+                if (e.target.value !== "") updateField("price_tba", false);
+              }}
+              hint={
+                form.mode === "bundle" && !form.price_tba
+                  ? "Sell price for the set — usually below the parts total."
+                  : undefined
+              }
             />
             <CurrencySelect
               name="currency"
@@ -439,8 +678,46 @@ export default function ProductsPage() {
               min="0"
               value={form.compare_at_price}
               onChange={(e) => updateField("compare_at_price", e.target.value)}
-              hint="When higher than price: red strikethrough + green sale price on cards and Shopify."
+              hint={
+                form.mode === "bundle"
+                  ? componentsSum != null
+                    ? `Suggested from parts: ${formatCurrency(componentsSum, form.currency)}. Higher than price shows as a sale.`
+                    : "Usually the combined list price of the pieces."
+                  : "When higher than price: red strikethrough + green sale price on cards and Shopify."
+              }
             />
+            {form.mode === "bundle" ? (
+              <>
+                <Input
+                  label="Silver price"
+                  name="metal_price_silver"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.metal_price_silver}
+                  disabled={form.price_tba}
+                  onChange={(e) =>
+                    updateField("metal_price_silver", e.target.value)
+                  }
+                  placeholder="589"
+                  hint="Optional. With gold, syncs as Metal variants on one Shopify product."
+                />
+                <Input
+                  label="Gold price"
+                  name="metal_price_gold"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.metal_price_gold}
+                  disabled={form.price_tba}
+                  onChange={(e) =>
+                    updateField("metal_price_gold", e.target.value)
+                  }
+                  placeholder="3699"
+                  hint="Optional. Leave both blank to use Bundle price only."
+                />
+              </>
+            ) : null}
             <Input
               label="Barcode"
               name="barcode"
@@ -452,14 +729,14 @@ export default function ProductsPage() {
               name="category"
               value={form.category}
               onChange={(e) => updateField("category", e.target.value)}
-              placeholder="Rings"
+              placeholder={form.mode === "bundle" ? "Bundles" : "Rings"}
             />
             <Input
               label="Collection"
               name="collection"
               value={form.collection}
               onChange={(e) => updateField("collection", e.target.value)}
-              placeholder="Salt & Spirit"
+              placeholder={form.mode === "bundle" ? "Bundles" : "Salt & Spirit"}
             />
             <Input
               label="Inventory qty"
@@ -477,6 +754,11 @@ export default function ProductsPage() {
               value={form.metal}
               onChange={(e) => updateField("metal", e.target.value)}
               placeholder="18K gold"
+              hint={
+                form.mode === "bundle"
+                  ? "Optional label when not using silver/gold variant prices."
+                  : undefined
+              }
             />
             <Input
               label="Weight (grams)"
@@ -531,20 +813,27 @@ export default function ProductsPage() {
               value={form.description}
               onChange={(e) => updateField("description", e.target.value)}
               className="ops-field px-3 py-2 text-ink focus:border-brown focus:outline-none"
-              placeholder="Materials, make time, collection notes…"
+              placeholder={
+                form.mode === "bundle"
+                  ? "Sold as a set — list included pieces and finish notes…"
+                  : "Materials, make time, collection notes…"
+              }
             />
           </label>
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
               checked={form.publish}
+              disabled={form.mode === "bundle" && form.price_tba}
               onChange={(e) => updateField("publish", e.target.checked)}
               className="h-4 w-4 accent-black"
             />
             Publish live (active on Shopify
             {channelStatus.wordpress?.connected ? " + WordPress" : ""}
             {shopifyConnected
-              ? "; drafts still sync to Shopify as draft)"
+              ? form.mode === "bundle" && form.price_tba
+                ? "; TBA drafts stay local until priced)"
+                : "; drafts still sync to Shopify as draft)"
               : ")"}
           </label>
           <div className="ops-actions">
@@ -552,12 +841,12 @@ export default function ProductsPage() {
               {busy === "save"
                 ? "Saving…"
                 : editingId
-                  ? shopifyConnected
+                  ? shopifyConnected && !(form.mode === "bundle" && form.price_tba)
                     ? "Save & sync Shopify"
                     : form.publish
                       ? "Save & publish"
                       : "Save draft"
-                  : shopifyConnected
+                  : shopifyConnected && !(form.mode === "bundle" && form.price_tba)
                     ? "Create & sync Shopify"
                     : form.publish
                       ? "Create & publish"
@@ -597,6 +886,13 @@ export default function ProductsPage() {
             const weight = metaString(item, "weight_grams");
             const photos = productPhotoUrls(item);
             const compareAt = extractProductSpecs(item).compare_at_price;
+            const bundle = extractProductBundle(item);
+            const pieceCount = bundle?.components?.length || 0;
+            const displayPrice =
+              item.price != null
+                ? item.price
+                : bundle?.metal_variants?.find((v) => v.price != null)?.price ??
+                  null;
             return (
               <article key={item.id} className="surface-card flex flex-col overflow-hidden p-0">
                 <ProductCardGallery
@@ -605,11 +901,24 @@ export default function ProductsPage() {
                   title={item.title || ""}
                 />
                 <div className="flex flex-1 flex-col p-5">
-                <h3 className="font-display text-2xl text-ink">{item.title}</h3>
+                <div className="flex flex-wrap items-start gap-2">
+                  <h3 className="font-display text-2xl text-ink">{item.title}</h3>
+                  {bundle?.is_bundle ? (
+                    <Badge tone="brand">
+                      {pieceCount ? `Set · ${pieceCount}` : "Set"}
+                    </Badge>
+                  ) : null}
+                </div>
                 {item.sku ? (
                   <p className="mt-1 text-xs uppercase tracking-wide text-muted">{item.sku}</p>
                 ) : null}
                 <p className="mt-2 flex-1 text-sm text-muted">{item.description}</p>
+                {bundle?.components?.length ? (
+                  <p className="mt-2 text-xs text-muted">
+                    Includes{" "}
+                    {bundle.components.map((c) => c.title).join(" + ")}
+                  </p>
+                ) : null}
                 {(metal || weight) && (
                   <p className="mt-2 text-xs text-muted">
                     {[metal, weight ? `${weight} g` : null]
@@ -618,11 +927,15 @@ export default function ProductsPage() {
                   </p>
                 )}
                 <div className="mt-4 ops-actions items-center">
-                  <SalePriceBadge
-                    price={item.price}
-                    compareAt={compareAt}
-                    currency={item.currency || "USD"}
-                  />
+                  {displayPrice == null && bundle?.price_tba ? (
+                    <Badge tone="warning">Price TBA</Badge>
+                  ) : (
+                    <SalePriceBadge
+                      price={displayPrice}
+                      compareAt={compareAt}
+                      currency={item.currency || "USD"}
+                    />
+                  )}
                   <Badge tone="info">{item.availability_status}</Badge>
                   <Badge
                     tone={
