@@ -221,6 +221,7 @@ import {
 import { uploadMediaAsset } from "@/lib/media/media-assets-store";
 import {
   hasGeminiEnv,
+  hasHiggsfieldEnv,
   hasMetaPageToken,
   hasWhatsAppPhoneId,
   hasWhatsAppToken,
@@ -1875,41 +1876,78 @@ export async function dispatchV1(method, segments, request, body) {
       resolveGeminiImageCascade,
       geminiBillingEnablementNotes,
     } = await import("@/lib/creative/gemini-media");
-    const keyed = hasGeminiEnv();
+    const geminiKeyed = hasGeminiEnv();
+    const higgsfieldKeyed = hasHiggsfieldEnv();
     const quota = getGeminiQuotaWarning();
-    // Soft-warn: key present but recent Free Tier / billing 429 — do not claim Live AI.
-    const live = keyed && !quota;
-    const mode = live ? "gemini" : keyed ? "quota_limited" : "local_sim";
-    const warn = quota
+    // Soft-warn: Gemini key present but recent Free Tier / billing 429.
+    const geminiLive = geminiKeyed && !quota;
+    // Images prefer Higgsfield when keyed; Gemini is fallback / video path.
+    const imageLive = higgsfieldKeyed || geminiLive;
+    const imageMode = higgsfieldKeyed
+      ? "higgsfield"
+      : geminiLive
+        ? "gemini"
+        : geminiKeyed
+          ? "quota_limited"
+          : "local_sim";
+    const videoLive = geminiLive;
+    const videoMode = videoLive ? "gemini" : geminiKeyed ? "quota_limited" : "local_sim";
+    const overallLive = imageLive || videoLive;
+    const mode = higgsfieldKeyed
+      ? "higgsfield"
+      : geminiLive
+        ? "gemini"
+        : geminiKeyed
+          ? "quota_limited"
+          : "local_sim";
+    const warn = quota && !higgsfieldKeyed
       ? "Media generation hit a provider limit. Pixels stay local until billing/quota is raised."
       : null;
     const billing = geminiBillingEnablementNotes();
     return jsonOk({
       mode,
-      mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
-      has_gemini: keyed,
+      mode_label: creativeModeLabel(
+        overallLive ? (higgsfieldKeyed ? "higgsfield" : "gemini") : "local_sim",
+      ),
+      has_gemini: geminiKeyed,
+      has_higgsfield: higgsfieldKeyed,
+      preferred_image_provider: higgsfieldKeyed
+        ? "higgsfield"
+        : geminiKeyed
+          ? "gemini"
+          : "local",
       quota_warning: quota,
       prefer_paid_models: preferPaidGeminiModels(),
       image_model_cascade: resolveGeminiImageCascade().slice(0, 5),
-      billing_required: Boolean(quota),
-      billing_notes: quota ? billing.required : undefined,
+      billing_required: Boolean(quota) && !higgsfieldKeyed,
+      billing_notes: quota && !higgsfieldKeyed ? billing.required : undefined,
       image: {
-        mode: live ? "gemini" : "local_sim",
-        mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
+        mode: imageMode === "quota_limited" ? "local_sim" : imageMode,
+        mode_label: creativeModeLabel(
+          imageLive ? (higgsfieldKeyed ? "higgsfield" : "gemini") : "local_sim",
+        ),
         message: warn
           ? warn
-          : live
-            ? "Image generation is connected."
+          : imageLive
+            ? higgsfieldKeyed
+              ? "Image generation is connected."
+              : "Image generation is connected."
             : "Image generation is local.",
+        provider: higgsfieldKeyed
+          ? "higgsfield"
+          : geminiKeyed
+            ? "gemini"
+            : "local",
       },
       video: {
-        mode: live ? "gemini" : "local_sim",
-        mode_label: creativeModeLabel(live ? "gemini" : "local_sim"),
+        mode: videoMode === "quota_limited" ? "local_sim" : videoMode,
+        mode_label: creativeModeLabel(videoLive ? "gemini" : "local_sim"),
         message: warn
           ? warn
-          : live
+          : videoLive
             ? "Video generation is connected."
             : "Video generation is local.",
+        provider: geminiKeyed ? "gemini" : "local",
       },
       resize_engine: "triada",
       summary: "Generate, preview, approve, schedule, and publish.",

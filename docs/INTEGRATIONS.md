@@ -189,9 +189,27 @@ Cron worker: `POST /api/v1/cron/content-publish/process` (Bearer `CRON_SECRET`) 
 | Layer | Env / UI | Role |
 |---|---|---|
 | Scripts / briefs | Anthropic on Integrations, or `ANTHROPIC_*` | Text intelligence |
-| Image pixels | `IMAGE_PROVIDER=gemini` + key + `INTEGRATION_MODE=live` (else local SVG) | Still frames |
-| Video pixels | `VIDEO_PROVIDER` + `VIDEO_API_KEY` + `INTEGRATION_MODE=live` | Motion frames |
-| Local animation | `VIDEO_PROVIDER=local` or `animation` (default) | SVG motion + placeholder mp4 (already in creative AI) |
+| Image pixels (preferred) | Higgsfield Key ID + Secret on Vercel (`HIGGSFIELD_API_KEY_ID` + `HIGGSFIELD_API_KEY_SECRET`) | Still frames via `https://api.higgsfield.ai` (Soul V2) |
+| Image pixels (fallback) | `GEMINI_API_KEY` / Gemini media models | Still frames when Higgsfield unset or fails |
+| Video pixels | Gemini Omni (`VIDEO_MODEL` / `GEMINI_API_KEY`) | Motion frames |
+| Local animation | no keys | SVG motion + placeholder (local mock) |
+
+### Higgsfield (status-only)
+
+**Never paste credentials in the dashboard.** Set on Vercel Production:
+
+```bash
+HIGGSFIELD_API_KEY_ID=
+HIGGSFIELD_API_KEY_SECRET=
+# Optional:
+# HIGGSFIELD_BASE_URL=https://api.higgsfield.ai
+# HIGGSFIELD_WEBHOOK_SECRET=   # whsec_… if using inbound webhooks later
+# HF_API_KEY_ID= / HF_API_KEY_SECRET=  # aliases
+```
+
+Auth header (official): `Authorization: Key ${HIGGSFIELD_API_KEY_ID}:${HIGGSFIELD_API_KEY_SECRET}`.
+
+Integrations shows **Connected** only when both Key ID and Secret are present; otherwise **Waiting credentials**. Content Studio prefers Higgsfield for images when Connected; Gemini remains fallback + video.
 
 ```bash
 # Scripts (required for live agent/creative intelligence)

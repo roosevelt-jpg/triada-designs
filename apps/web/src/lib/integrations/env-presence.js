@@ -27,6 +27,16 @@ export function hasGeminiEnv() {
   return envPresentAny("GEMINI_API_KEY", "GOOGLE_GEMINI_API_KEY");
 }
 
+/**
+ * Higgsfield image API — Key ID + Secret both required (official Authorization header).
+ * Aliases HF_API_KEY_ID / HF_API_KEY_SECRET accepted (docs naming).
+ */
+export function hasHiggsfieldEnv() {
+  const id = envPresentAny("HIGGSFIELD_API_KEY_ID", "HF_API_KEY_ID");
+  const secret = envPresentAny("HIGGSFIELD_API_KEY_SECRET", "HF_API_KEY_SECRET");
+  return id && secret;
+}
+
 export function hasResendEnv() {
   return envPresentAny("RESEND_API_KEY", "EMAIL_CHANNEL_API_KEY");
 }
@@ -165,6 +175,7 @@ export function integrationRuntimeMode(hasLiveCredentials) {
 export function credentialsPresenceMatrix(extra = {}) {
   const anthropic = Boolean(extra.anthropic) || hasAnthropicEnv();
   const gemini = hasGeminiEnv();
+  const higgsfield = hasHiggsfieldEnv();
   const meta = hasMetaAnyEnv();
   const resend = hasResendEnv();
   const supabase = hasSupabaseEnv();
@@ -172,6 +183,7 @@ export function credentialsPresenceMatrix(extra = {}) {
   return {
     anthropic: { present: anthropic },
     gemini: { present: gemini },
+    higgsfield: { present: higgsfield },
     meta: {
       present: meta,
       page_token: hasMetaPageToken(),

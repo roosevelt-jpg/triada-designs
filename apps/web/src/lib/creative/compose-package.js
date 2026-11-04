@@ -1,11 +1,15 @@
 /**
- * Compose Content Studio packages: Claude for copy/scripts, Gemini for media pixels.
+ * Compose Content Studio packages: Claude for copy/scripts;
+ * image pixels prefer Higgsfield when keyed, else Gemini; video stays Gemini.
  * UI must stay product-facing (generate → approve → schedule → publish).
  */
 
 import { completeAnthropic } from "@/lib/agents/anthropic-client";
-import { hasGeminiEnv } from "@/lib/integrations/env-presence";
-import { creativeModeLabel } from "@/lib/integrations/brand-labels";
+import { hasGeminiEnv, hasHiggsfieldEnv } from "@/lib/integrations/env-presence";
+import {
+  creativeModeLabel,
+  isLiveCreativeMediaMode,
+} from "@/lib/integrations/brand-labels";
 import {
   CREATIVE_PROMPT_VERSION,
   captionCopySystemPrompt,
@@ -17,7 +21,52 @@ import {
   ugcScriptUserPrompt,
 } from "./jewellery-prompts";
 import { generateGeminiMedia, resolveGeminiApiKey } from "./gemini-media";
+import { generateHiggsfieldImage } from "./higgsfield-media";
 import { previewSvgDataUrl } from "./preview-svg";
+
+/**
+ * Image pixels: Higgsfield first when Key ID + Secret present, else Gemini.
+ * Video / animation stay on Gemini (Higgsfield wired for stills only).
+ * @param {{
+ *   prompt: string,
+ *   kind: "image"|"video"|"animation",
+ *   width?: number,
+ *   height?: number,
+ *   durationMs?: number,
+ * }} input
+ */
+async function generateCreativePixels(input) {
+  const kind = input.kind === "animation" ? "video" : input.kind;
+  if (kind === "image" && hasHiggsfieldEnv()) {
+    const hf = await generateHiggsfieldImage({
+      prompt: input.prompt,
+      width: input.width,
+      height: input.height,
+    });
+    if (hf.ok && hf.dataUrl) return hf;
+    // Prefer Gemini fallback when Higgsfield is keyed but fails.
+    if (hasGeminiEnv() || resolveGeminiApiKey()) {
+      const gemini = await generateGeminiMedia(input);
+      if (gemini.ok && gemini.dataUrl) {
+        return {
+          ...gemini,
+          higgsfield_error: hf.error || undefined,
+          path: gemini.path
+            ? `higgsfield_fallback_${gemini.path}`
+            : "higgsfield_fallback_gemini",
+        };
+      }
+      return {
+        ok: false,
+        error: gemini.error || hf.error || "image_generation_failed",
+        mode: "error",
+        higgsfield_error: hf.error || undefined,
+      };
+    }
+    return hf;
+  }
+  return generateGeminiMedia(input);
+}
 
 /**
  * @param {string} text
@@ -96,6 +145,9 @@ export async function composeCreativePackage(input) {
   let ugcScript = null;
   let copyLive = false;
   const geminiReady = hasGeminiEnv() || Boolean(resolveGeminiApiKey());
+  const higgsfieldReady = hasHiggsfieldEnv();
+  const imageProviderReady = higgsfieldReady || geminiReady;
+  const mediaProviderReady = isVideo ? geminiReady : imageProviderReady;
 
   if (isUgc || isVideo || action === "ensure-creative") {
     const fallback = localUgcPackage({
@@ -118,7 +170,7 @@ export async function composeCreativePackage(input) {
       ugcScript = { ...fallback };
     }
 
-    const packageMode = copyLive || geminiReady ? "live" : "local_sim";
+    const packageMode = copyLive || mediaProviderReady ? "live" : "local_sim";
     ugcScript = {
       hook: String(ugcScript.hook || fallback.hook),
       script: String(ugcScript.script || fallback.script),
@@ -197,10 +249,11 @@ export async function composeCreativePackage(input) {
   let mimeType = "image/svg+xml";
   let mediaModel = null;
   let mediaPath = null;
+  let mediaProvider = null;
   let posterOnly = false;
 
-  if (geminiReady) {
-    const media = await generateGeminiMedia({
+  if (mediaProviderReady) {
+    const media = await generateCreativePixels({
       prompt,
       kind,
       width,
@@ -209,7 +262,8 @@ export async function composeCreativePackage(input) {
     });
 
     if (media.ok && media.dataUrl) {
-      mediaMode = "gemini";
+      mediaMode = media.mode === "higgsfield" ? "higgsfield" : "gemini";
+      mediaProvider = media.provider || mediaMode;
       previewUrl = media.dataUrl;
       mimeType = media.mimeType || (isVideo ? "video/mp4" : "image/png");
       mediaModel = media.model || null;
@@ -218,10 +272,13 @@ export async function composeCreativePackage(input) {
       if (media.video_error) {
         mediaError = media.video_error;
       }
+      if (media.higgsfield_error) {
+        mediaError = media.higgsfield_error;
+      }
     } else {
-      // Keyed but failed — do not pretend SVG is Gemini output.
+      // Keyed but failed — do not pretend SVG is live provider output.
       mediaMode = "error";
-      mediaError = media.error || "Gemini media generation failed";
+      mediaError = media.error || "Media generation failed";
       previewUrl = previewSvgDataUrl({
         width,
         height,
@@ -243,14 +300,12 @@ export async function composeCreativePackage(input) {
     });
   }
 
-  const overallMode =
-    mediaMode === "gemini"
-      ? "gemini"
-      : copyLive
-        ? "live"
-        : mediaMode === "error"
-          ? "local_sim"
-          : "local_sim";
+  const liveMedia = isLiveCreativeMediaMode(mediaMode);
+  const overallMode = liveMedia
+    ? mediaMode
+    : copyLive
+      ? "live"
+      : "local_sim";
 
   /** @type {object[]} */
   const variants = [];
@@ -262,18 +317,18 @@ export async function composeCreativePackage(input) {
       { key: "tiktok", w: 1080, h: 1920, ratio: "9:16" },
     ];
 
-    // Prefer one live Gemini hero, then crop-label variants from that asset URL.
+    // Prefer one live hero image, then crop-label variants from that asset URL.
     let heroUrl = previewUrl;
-    if (geminiReady && mediaMode === "gemini" && kind !== "image") {
-      const hero = await generateGeminiMedia({
+    if (imageProviderReady && liveMedia && kind !== "image") {
+      const hero = await generateCreativePixels({
         prompt: imagePrompt,
         kind: "image",
         width: 1080,
         height: 1080,
       });
       if (hero.ok && hero.dataUrl) heroUrl = hero.dataUrl;
-    } else if (geminiReady && mediaMode !== "gemini") {
-      const hero = await generateGeminiMedia({
+    } else if (imageProviderReady && !liveMedia) {
+      const hero = await generateCreativePixels({
         prompt: imagePrompt,
         kind: "image",
         width: 1080,
@@ -281,7 +336,8 @@ export async function composeCreativePackage(input) {
       });
       if (hero.ok && hero.dataUrl) {
         heroUrl = hero.dataUrl;
-        mediaMode = "gemini";
+        mediaMode = hero.mode === "higgsfield" ? "higgsfield" : "gemini";
+        mediaProvider = hero.provider || mediaMode;
         previewUrl = hero.dataUrl;
         mimeType = hero.mimeType || "image/png";
         mediaModel = hero.model;
@@ -289,6 +345,7 @@ export async function composeCreativePackage(input) {
       }
     }
 
+    const variantLive = isLiveCreativeMediaMode(mediaMode);
     for (const platform of platforms) {
       variants.push({
         id: `variant-${item.id || "draft"}-${platform.key}`,
@@ -296,10 +353,10 @@ export async function composeCreativePackage(input) {
         width: platform.w,
         height: platform.h,
         aspect_ratio: platform.ratio,
-        mode: mediaMode === "gemini" ? "gemini" : "local_sim",
+        mode: variantLive ? mediaMode : "local_sim",
         media_asset: {
           url:
-            mediaMode === "gemini" && heroUrl
+            variantLive && heroUrl
               ? heroUrl
               : previewSvgDataUrl({
                   width: platform.w,
@@ -310,9 +367,9 @@ export async function composeCreativePackage(input) {
                   kind: "image",
                 }),
           kind: "image",
-          mode: mediaMode === "gemini" ? "gemini" : "local_sim",
+          mode: variantLive ? mediaMode : "local_sim",
           mime_type:
-            mediaMode === "gemini" && heroUrl && !String(heroUrl).startsWith("data:image/svg")
+            variantLive && heroUrl && !String(heroUrl).startsWith("data:image/svg")
               ? "image/png"
               : "image/svg+xml",
         },
@@ -320,12 +377,13 @@ export async function composeCreativePackage(input) {
     }
   }
 
-  const ok = mediaMode === "gemini" || !geminiReady;
+  const finalLive = isLiveCreativeMediaMode(mediaMode);
+  const ok = finalLive || !mediaProviderReady;
 
   return {
     ok,
-    mode: overallMode === "gemini" ? "gemini" : overallMode,
-    mode_label: creativeModeLabel(overallMode === "gemini" ? "gemini" : overallMode),
+    mode: finalLive ? mediaMode : overallMode,
+    mode_label: creativeModeLabel(finalLive ? mediaMode : overallMode),
     prompt_version: CREATIVE_PROMPT_VERSION,
     creative_brief: {
       ...(item.creative_brief && typeof item.creative_brief === "object"
@@ -337,6 +395,7 @@ export async function composeCreativePackage(input) {
       video_prompt: videoPrompt,
       media_model: mediaModel,
       media_path: mediaPath,
+      media_provider: mediaProvider || undefined,
       updated_at: new Date().toISOString(),
       prompt_version: CREATIVE_PROMPT_VERSION,
     },
@@ -344,7 +403,7 @@ export async function composeCreativePackage(input) {
     asset: {
       id: `asset-${item.id || "draft"}-${action || "creative"}`,
       kind,
-      mode: mediaMode === "gemini" ? "gemini" : "local_sim",
+      mode: finalLive ? mediaMode : "local_sim",
       width,
       height,
       aspect_ratio: height === width ? "1:1" : height > width ? "9:16" : "16:9",
@@ -356,20 +415,21 @@ export async function composeCreativePackage(input) {
       model: mediaModel,
       metadata: {
         media_path: mediaPath,
+        media_provider: mediaProvider || undefined,
         poster_only: posterOnly || undefined,
-        gemini_error: mediaError || undefined,
-        realistic_3d: mediaMode === "gemini",
+        media_error: mediaError || undefined,
+        realistic_3d: finalLive,
       },
     },
     variants,
     sidecar: isVideo
       ? {
-          placeholder_mp4: mediaMode !== "gemini",
-          animation_svg: mediaMode !== "gemini",
+          placeholder_mp4: !finalLive,
+          animation_svg: !finalLive,
           poster_only: posterOnly || undefined,
         }
       : null,
-    error: geminiReady && mediaMode !== "gemini" ? mediaError : null,
+    error: mediaProviderReady && !finalLive ? mediaError : null,
     message: !ok
       ? "Media generation needs a retry — preview is not live yet."
       : isUgc

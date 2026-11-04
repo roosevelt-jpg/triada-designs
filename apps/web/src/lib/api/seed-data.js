@@ -8,6 +8,7 @@ import {
   envPresent,
   hasGeminiEnv,
   hasGooglePlacesEnv,
+  hasHiggsfieldEnv,
   hasMetaPageMessagingEnv,
   hasResendEnv,
   hasShopifyEnv,
@@ -252,6 +253,7 @@ export function buildIntegrationsList(opts = {}) {
       ? Boolean(opts.metaWhatsAppReady)
       : envWaReady;
   const gemini = hasGeminiEnv();
+  const higgsfield = hasHiggsfieldEnv();
   const resend = hasResendEnv();
   const googlePlaces = hasGooglePlacesEnv();
   const anthropicReady =
@@ -430,7 +432,23 @@ export function buildIntegrationsList(opts = {}) {
       external_account_id: "gemini-primary",
       last_health_check_at: nowIso(),
       last_error_code: null,
-      capabilities: ["llm.generate"],
+      capabilities: ["llm.generate", "creative.image", "creative.video"],
+    },
+    {
+      id: "int-higgsfield",
+      provider: "higgsfield",
+      display_name: "Higgsfield",
+      status: higgsfield ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(
+        higgsfield ? "connected" : "awaiting_credentials",
+      ),
+      external_account_id: "higgsfield-primary",
+      last_health_check_at: nowIso(),
+      last_error_code: null,
+      capabilities: ["creative.image"],
+      metadata: {
+        preferred_image_provider: true,
+      },
     },
     {
       id: "int-google-places",
@@ -526,6 +544,7 @@ export function buildIntegrationsHealth(opts = {}) {
       ? Boolean(metaFromStore.connected)
       : metaReady || waReady;
   const gemini = hasGeminiEnv();
+  const higgsfield = hasHiggsfieldEnv();
   const resend = hasResendEnv();
   const supabase = hasSupabaseEnv();
   const googlePlaces = hasGooglePlacesEnv();
@@ -574,6 +593,7 @@ export function buildIntegrationsHealth(opts = {}) {
   const liveCredentials =
     anthropicReady ||
     gemini ||
+    higgsfield ||
     resend ||
     metaConnected ||
     supabase ||
@@ -679,6 +699,17 @@ export function buildIntegrationsHealth(opts = {}) {
       model: geminiModel,
       model_label: modelNickname(geminiModel),
       summary: gemini ? "Gemini is connected." : "Waiting credentials.",
+    },
+    higgsfield: {
+      provider: "higgsfield",
+      has_credentials: higgsfield,
+      status: higgsfield ? "connected" : "awaiting_credentials",
+      status_label: connectionLabel(
+        higgsfield ? "connected" : "awaiting_credentials",
+      ),
+      summary: higgsfield
+        ? "Higgsfield is connected."
+        : "Waiting credentials.",
     },
     google_places: places,
     resend: {

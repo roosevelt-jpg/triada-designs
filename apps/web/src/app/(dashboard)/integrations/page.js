@@ -200,6 +200,23 @@ export default function IntegrationsPage() {
                 })
               }
             />
+            <ProviderRow
+              title="Higgsfield"
+              summary={
+                health?.higgsfield?.summary ||
+                (health?.higgsfield?.has_credentials
+                  ? "Higgsfield is connected."
+                  : "Waiting credentials.")
+              }
+              status={health?.higgsfield?.status}
+              hasCredentials={health?.higgsfield?.has_credentials}
+              statusLabel={
+                health?.higgsfield?.status_label ||
+                connectionLabel(health?.higgsfield?.status, {
+                  hasCredentials: health?.higgsfield?.has_credentials,
+                })
+              }
+            />
           </section>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

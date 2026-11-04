@@ -39,6 +39,7 @@ export function providerNickname(provider) {
   const p = String(provider || "").toLowerCase();
   if (p === "anthropic" || p === "claude") return "Claude";
   if (p === "gemini" || p === "google") return "Gemini";
+  if (p === "higgsfield") return "Higgsfield";
   if (p === "local" || p === "local_sim") return "Local assistant";
   if (p === "resend" || p === "email") return "Email";
   if (p === "messenger") return "Messenger";
@@ -70,12 +71,25 @@ export function aiStatusSummary(llm) {
   return `${who} connected · ${model}`;
 }
 
-/** Soften creative mode badges (gemini → Live AI, local_sim → Local). */
+/** Soften creative mode badges (gemini/higgsfield → Live AI, local_sim → Local). */
 export function creativeModeLabel(mode) {
   const m = String(mode || "").toLowerCase();
-  if (m === "gemini" || m === "anthropic" || m === "live") return "Live AI";
+  if (
+    m === "gemini" ||
+    m === "higgsfield" ||
+    m === "anthropic" ||
+    m === "live"
+  ) {
+    return "Live AI";
+  }
   if (m === "local_sim" || m === "local" || m === "local_seed") return "Local";
   if (!m) return "Local";
   if (m.includes("_")) return "Local";
   return "Live AI";
+}
+
+/** True when creative pixels came from a live image provider (not SVG). */
+export function isLiveCreativeMediaMode(mode) {
+  const m = String(mode || "").toLowerCase();
+  return m === "gemini" || m === "higgsfield";
 }
