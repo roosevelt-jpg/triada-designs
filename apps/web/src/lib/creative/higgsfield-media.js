@@ -68,14 +68,51 @@ export function aspectRatioForSize(width, height) {
   return "3:4";
 }
 
+/** Soul V2 is async poll — never inherit a short shared IMAGE_TIMEOUT floor. */
+const HIGGSFIELD_TIMEOUT_FLOOR_MS = 90_000;
+const HIGGSFIELD_TIMEOUT_DEFAULT_MS = 120_000;
+
 /**
  * @param {string | undefined} raw
  * @param {number} fallbackMs
+ * @param {number} [floorMs]
  */
-function resolveTimeoutMs(raw, fallbackMs) {
+function resolveTimeoutMs(raw, fallbackMs, floorMs = 0) {
   const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return fallbackMs;
-  return n < 1000 ? Math.round(n * 1000) : Math.round(n);
+  let ms = fallbackMs;
+  if (Number.isFinite(n) && n > 0) {
+    ms = n < 1000 ? Math.round(n * 1000) : Math.round(n);
+  }
+  return Math.max(ms, floorMs || 0);
+}
+
+/**
+ * Pull first image URL from a completed Soul V2 body (shape-tolerant).
+ * @param {Record<string, unknown> | null | undefined} body
+ * @returns {string | null}
+ */
+function firstImageUrl(body) {
+  if (!body || typeof body !== "object") return null;
+  const candidates = [
+    body.images,
+    body.output && typeof body.output === "object"
+      ? /** @type {Record<string, unknown>} */ (body.output).images
+      : null,
+    body.data && typeof body.data === "object"
+      ? /** @type {Record<string, unknown>} */ (body.data).images
+      : null,
+  ];
+  for (const list of candidates) {
+    if (!Array.isArray(list) || !list.length) continue;
+    const first = list[0];
+    if (typeof first === "string" && first.startsWith("http")) return first;
+    if (first && typeof first === "object") {
+      const row = /** @type {Record<string, unknown>} */ (first);
+      const url = row.url || row.image_url || row.src || row.download_url;
+      if (typeof url === "string" && url) return url;
+    }
+  }
+  return null;
 }
 
 /**
@@ -244,7 +281,12 @@ async function pollUntilDone(input) {
 export async function generateHiggsfieldImage(input) {
   const creds = await resolveHiggsfieldCredentialsAsync();
   if (!creds) {
-    return { ok: false, error: "awaiting_credentials", mode: "awaiting_credentials" };
+    return {
+      ok: false,
+      error: "awaiting_credentials",
+      mode: "awaiting_credentials",
+      credential_source: "none",
+    };
   }
 
   const base = higgsfieldBaseUrl();
@@ -253,11 +295,15 @@ export async function generateHiggsfieldImage(input) {
   const aspectRatio = aspectRatioForSize(input.width, input.height);
   const resolution =
     (process.env.HIGGSFIELD_RESOLUTION || "").trim() || "720p";
+  // Prefer HIGGSFIELD_TIMEOUT; fall back to IMAGE_TIMEOUT but never below 90s
+  // (Soul V2 poll cannot finish inside a short Laravel-era IMAGE_TIMEOUT=5–15s).
   const timeoutMs = resolveTimeoutMs(
     process.env.HIGGSFIELD_TIMEOUT || process.env.IMAGE_TIMEOUT,
-    120000,
+    HIGGSFIELD_TIMEOUT_DEFAULT_MS,
+    HIGGSFIELD_TIMEOUT_FLOOR_MS,
   );
   const idempotencyKey = randomUUID();
+  const credentialSource = creds.source;
 
   const payload = {
     prompt: String(input.prompt || "").slice(0, 4000),
@@ -294,6 +340,16 @@ export async function generateHiggsfieldImage(input) {
         error: "higgsfield_unauthorized",
         mode: "error",
         provider: "higgsfield",
+        credential_source: credentialSource,
+      };
+    }
+    if (res.status === 403) {
+      return {
+        ok: false,
+        error: "higgsfield_forbidden_or_insufficient_balance",
+        mode: "error",
+        provider: "higgsfield",
+        credential_source: credentialSource,
       };
     }
     if (!res.ok) {
@@ -305,6 +361,7 @@ export async function generateHiggsfieldImage(input) {
         error: `higgsfield_submit: ${String(detail).slice(0, 240)}`,
         mode: "error",
         provider: "higgsfield",
+        credential_source: credentialSource,
       };
     }
   } catch (err) {
@@ -316,6 +373,7 @@ export async function generateHiggsfieldImage(input) {
           : String(err?.message || err),
       mode: "error",
       provider: "higgsfield",
+      credential_source: credentialSource,
     };
   } finally {
     clearTimeout(timer);
@@ -332,6 +390,7 @@ export async function generateHiggsfieldImage(input) {
       error: "higgsfield_missing_status_url",
       mode: "error",
       provider: "higgsfield",
+      credential_source: credentialSource,
     };
   }
 
@@ -347,6 +406,7 @@ export async function generateHiggsfieldImage(input) {
         provider: "higgsfield",
         request_id: requestId || undefined,
         status: submitStatus,
+        credential_source: credentialSource,
       };
     }
     const polled = await pollUntilDone({
@@ -362,15 +422,17 @@ export async function generateHiggsfieldImage(input) {
         provider: "higgsfield",
         request_id: requestId || undefined,
         status: polled.status,
+        credential_source: credentialSource,
       };
     }
     completed = polled.body;
   }
 
-  const images = Array.isArray(completed?.images) ? completed.images : [];
-  const firstUrl =
-    (images[0] && (images[0].url || images[0].image_url || images[0].src)) ||
-    null;
+  const firstUrl = firstImageUrl(
+    completed && typeof completed === "object"
+      ? /** @type {Record<string, unknown>} */ (completed)
+      : null,
+  );
   if (!firstUrl) {
     return {
       ok: false,
@@ -378,6 +440,7 @@ export async function generateHiggsfieldImage(input) {
       mode: "error",
       provider: "higgsfield",
       request_id: requestId || undefined,
+      credential_source: credentialSource,
     };
   }
 
@@ -390,6 +453,7 @@ export async function generateHiggsfieldImage(input) {
       provider: "higgsfield",
       request_id: requestId || undefined,
       remote_url: String(firstUrl).slice(0, 200),
+      credential_source: credentialSource,
     };
   }
 
@@ -399,11 +463,15 @@ export async function generateHiggsfieldImage(input) {
     kind: "image",
     provider: "higgsfield",
     model: endpoint,
-    path: "soul_v2_poll",
+    path:
+      credentialSource === "env"
+        ? "soul_v2_poll_env"
+        : `soul_v2_poll_${credentialSource}`,
     bytesBase64: downloaded.bytesBase64,
     mimeType: downloaded.mimeType,
     dataUrl: `data:${downloaded.mimeType};base64,${downloaded.bytesBase64}`,
     request_id: requestId || undefined,
     remote_url: String(firstUrl),
+    credential_source: credentialSource,
   };
 }

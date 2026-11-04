@@ -38,6 +38,7 @@ import { previewSvgDataUrl } from "./preview-svg";
  */
 async function generateCreativePixels(input) {
   const kind = input.kind === "animation" ? "video" : input.kind;
+  // Store (supabase_table) or env — hasHiggsfieldCredentials resolves both.
   if (kind === "image" && (await hasHiggsfieldCredentials())) {
     const hf = await generateHiggsfieldImage({
       prompt: input.prompt,
@@ -52,16 +53,23 @@ async function generateCreativePixels(input) {
         return {
           ...gemini,
           higgsfield_error: hf.error || undefined,
+          credential_source: hf.credential_source || undefined,
           path: gemini.path
             ? `higgsfield_fallback_${gemini.path}`
             : "higgsfield_fallback_gemini",
         };
       }
+      // Surface BOTH failures — do not let Gemini quota hide a store-key HF error.
+      const parts = [];
+      if (hf.error) parts.push(`higgsfield(${hf.credential_source || "store"}): ${hf.error}`);
+      if (gemini.error) parts.push(`gemini_fallback: ${gemini.error}`);
       return {
         ok: false,
-        error: gemini.error || hf.error || "image_generation_failed",
+        error: parts.join(" | ") || "image_generation_failed",
         mode: "error",
         higgsfield_error: hf.error || undefined,
+        credential_source: hf.credential_source || undefined,
+        gemini_error: gemini.error || undefined,
       };
     }
     return hf;
@@ -252,6 +260,8 @@ export async function composeCreativePackage(input) {
   let mediaPath = null;
   let mediaProvider = null;
   let posterOnly = false;
+  let credentialSource = null;
+  let higgsfieldError = null;
 
   if (mediaProviderReady) {
     const media = await generateCreativePixels({
@@ -270,16 +280,20 @@ export async function composeCreativePackage(input) {
       mediaModel = media.model || null;
       mediaPath = media.path || null;
       posterOnly = Boolean(media.poster_only);
+      credentialSource = media.credential_source || null;
       if (media.video_error) {
         mediaError = media.video_error;
       }
       if (media.higgsfield_error) {
+        higgsfieldError = media.higgsfield_error;
         mediaError = media.higgsfield_error;
       }
     } else {
       // Keyed but failed — do not pretend SVG is live provider output.
       mediaMode = "error";
       mediaError = media.error || "Media generation failed";
+      higgsfieldError = media.higgsfield_error || null;
+      credentialSource = media.credential_source || null;
       previewUrl = previewSvgDataUrl({
         width,
         height,
@@ -397,6 +411,7 @@ export async function composeCreativePackage(input) {
       media_model: mediaModel,
       media_path: mediaPath,
       media_provider: mediaProvider || undefined,
+      credential_source: credentialSource || undefined,
       updated_at: new Date().toISOString(),
       prompt_version: CREATIVE_PROMPT_VERSION,
     },
@@ -417,8 +432,10 @@ export async function composeCreativePackage(input) {
       metadata: {
         media_path: mediaPath,
         media_provider: mediaProvider || undefined,
+        credential_source: credentialSource || undefined,
         poster_only: posterOnly || undefined,
         media_error: mediaError || undefined,
+        higgsfield_error: higgsfieldError || undefined,
         realistic_3d: finalLive,
       },
     },
@@ -429,7 +446,10 @@ export async function composeCreativePackage(input) {
           animation_svg: !finalLive,
           poster_only: posterOnly || undefined,
         }
-      : null,
+      : {
+          credential_source: credentialSource || undefined,
+          higgsfield_error: higgsfieldError || undefined,
+        },
     error: mediaProviderReady && !finalLive ? mediaError : null,
     message: !ok
       ? "Media generation needs a retry — preview is not live yet."

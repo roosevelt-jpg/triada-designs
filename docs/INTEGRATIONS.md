@@ -189,27 +189,28 @@ Cron worker: `POST /api/v1/cron/content-publish/process` (Bearer `CRON_SECRET`) 
 | Layer | Env / UI | Role |
 |---|---|---|
 | Scripts / briefs | Anthropic on Integrations, or `ANTHROPIC_*` | Text intelligence |
-| Image pixels (preferred) | Higgsfield Key ID + Secret on Vercel (`HIGGSFIELD_API_KEY_ID` + `HIGGSFIELD_API_KEY_SECRET`) | Still frames via `https://api.higgsfield.ai` (Soul V2) |
+| Image pixels (preferred) | Higgsfield Key ID + Secret — **Vercel env or Integrations `supabase_table` store** (same path as Anthropic/Shopify) | Still frames via `https://api.higgsfield.ai` (Soul V2) |
 | Image pixels (fallback) | `GEMINI_API_KEY` / Gemini media models | Still frames when Higgsfield unset or fails |
 | Video pixels | Gemini Omni (`VIDEO_MODEL` / `GEMINI_API_KEY`) | Motion frames |
 | Local animation | no keys | SVG motion + placeholder (local mock) |
 
 ### Higgsfield (status-only)
 
-**Never paste credentials in the dashboard.** Set on Vercel Production:
+**Never paste credentials in the dashboard.** Preferred: set on Vercel Production. When `VERCEL_TOKEN` is unavailable, keys may be applied via the Integrations encrypted store (`integration_secrets` / `supabase_table`) — Creative image gen resolves **env first, then store** (same pattern as Anthropic/Shopify).
 
 ```bash
 HIGGSFIELD_API_KEY_ID=
 HIGGSFIELD_API_KEY_SECRET=
 # Optional:
 # HIGGSFIELD_BASE_URL=https://api.higgsfield.ai
+# HIGGSFIELD_TIMEOUT=120   # seconds or ms; Soul V2 poll floor is 90s
 # HIGGSFIELD_WEBHOOK_SECRET=   # whsec_… if using inbound webhooks later
 # HF_API_KEY_ID= / HF_API_KEY_SECRET=  # aliases
 ```
 
 Auth header (official): `Authorization: Key ${HIGGSFIELD_API_KEY_ID}:${HIGGSFIELD_API_KEY_SECRET}`.
 
-Integrations shows **Connected** only when both Key ID and Secret are present; otherwise **Waiting credentials**. Content Studio prefers Higgsfield for images when Connected; Gemini remains fallback + video.
+Integrations shows **Connected** when both Key ID and Secret are present in **env or store**; otherwise **Waiting credentials**. Content Studio prefers Higgsfield for images when Connected; Gemini remains fallback + video.
 
 ```bash
 # Scripts (required for live agent/creative intelligence)

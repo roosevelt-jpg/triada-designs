@@ -195,6 +195,33 @@ async function readStoredRow() {
 }
 
 /**
+ * Normalize stored JSON / aliases to Key ID + Secret (never logs values).
+ * Accepts key_id / key_secret (canonical), api_key_* input aliases, and camelCase.
+ * @param {Record<string, unknown>} fields
+ * @returns {{ key_id: string, key_secret: string }}
+ */
+function normalizeCredentialFields(fields) {
+  const raw = fields && typeof fields === "object" ? fields : {};
+  const keyId = String(
+    raw.key_id ||
+      raw.api_key_id ||
+      raw.keyId ||
+      raw.apiKeyId ||
+      raw.hf_api_key_id ||
+      "",
+  ).trim();
+  const keySecret = String(
+    raw.key_secret ||
+      raw.api_key_secret ||
+      raw.keySecret ||
+      raw.apiKeySecret ||
+      raw.hf_api_key_secret ||
+      "",
+  ).trim();
+  return { key_id: keyId, key_secret: keySecret };
+}
+
+/**
  * @param {string} ciphertext
  * @returns {HiggsfieldCredentialFields}
  */
@@ -202,7 +229,10 @@ function decryptFields(ciphertext) {
   try {
     const raw = decryptSecret(ciphertext);
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
+    if (!parsed || typeof parsed !== "object") return {};
+    return normalizeCredentialFields(
+      /** @type {Record<string, unknown>} */ (parsed),
+    );
   } catch {
     return {};
   }
@@ -216,7 +246,9 @@ async function loadStoredFields() {
 }
 
 /**
- * Resolve Key ID + Secret from env first, then Integrations store.
+ * Resolve Key ID + Secret from env first, then Integrations store
+ * (supabase_table → app_metadata → local) — same pattern as Anthropic/Shopify.
+ * Creative image gen must use this path; Vercel env is optional when store Connected.
  * @returns {Promise<{ keyId: string, keySecret: string, source: string } | null>}
  */
 export async function resolveHiggsfieldCredentialsAsync() {
@@ -226,15 +258,15 @@ export async function resolveHiggsfieldCredentialsAsync() {
     return { keyId: envId, keySecret: envSecret, source: "env" };
   }
 
-  const fields = await loadStoredFields();
-  const keyId = String(fields.key_id || "").trim();
-  const keySecret = String(fields.key_secret || "").trim();
-  if (keyId && keySecret) {
-    const stored = await readStoredRow();
+  const stored = await readStoredRow();
+  if (!stored?.ciphertext) return null;
+
+  const fields = decryptFields(stored.ciphertext);
+  if (nonempty(fields.key_id) && nonempty(fields.key_secret)) {
     return {
-      keyId,
-      keySecret,
-      source: stored?.storage || "stored",
+      keyId: String(fields.key_id).trim(),
+      keySecret: String(fields.key_secret).trim(),
+      source: stored.storage || "stored",
     };
   }
   return null;
@@ -245,6 +277,17 @@ export async function hasHiggsfieldCredentials() {
   if (hasHiggsfieldEnv()) return true;
   const creds = await resolveHiggsfieldCredentialsAsync();
   return Boolean(creds?.keyId && creds?.keySecret);
+}
+
+/**
+ * Presence-only credential source for Creative status / asset metadata.
+ * Never returns secret values.
+ * @returns {Promise<{ has_credentials: boolean, source: string }>}
+ */
+export async function getHiggsfieldCredentialSource() {
+  const creds = await resolveHiggsfieldCredentialsAsync();
+  if (!creds) return { has_credentials: false, source: "none" };
+  return { has_credentials: true, source: creds.source };
 }
 
 /** @returns {Promise<ReturnType<typeof higgsfieldStatusPayload>>} */

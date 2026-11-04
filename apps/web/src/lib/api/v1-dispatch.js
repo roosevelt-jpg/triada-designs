@@ -199,6 +199,7 @@ import {
 } from "@/lib/integrations/anthropic-credentials";
 import {
   clearHiggsfieldCredentials,
+  getHiggsfieldCredentialSource,
   getHiggsfieldStatus,
   saveHiggsfieldCredentials,
 } from "@/lib/integrations/higgsfield-credentials";
@@ -1884,7 +1885,10 @@ export async function dispatchV1(method, segments, request, body) {
     } = await import("@/lib/creative/gemini-media");
     const geminiKeyed = hasGeminiEnv();
     const higgsfieldStatus = await getHiggsfieldStatus();
-    const higgsfieldKeyed = Boolean(higgsfieldStatus.has_credentials);
+    const higgsfieldCredSource = await getHiggsfieldCredentialSource();
+    const higgsfieldKeyed = Boolean(
+      higgsfieldStatus.has_credentials || higgsfieldCredSource.has_credentials,
+    );
     const quota = getGeminiQuotaWarning();
     // Soft-warn: Gemini key present but recent Free Tier / billing 429.
     const geminiLive = geminiKeyed && !quota;
@@ -1918,6 +1922,7 @@ export async function dispatchV1(method, segments, request, body) {
       ),
       has_gemini: geminiKeyed,
       has_higgsfield: higgsfieldKeyed,
+      higgsfield_credential_source: higgsfieldCredSource.source,
       preferred_image_provider: higgsfieldKeyed
         ? "higgsfield"
         : geminiKeyed
@@ -1945,6 +1950,9 @@ export async function dispatchV1(method, segments, request, body) {
           : geminiKeyed
             ? "gemini"
             : "local",
+        credential_source: higgsfieldKeyed
+          ? higgsfieldCredSource.source
+          : undefined,
       },
       video: {
         mode: videoMode === "quota_limited" ? "local_sim" : videoMode,
