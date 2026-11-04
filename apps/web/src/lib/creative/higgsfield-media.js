@@ -6,7 +6,7 @@
  * Never invent secrets; never call from the browser.
  */
 
-import { hasHiggsfieldEnv } from "@/lib/integrations/env-presence";
+import { resolveHiggsfieldCredentialsAsync } from "@/lib/integrations/higgsfield-credentials";
 import { randomUUID } from "node:crypto";
 
 const DEFAULT_BASE = "https://api.higgsfield.ai";
@@ -14,6 +14,7 @@ const DEFAULT_ENDPOINT = "higgsfield-ai/soul/v2/standard";
 const TERMINAL = new Set(["completed", "failed", "nsfw", "canceled", "cancelled"]);
 
 /**
+ * Env-only sync resolve (legacy). Prefer resolveHiggsfieldCredentialsAsync.
  * @returns {{ keyId: string, keySecret: string } | null}
  */
 export function resolveHiggsfieldCredentials() {
@@ -241,11 +242,7 @@ async function pollUntilDone(input) {
  * }} input
  */
 export async function generateHiggsfieldImage(input) {
-  if (!hasHiggsfieldEnv()) {
-    return { ok: false, error: "awaiting_credentials", mode: "awaiting_credentials" };
-  }
-
-  const creds = resolveHiggsfieldCredentials();
+  const creds = await resolveHiggsfieldCredentialsAsync();
   if (!creds) {
     return { ok: false, error: "awaiting_credentials", mode: "awaiting_credentials" };
   }

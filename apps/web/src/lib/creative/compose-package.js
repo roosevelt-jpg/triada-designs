@@ -5,7 +5,8 @@
  */
 
 import { completeAnthropic } from "@/lib/agents/anthropic-client";
-import { hasGeminiEnv, hasHiggsfieldEnv } from "@/lib/integrations/env-presence";
+import { hasGeminiEnv } from "@/lib/integrations/env-presence";
+import { hasHiggsfieldCredentials } from "@/lib/integrations/higgsfield-credentials";
 import {
   creativeModeLabel,
   isLiveCreativeMediaMode,
@@ -37,7 +38,7 @@ import { previewSvgDataUrl } from "./preview-svg";
  */
 async function generateCreativePixels(input) {
   const kind = input.kind === "animation" ? "video" : input.kind;
-  if (kind === "image" && hasHiggsfieldEnv()) {
+  if (kind === "image" && (await hasHiggsfieldCredentials())) {
     const hf = await generateHiggsfieldImage({
       prompt: input.prompt,
       width: input.width,
@@ -145,7 +146,7 @@ export async function composeCreativePackage(input) {
   let ugcScript = null;
   let copyLive = false;
   const geminiReady = hasGeminiEnv() || Boolean(resolveGeminiApiKey());
-  const higgsfieldReady = hasHiggsfieldEnv();
+  const higgsfieldReady = await hasHiggsfieldCredentials();
   const imageProviderReady = higgsfieldReady || geminiReady;
   const mediaProviderReady = isVideo ? geminiReady : imageProviderReady;
 

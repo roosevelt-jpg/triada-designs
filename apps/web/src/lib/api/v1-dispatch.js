@@ -198,6 +198,11 @@ import {
   saveAnthropicCredentials,
 } from "@/lib/integrations/anthropic-credentials";
 import {
+  clearHiggsfieldCredentials,
+  getHiggsfieldStatus,
+  saveHiggsfieldCredentials,
+} from "@/lib/integrations/higgsfield-credentials";
+import {
   clearMetaCredentials,
   getMetaStatus,
   saveMetaCredentials,
@@ -221,7 +226,6 @@ import {
 import { uploadMediaAsset } from "@/lib/media/media-assets-store";
 import {
   hasGeminiEnv,
-  hasHiggsfieldEnv,
   hasMetaPageToken,
   hasWhatsAppPhoneId,
   hasWhatsAppToken,
@@ -764,10 +768,11 @@ export async function dispatchV1(method, segments, request, body) {
     // Same Meta store overlay as integrations/list — otherwise overview
     // falsely shows FB/IG/WA as awaiting when credentials live in app_metadata.
     // KPI metrics come from live stores / entity APIs (zeros when empty).
-    const [anthropic, meta, shopify] = await Promise.all([
+    const [anthropic, meta, shopify, higgsfield] = await Promise.all([
       getAnthropicStatus(),
       getMetaStatus(),
       getShopifyStatus(),
+      getHiggsfieldStatus(),
     ]);
     const integrationOpts = {
       anthropicHasCredentials: anthropic.has_credentials,
@@ -777,6 +782,7 @@ export async function dispatchV1(method, segments, request, body) {
       metaInstagramReady: meta.instagram_ready,
       metaWhatsAppReady: meta.whatsapp_ready,
       shopifyHasCredentials: shopify.connected,
+      higgsfieldHasCredentials: higgsfield.has_credentials,
     };
     const metrics = await collectLiveDashboardMetrics(integrationOpts);
     return jsonOk(
@@ -1877,7 +1883,8 @@ export async function dispatchV1(method, segments, request, body) {
       geminiBillingEnablementNotes,
     } = await import("@/lib/creative/gemini-media");
     const geminiKeyed = hasGeminiEnv();
-    const higgsfieldKeyed = hasHiggsfieldEnv();
+    const higgsfieldStatus = await getHiggsfieldStatus();
+    const higgsfieldKeyed = Boolean(higgsfieldStatus.has_credentials);
     const quota = getGeminiQuotaWarning();
     // Soft-warn: Gemini key present but recent Free Tier / billing 429.
     const geminiLive = geminiKeyed && !quota;
@@ -1956,10 +1963,11 @@ export async function dispatchV1(method, segments, request, body) {
 
   // ---- integrations ----
   if (path === "integrations" && m === "GET") {
-    const [anthropic, meta, shopify] = await Promise.all([
+    const [anthropic, meta, shopify, higgsfield] = await Promise.all([
       getAnthropicStatus(),
       getMetaStatus(),
       getShopifyStatus(),
+      getHiggsfieldStatus(),
     ]);
     return jsonOk({
       data: buildIntegrationsList({
@@ -1970,17 +1978,19 @@ export async function dispatchV1(method, segments, request, body) {
         metaInstagramReady: meta.instagram_ready,
         metaWhatsAppReady: meta.whatsapp_ready,
         shopifyHasCredentials: shopify.connected,
+        higgsfieldHasCredentials: higgsfield.has_credentials,
       }),
     });
   }
 
   if (path === "integrations/health" && m === "GET") {
-    const [anthropic, meta, shopify] = await Promise.all([
+    const [anthropic, meta, shopify, higgsfield] = await Promise.all([
       getAnthropicStatus(),
       getMetaStatus(),
       getShopifyStatus(),
+      getHiggsfieldStatus(),
     ]);
-    return jsonOk(buildIntegrationsHealth({ anthropic, meta, shopify }));
+    return jsonOk(buildIntegrationsHealth({ anthropic, meta, shopify, higgsfield }));
   }
 
   if (path === "integrations/wordpress/status" && m === "GET") {
@@ -2075,6 +2085,37 @@ export async function dispatchV1(method, segments, request, body) {
 
   if (path === "integrations/anthropic/status" && m === "GET") {
     return jsonOk(await getAnthropicStatus());
+  }
+
+  if (path === "integrations/higgsfield" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {{ key_id?: string, key_secret?: string, api_key_id?: string, api_key_secret?: string }} */ (body)
+        : {};
+    const result = await saveHiggsfieldCredentials(input);
+    if (!result.ok) {
+      return jsonErr(result.message, result.status || 422);
+    }
+    return jsonOk({
+      ok: true,
+      higgsfield: result.higgsfield,
+      storage: result.storage,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "integrations/higgsfield/clear" && m === "POST") {
+    const result = await clearHiggsfieldCredentials();
+    return jsonOk({
+      ok: true,
+      higgsfield: result.higgsfield,
+      storage: result.storage,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "integrations/higgsfield/status" && m === "GET") {
+    return jsonOk(await getHiggsfieldStatus());
   }
 
   if (path === "integrations/zoho" && m === "POST") {

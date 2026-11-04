@@ -253,7 +253,10 @@ export function buildIntegrationsList(opts = {}) {
       ? Boolean(opts.metaWhatsAppReady)
       : envWaReady;
   const gemini = hasGeminiEnv();
-  const higgsfield = hasHiggsfieldEnv();
+  const higgsfield =
+    opts.higgsfieldHasCredentials !== undefined
+      ? Boolean(opts.higgsfieldHasCredentials)
+      : hasHiggsfieldEnv();
   const resend = hasResendEnv();
   const googlePlaces = hasGooglePlacesEnv();
   const anthropicReady =
@@ -544,7 +547,11 @@ export function buildIntegrationsHealth(opts = {}) {
       ? Boolean(metaFromStore.connected)
       : metaReady || waReady;
   const gemini = hasGeminiEnv();
-  const higgsfield = hasHiggsfieldEnv();
+  const higgsfieldFromStore =
+    opts.higgsfield && typeof opts.higgsfield === "object" ? opts.higgsfield : null;
+  const higgsfield = Boolean(
+    higgsfieldFromStore?.has_credentials || hasHiggsfieldEnv(),
+  );
   const resend = hasResendEnv();
   const supabase = hasSupabaseEnv();
   const googlePlaces = hasGooglePlacesEnv();
@@ -700,7 +707,7 @@ export function buildIntegrationsHealth(opts = {}) {
       model_label: modelNickname(geminiModel),
       summary: gemini ? "Gemini is connected." : "Waiting credentials.",
     },
-    higgsfield: {
+    higgsfield: higgsfieldFromStore || {
       provider: "higgsfield",
       has_credentials: higgsfield,
       status: higgsfield ? "connected" : "awaiting_credentials",
