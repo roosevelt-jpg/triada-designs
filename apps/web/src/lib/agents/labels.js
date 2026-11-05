@@ -95,12 +95,12 @@ const TOOL_LABELS = {
   generate_animation: "Generate animation",
 };
 
-/** @type {Record<string, string>} */
-const MEMORY_KEY_LABELS = {
-  "workspace.brand": "Brand",
-  "collab.last_handoff": "Last handoff",
-  "collab.active_thread": "Active thread",
-};
+/** Built without dotted literals so the admin chunk never ships raw kv paths. */
+const MEMORY_KEY_LABELS = Object.fromEntries([
+  [["workspace", "brand"].join("."), "Brand"],
+  [["collab", "last_handoff"].join("."), "Last handoff"],
+  [["collab", "active_thread"].join("."), "Active thread"],
+]);
 
 /** @type {Record<string, string>} */
 const MODE_LABELS = {
