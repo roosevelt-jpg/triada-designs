@@ -1,16 +1,26 @@
 /**
  * Human-readable labels for the AI Agents admin UI.
  * Technical keys (snake_case / shared-memory paths) stay under the hood.
+ *
+ * Keep this module free of team-roster / role-prompt imports so the Agents
+ * page bundle does not ship internal prompt plumbing to the browser.
  */
 
-import { TEAM_ROSTER } from "./team-roster";
 import { platformLabel } from "@/lib/templates/labels";
 import { providerNickname } from "@/lib/integrations/brand-labels";
 
 /** @type {Record<string, string>} */
-const AGENT_KEY_LABELS = Object.fromEntries(
-  TEAM_ROSTER.map((agent) => [agent.key, agent.name]),
-);
+const AGENT_KEY_LABELS = {
+  ai_support: "AI Support",
+  social_media_manager: "Social Media Manager",
+  content_creator: "Content creator / Creative",
+  follow_up: "Follow up",
+  marketing: "Marketing",
+  quality_control: "Quality Control",
+  compliance: "Compliance",
+  leads_qualification: "Leads Qualification",
+  escalation_officer: "Escalation officer",
+};
 
 /** @type {Record<string, string>} */
 const ROLE_LABELS = {
@@ -145,10 +155,8 @@ export function agentDisplayName(keyOrId, agents = []) {
   );
   if (fromList?.name) return fromList.name;
   if (AGENT_KEY_LABELS[needle]) return AGENT_KEY_LABELS[needle];
-  const rosterHit = TEAM_ROSTER.find(
-    (a) => a.key === needle || a.id === needle || a.name === needle,
-  );
-  if (rosterHit) return rosterHit.name;
+  const withoutPrefix = needle.replace(/^agent-/, "").replace(/-/g, "_");
+  if (AGENT_KEY_LABELS[withoutPrefix]) return AGENT_KEY_LABELS[withoutPrefix];
   return humanizeKey(needle);
 }
 

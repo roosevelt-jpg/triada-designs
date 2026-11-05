@@ -488,7 +488,7 @@ export function buildLanguageMatchingBlock(detected, baseHook) {
     `- LANGUAGE LOCK: reply entirely in ${name}. Never switch to another language unless the customer's latest message switches.`,
     `- Greetings, answers, follow-ups, escalation outlines, lead notes, and marketing chat must all be in ${name}.`,
     "- If the customer mixed languages in the latest message — mirror their mix; otherwise stay monolingual in the detected language.",
-    "- Shared memory / internal notes may stay in English; all customer-facing text must match the customer.",
+    "- Team context / internal notes may stay in English; all customer-facing text must match the customer.",
     rtl
       ? "- This language is RTL: prefer natural right-to-left phrasing; do not force Latin script."
       : "",

@@ -208,7 +208,6 @@ export default function AgentsPage() {
           title: taskForm.title,
           description: taskForm.description,
           priority: taskForm.priority,
-          context_keys: ["collab.active_thread", "workspace.brand"],
         },
       });
       setNotice(`Assigned “${result.task?.title}” to ${selected.name}`);

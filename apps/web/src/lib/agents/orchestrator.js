@@ -215,7 +215,7 @@ Hard rules:
 - End threads with Triada contact/address when closing.
 - WhatsApp: business messages only to opted-in customers. Broadcasts need human approval.
 - Materials: silver with gold plating; 14K and 18K gold on request. Typical make time ~7 days.
-- Treat Shared memory as team context other agents already wrote — do not contradict it without escalating.
+- Treat Team context as notes other agents already wrote — do not contradict it without escalating.
 - Never mention internal tooling or implementation details in customer or dashboard-facing copy.
 ${languageBlock}
 ${roleFocus}
@@ -224,7 +224,7 @@ ${brandContactPlain(opts.brandContact)}
 
 ${policy ? `Agent policy:\n${policy}\n` : ""}
 ${opts.assignedTasks ? `Assigned tasks:\n${opts.assignedTasks}\n` : ""}
-${opts.sharedMemory ? `Shared memory / kv:\n${opts.sharedMemory}\n` : ""}
+${opts.sharedMemory ? `Team context:\n${opts.sharedMemory}\n` : ""}
 Training docs (authoritative — retrieve & obey; do not fabricate beyond these):
 ${kb || "(none loaded — escalate rather than invent)"}
 `;
