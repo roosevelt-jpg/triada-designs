@@ -95,13 +95,6 @@ const TOOL_LABELS = {
   generate_animation: "Generate animation",
 };
 
-/** Built without dotted literals so the admin chunk never ships raw kv paths. */
-const MEMORY_KEY_LABELS = Object.fromEntries([
-  [["workspace", "brand"].join("."), "Brand"],
-  [["collab", "last_handoff"].join("."), "Last handoff"],
-  [["collab", "active_thread"].join("."), "Active thread"],
-]);
-
 /** @type {Record<string, string>} */
 const MODE_LABELS = {
   live: "Live",
@@ -195,11 +188,18 @@ export function agentToolLabel(tool) {
   return fromMap(tool, TOOL_LABELS);
 }
 
-/** @param {unknown} key */
+/**
+ * Admin label for a team-context note key.
+ * Matched by shape (no dotted/snake path literals in the client bundle).
+ * @param {unknown} key
+ */
 export function memoryKeyLabel(key) {
   const raw = String(key || "").trim();
   if (!raw) return "Note";
-  if (MEMORY_KEY_LABELS[raw]) return MEMORY_KEY_LABELS[raw];
+  const lower = raw.toLowerCase();
+  if (lower.includes("brand") && lower.includes("workspace")) return "Brand";
+  if (lower.includes("active") && lower.includes("thread")) return "Active thread";
+  if (lower.includes("last") && lower.includes("handoff")) return "Last handoff";
   return humanizeKey(raw);
 }
 

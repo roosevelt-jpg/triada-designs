@@ -30,9 +30,9 @@ assert.equal(agentChannelLabel("content_studio"), "Content Studio");
 assert.equal(agentChannelLabel("whatsapp"), "WhatsApp");
 assert.equal(agentToolLabel("sweep_unanswered_dms"), "Sweep unanswered DMs");
 assert.equal(agentToolLabel("generate_ugc_video"), "Generate UGC video");
-assert.equal(memoryKeyLabel(["workspace", "brand"].join(".")), "Brand");
-assert.equal(memoryKeyLabel(["collab", "active_thread"].join(".")), "Active thread");
-assert.equal(memoryKeyLabel(["collab", "last_handoff"].join(".")), "Last handoff");
+assert.equal(memoryKeyLabel("workspace" + "." + "brand"), "Brand");
+assert.equal(memoryKeyLabel("collab" + "." + "active_thread"), "Active thread");
+assert.equal(memoryKeyLabel("collab" + "." + "last_handoff"), "Last handoff");
 assert.equal(runModeLabel("local_sim"), "Local");
 assert.equal(runModeLabel("dry_run"), "Preview");
 assert.equal(
