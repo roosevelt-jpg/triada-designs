@@ -177,6 +177,19 @@ export function ContactProfileDrawer({
                     }
                   />
                   <FieldRow
+                    label="Waitlist"
+                    value={meta.waitlist_product || meta.waitlist_slug}
+                  />
+                  <FieldRow
+                    label="Looking for"
+                    value={meta.collection_wants}
+                    empty="—"
+                  />
+                  <FieldRow
+                    label="Address"
+                    value={meta.address}
+                  />
+                  <FieldRow
                     label="Updated"
                     value={
                       contact.updated_at

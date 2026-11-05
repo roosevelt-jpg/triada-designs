@@ -35,6 +35,11 @@ export async function joinWaitlist(input = {}) {
       phone: input.phone || null,
       email: input.email || null,
       chat_id: input.chat_id || null,
+      collection_wants: input.collection_wants
+        ? String(input.collection_wants).trim().slice(0, 2000)
+        : input.notes
+          ? String(input.notes).trim().slice(0, 2000)
+          : null,
     },
   });
   return { ok: true, entry: { id: saved.record.id, status: "waiting", ...saved.record.payload }, storage: saved.storage };

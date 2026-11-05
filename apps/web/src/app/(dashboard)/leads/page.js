@@ -325,6 +325,27 @@ export default function LeadsPage() {
                     {lead.source_channel || lead.channel || "—"}
                   </dd>
                 </div>
+                {lead.metadata?.collection_wants ||
+                lead.metadata?.waitlist_product ? (
+                  <div className="space-y-1 border-t border-line/60 pt-2">
+                    {lead.metadata?.waitlist_product ? (
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-muted">Waitlist</dt>
+                        <dd className="text-right text-ink">
+                          {String(lead.metadata.waitlist_product)}
+                        </dd>
+                      </div>
+                    ) : null}
+                    {lead.metadata?.collection_wants ? (
+                      <div>
+                        <dt className="text-muted">Looking for</dt>
+                        <dd className="mt-1 whitespace-pre-wrap text-ink">
+                          {String(lead.metadata.collection_wants)}
+                        </dd>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted">Zoho ID</dt>
                   <dd className="truncate text-muted">

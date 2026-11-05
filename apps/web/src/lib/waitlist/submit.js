@@ -92,6 +92,17 @@ export async function submitWaitlistInterest(slug, input = {}) {
     form.product_label ||
     form.title;
 
+  // Free-text: what the submitter wants from the collection.
+  const collectionWantsRaw =
+    cleanText(input.collection_wants) ||
+    cleanText(input.wants) ||
+    cleanText(input.what_they_want) ||
+    cleanText(input.looking_for) ||
+    null;
+  const collection_wants = collectionWantsRaw
+    ? collectionWantsRaw.slice(0, 2000)
+    : null;
+
   if (!name) {
     return { ok: false, status: 422, message: "Name is required." };
   }
@@ -128,6 +139,7 @@ export async function submitWaitlistInterest(slug, input = {}) {
         waitlist_form_id: form.id,
         waitlist_product: productTarget,
         product_link: form.product_link,
+        collection_wants,
         broadcast_audiences: [audienceTag, "waitlist", "whatsapp_broadcast"],
         whatsapp_opt_in: true,
         waitlist_submitted_at: now,
@@ -154,6 +166,7 @@ export async function submitWaitlistInterest(slug, input = {}) {
       address: address || null,
       whatsapp: phones.whatsapp_raw || null,
       whatsapp_e164: phones.whatsapp_e164,
+      collection_wants,
       broadcast_audiences: [audienceTag, "waitlist", "whatsapp_broadcast"],
       whatsapp_opt_in: true,
     },
@@ -172,6 +185,8 @@ export async function submitWaitlistInterest(slug, input = {}) {
       phone: phones.whatsapp_e164 || phones.phone_e164 || phones.phone_raw,
       email,
       vip: false,
+      collection_wants,
+      notes: collection_wants,
     });
     opsEntry = joined.entry || null;
   } catch {
@@ -194,6 +209,7 @@ export async function submitWaitlistInterest(slug, input = {}) {
     phone_e164: contact?.phone_e164 || phones.primary_e164 || null,
     whatsapp_e164: phones.whatsapp_e164,
     whatsapp_ready: Boolean(contact?.whatsapp_ready),
+    collection_wants,
     broadcast_audiences: [audienceTag, "waitlist", "whatsapp_broadcast"],
     jewellery_ops_waitlist_id: opsEntry?.id || null,
     mode: contactResult.mode || leadResult.mode || "local",

@@ -28,8 +28,38 @@ function statusTone(status) {
   return "neutral";
 }
 
+/**
+ * @param {unknown} lead
+ * @returns {{ id: string, name: string, email: string, product: string, wants: string, at: string, slug: string } | null}
+ */
+function shapeSubmission(lead) {
+  if (!lead || typeof lead !== "object") return null;
+  const row = /** @type {Record<string, unknown>} */ (lead);
+  const meta =
+    row.metadata && typeof row.metadata === "object"
+      ? /** @type {Record<string, unknown>} */ (row.metadata)
+      : {};
+  const channel = String(row.source_channel || row.channel || "").toLowerCase();
+  const slug = String(meta.waitlist_slug || "").trim();
+  if (channel !== "waitlist" && !slug) return null;
+  const contact =
+    row.contact && typeof row.contact === "object"
+      ? /** @type {Record<string, unknown>} */ (row.contact)
+      : {};
+  return {
+    id: String(row.id || ""),
+    name: String(contact.name || row.contact_name || row.title || "Guest"),
+    email: String(contact.email || row.contact_email || ""),
+    product: String(meta.waitlist_product || ""),
+    wants: String(meta.collection_wants || "").trim(),
+    at: String(row.updated_at || row.created_at || ""),
+    slug: slug || "waitlist",
+  };
+}
+
 export default function WaitlistFormsPage() {
   const [items, setItems] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
   const [q, setQ] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -45,8 +75,16 @@ export default function WaitlistFormsPage() {
     setError("");
     try {
       const query = q ? `?q=${encodeURIComponent(q)}` : "";
-      const response = await apiFetch(`/v1/waitlist-forms${query}`);
+      const [response, leadsRes] = await Promise.all([
+        apiFetch(`/v1/waitlist-forms${query}`),
+        apiFetch("/v1/leads").catch(() => ({ data: [] })),
+      ]);
       setItems(response.data || []);
+      const shaped = (leadsRes.data || [])
+        .map(shapeSubmission)
+        .filter(Boolean)
+        .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+      setSubmissions(shaped);
     } catch (err) {
       setError(err.message || "Failed to load waitlist forms");
     } finally {
@@ -402,6 +440,48 @@ export default function WaitlistFormsPage() {
                   </Button>
                 </div>
               </div>
+
+              {(() => {
+                const rows = submissions
+                  .filter((s) => s.slug === item.slug)
+                  .slice(0, 8);
+                if (!rows.length) return null;
+                return (
+                  <div className="mt-4 border-t border-line pt-3">
+                    <p className="mb-2 text-[12px] font-medium uppercase tracking-[0.06em] text-muted">
+                      Recent interest
+                    </p>
+                    <ul className="space-y-2.5">
+                      {rows.map((row) => (
+                        <li
+                          key={row.id}
+                          className="rounded-sm bg-[var(--surface-page)] px-3 py-2.5"
+                        >
+                          <p className="text-sm text-ink">
+                            <span className="font-medium">{row.name}</span>
+                            {row.email ? (
+                              <span className="text-muted"> · {row.email}</span>
+                            ) : null}
+                          </p>
+                          {row.product ? (
+                            <p className="text-[12px] text-muted">{row.product}</p>
+                          ) : null}
+                          {row.wants ? (
+                            <p className="mt-1 whitespace-pre-wrap text-sm text-ink/90">
+                              <span className="text-muted">Looking for: </span>
+                              {row.wants}
+                            </p>
+                          ) : (
+                            <p className="mt-1 text-[12px] text-muted">
+                              No collection note
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
             </li>
           ))}
         </ul>

@@ -16,6 +16,7 @@ const EMPTY = {
   whatsapp: "",
   address: "",
   product: "",
+  collection_wants: "",
 };
 
 /**
@@ -91,6 +92,7 @@ export default function PublicWaitlistFormPage() {
           address: fields.address.trim(),
           product: fields.product.trim(),
           product_target: fields.product.trim(),
+          collection_wants: fields.collection_wants.trim(),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -256,6 +258,24 @@ export default function PublicWaitlistFormPage() {
                 onChange={(e) => updateField("product", e.target.value)}
                 placeholder={formMeta.product_label || "Piece or collection"}
               />
+
+              <label className="block space-y-1.5">
+                <span className="block text-[13px] font-medium text-ink">
+                  What are you looking for?
+                </span>
+                <textarea
+                  name="collection_wants"
+                  rows={4}
+                  className="ops-field min-h-[110px] w-full px-3 py-2.5"
+                  value={fields.collection_wants}
+                  onChange={(e) => updateField("collection_wants", e.target.value)}
+                  placeholder="Tell us the piece, size, metal, or feeling you want from this collection."
+                  maxLength={2000}
+                />
+                <span className="block text-sm text-muted">
+                  Optional — helps us match you to the right piece.
+                </span>
+              </label>
 
               {formMeta.product_link ? (
                 <p className="text-sm text-muted">
