@@ -126,11 +126,8 @@ export default function PublicWaitlistFormPage() {
   const siteUrl = brand?.site_url || PUBLIC_SITE_URL;
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#f3eee6]">
-      <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_10%_-10%,rgba(196,168,130,0.35),transparent_55%),radial-gradient(ellipse_60%_40%_at_100%_20%,rgba(154,121,88,0.12),transparent_50%),linear-gradient(165deg,#f7f3ee_0%,#efe6da_48%,#f3eee6_100%)]"
-        aria-hidden
-      />
+    <div className="relative min-h-screen overflow-x-hidden bg-[var(--surface-page)]">
+      {/* Dashboard shell grey (#e9e8e6) — logo watermarks float on top */}
       <LogoBubbles
         preferLive
         density="rich"
