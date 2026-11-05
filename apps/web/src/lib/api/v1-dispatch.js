@@ -54,6 +54,14 @@ import {
   upsertLead,
 } from "@/lib/crm/leads-store";
 import {
+  deleteWaitlistForm,
+  getWaitlistForm,
+  listWaitlistForms,
+  upsertWaitlistForm,
+  waitlistShortPath,
+} from "@/lib/waitlist/forms-store";
+import { OPS_HOST } from "@/lib/constants";
+import {
   notifyAdminPendingReview,
   syncPendingReviewNotifications,
 } from "@/lib/content/admin-review-notify";
@@ -3302,7 +3310,9 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "contacts/whatsapp-recipients" && m === "GET") {
-    const listed = await listWhatsAppCampaignRecipients();
+    const url = new URL(request.url);
+    const audience = url.searchParams.get("audience") || "";
+    const listed = await listWhatsAppCampaignRecipients({ audience });
     return jsonOk({
       data: listed.data.map((c) => ({
         id: c.id,
@@ -3311,7 +3321,16 @@ export async function dispatchV1(method, segments, request, body) {
         phone_normalized: c.phone_normalized,
         to: c.phone_normalized,
         marketing_opt_out: c.marketing_opt_out,
+        broadcast_audiences:
+          c.metadata && Array.isArray(c.metadata.broadcast_audiences)
+            ? c.metadata.broadcast_audiences
+            : [],
+        waitlist_slug:
+          c.metadata && c.metadata.waitlist_slug
+            ? String(c.metadata.waitlist_slug)
+            : null,
       })),
+      audience: listed.audience,
       mode: listed.mode,
       source: "next_dual_run",
     });
@@ -3691,6 +3710,121 @@ export async function dispatchV1(method, segments, request, body) {
       zoho: { status: "awaiting_credentials" },
       message: "Zoho sync queued. Waiting credentials.",
     });
+  }
+
+  // ---- waitlist / product-interest forms (admin) ----
+  if (path === "waitlist-forms" && m === "GET") {
+    const url = new URL(request.url);
+    const q = url.searchParams.get("q") || "";
+    const status = url.searchParams.get("status") || "";
+    const listed = await listWaitlistForms({ q, status });
+    const host =
+      process.env.NEXT_PUBLIC_OPS_HOST || OPS_HOST || "dashboard.triada-designs.com";
+    return jsonOk({
+      data: listed.data.map((form) => ({
+        ...form,
+        short_path: waitlistShortPath(form),
+        short_url: `https://${host}${waitlistShortPath(form)}`,
+      })),
+      mode: listed.mode,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path === "waitlist-forms" && m === "POST") {
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    try {
+      const result = await upsertWaitlistForm(input);
+      const host =
+        process.env.NEXT_PUBLIC_OPS_HOST || OPS_HOST || "dashboard.triada-designs.com";
+      await appendAuditEvent({
+        action: "waitlist_forms.create",
+        actor: "admin",
+        entity_type: "waitlist_form",
+        entity_id: result.form.id,
+      }).catch(() => {});
+      return jsonOk(
+        {
+          ...result.form,
+          short_path: waitlistShortPath(result.form),
+          short_url: `https://${host}${waitlistShortPath(result.form)}`,
+          mode: result.mode,
+          created: result.created,
+        },
+        201,
+      );
+    } catch (err) {
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? Number(/** @type {{ status?: number }} */ (err).status) || 400
+          : 400;
+      return jsonErr(
+        err instanceof Error ? err.message : "Unable to save form.",
+        status,
+      );
+    }
+  }
+
+  if (path.match(/^waitlist-forms\/[^/]+$/) && m === "GET") {
+    const form = await getWaitlistForm(segments[1]);
+    if (!form) return jsonErr("Waitlist form not found.", 404);
+    const host =
+      process.env.NEXT_PUBLIC_OPS_HOST || OPS_HOST || "dashboard.triada-designs.com";
+    return jsonOk({
+      ...form,
+      short_path: waitlistShortPath(form),
+      short_url: `https://${host}${waitlistShortPath(form)}`,
+      source: "next_dual_run",
+    });
+  }
+
+  if (path.match(/^waitlist-forms\/[^/]+$/) && (m === "PUT" || m === "PATCH")) {
+    const existing = await getWaitlistForm(segments[1]);
+    if (!existing) return jsonErr("Waitlist form not found.", 404);
+    const input =
+      body && typeof body === "object"
+        ? /** @type {Record<string, unknown>} */ (body)
+        : {};
+    try {
+      const result = await upsertWaitlistForm({
+        ...existing,
+        ...input,
+        id: existing.id,
+      });
+      const host =
+        process.env.NEXT_PUBLIC_OPS_HOST || OPS_HOST || "dashboard.triada-designs.com";
+      return jsonOk({
+        ...result.form,
+        short_path: waitlistShortPath(result.form),
+        short_url: `https://${host}${waitlistShortPath(result.form)}`,
+        mode: result.mode,
+        created: false,
+      });
+    } catch (err) {
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? Number(/** @type {{ status?: number }} */ (err).status) || 400
+          : 400;
+      return jsonErr(
+        err instanceof Error ? err.message : "Unable to save form.",
+        status,
+      );
+    }
+  }
+
+  if (path.match(/^waitlist-forms\/[^/]+$/) && m === "DELETE") {
+    const result = await deleteWaitlistForm(segments[1]);
+    if (!result.ok) return jsonErr("Waitlist form not found.", 404);
+    await appendAuditEvent({
+      action: "waitlist_forms.delete",
+      actor: "admin",
+      entity_type: "waitlist_form",
+      entity_id: segments[1],
+    }).catch(() => {});
+    return jsonOk({ ok: true, id: segments[1], mode: result.mode });
   }
 
   if (path === "opportunities" && m === "GET") {

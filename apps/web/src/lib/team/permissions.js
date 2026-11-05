@@ -22,8 +22,8 @@ export const PERMISSION_AREAS = [
   {
     key: "crm",
     label: "CRM",
-    description: "Contacts and leads",
-    hrefs: ["/contacts", "/leads"],
+    description: "Contacts, leads, and waitlist forms",
+    hrefs: ["/contacts", "/leads", "/waitlist-forms"],
   },
   {
     key: "analytics",
@@ -214,7 +214,7 @@ export function defaultRoleDefinitions() {
       workspace_id: "triada-ops",
       slug: "marketing",
       name: "Marketing",
-      description: "Content, calendar, campaigns, templates, and UGC.",
+      description: "Content, calendar, campaigns, templates, UGC, and waitlist forms.",
       is_system: true,
       permissions: normalizePermissions({
         overview: { view: true, manage: false },
@@ -225,7 +225,7 @@ export function defaultRoleDefinitions() {
         outreach: { view: true, manage: true },
         catalog: { view: true, manage: false },
         analytics: { view: true, manage: false },
-        crm: { view: true, manage: false },
+        crm: { view: true, manage: true },
       }),
       created_at: at,
       updated_at: at,
@@ -321,6 +321,8 @@ export const API_PERMISSION_RULES = [
   { match: /^contacts(\/|$)/, area: "crm", level: "manage", methods: ["POST", "PATCH", "PUT", "DELETE"] },
   { match: /^leads(\/|$)/, area: "crm", level: "view", methods: ["GET"] },
   { match: /^leads(\/|$)/, area: "crm", level: "manage", methods: ["POST", "PATCH", "PUT", "DELETE"] },
+  { match: /^waitlist-forms(\/|$)/, area: "crm", level: "view", methods: ["GET"] },
+  { match: /^waitlist-forms(\/|$)/, area: "crm", level: "manage", methods: ["POST", "PATCH", "PUT", "DELETE"] },
   { match: /^settings(\/|$)/, area: "settings", level: "view", methods: ["GET"] },
   { match: /^settings(\/|$)/, area: "settings", level: "manage", methods: ["POST", "PATCH", "PUT", "DELETE"] },
   { match: /^media(\/|$)/, area: "content", level: "manage", methods: ["POST", "PUT", "DELETE"] },

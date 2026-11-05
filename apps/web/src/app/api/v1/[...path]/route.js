@@ -57,6 +57,15 @@ async function handle(request, context) {
     );
   }
 
+  // Public waitlist / product-interest forms — dedicated handler at
+  // /api/v1/public/waitlist/[slug].
+  if (segments[0] === "public" && segments[1] === "waitlist") {
+    return NextResponse.json(
+      { message: "Use dedicated public waitlist route handler." },
+      { status: 404 },
+    );
+  }
+
   const membership = await requireMembership(request);
   if (!membership.ok) {
     return NextResponse.json(

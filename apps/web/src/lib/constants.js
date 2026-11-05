@@ -53,6 +53,7 @@ export const DASHBOARD_NAV = [
       { href: "/templates", label: "Channel templates" },
       { href: "/calendar", label: "Calendar" },
       { href: "/campaigns", label: "Campaigns" },
+      { href: "/waitlist-forms", label: "Waitlist forms" },
       { href: "/ugc", label: "UGC & tags" },
       { href: "/popups", label: "Pop-ups & markets" },
       { href: "/outreach", label: "Outreach CRM" },

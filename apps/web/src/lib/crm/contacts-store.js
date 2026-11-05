@@ -478,8 +478,29 @@ export async function countContacts() {
 
 /**
  * Contacts ready for WhatsApp template/campaign sends.
- * @returns {Promise<{ mode: string, data: ContactRecord[] }>}
+ * Optional audience filter matches metadata.broadcast_audiences (e.g. waitlist:slug).
+ * @param {{ audience?: string }} [opts]
+ * @returns {Promise<{ mode: string, data: ContactRecord[], audience: string | null }>}
  */
-export async function listWhatsAppCampaignRecipients() {
-  return listContacts({ whatsapp_ready: true });
+export async function listWhatsAppCampaignRecipients(opts = {}) {
+  const listed = await listContacts({ whatsapp_ready: true });
+  const audience = String(opts.audience || "").trim();
+  if (!audience) {
+    return { ...listed, audience: null };
+  }
+  const data = listed.data.filter((c) => {
+    const meta = c.metadata && typeof c.metadata === "object" ? c.metadata : {};
+    const tags = Array.isArray(meta.broadcast_audiences)
+      ? meta.broadcast_audiences.map(String)
+      : [];
+    if (tags.includes(audience)) return true;
+    if (audience.startsWith("waitlist:") && meta.waitlist_slug) {
+      return `waitlist:${meta.waitlist_slug}` === audience;
+    }
+    if (audience === "waitlist" && (meta.waitlist_slug || tags.includes("waitlist"))) {
+      return true;
+    }
+    return false;
+  });
+  return { mode: listed.mode, data, audience };
 }
