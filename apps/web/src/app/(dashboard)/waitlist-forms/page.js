@@ -151,8 +151,26 @@ export default function WaitlistFormsPage() {
     }
   }
 
+  /**
+   * Always copy the canonical dashboard short URL — never ops.* aliases.
+   * @param {{ slug?: string, short_path?: string, short_url?: string }} item
+   */
+  function canonicalShortUrl(item) {
+    const slug = String(item?.slug || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    const path =
+      (item?.short_path && String(item.short_path).startsWith("/f/")
+        ? String(item.short_path)
+        : null) || (slug ? `/f/${slug}` : "");
+    if (!path) return "";
+    return `https://dashboard.triada-designs.com${path}`;
+  }
+
   async function copyLink(item) {
-    const text = item.short_url || item.short_path || "";
+    const text = canonicalShortUrl(item);
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
@@ -332,9 +350,16 @@ export default function WaitlistFormsPage() {
                   {item.description ? (
                     <p className="max-w-2xl text-sm text-muted">{item.description}</p>
                   ) : null}
-                  <p className="font-mono text-[13px] text-ink/80">
-                    {item.short_path || `/f/${item.slug}`}
+                  <p className="font-mono text-[13px] text-ink/80 break-all">
+                    {canonicalShortUrl(item) ||
+                      item.short_path ||
+                      `/f/${item.slug}`}
                   </p>
+                  {item.slug ? (
+                    <p className="text-[12px] text-muted">
+                      Alias /waitlist/{item.slug}
+                    </p>
+                  ) : null}
                   <p className="text-sm text-muted">
                     {item.submission_count || 0} submission
                     {(item.submission_count || 0) === 1 ? "" : "s"}

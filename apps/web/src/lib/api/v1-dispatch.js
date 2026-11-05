@@ -58,9 +58,8 @@ import {
   getWaitlistForm,
   listWaitlistForms,
   upsertWaitlistForm,
-  waitlistShortPath,
+  waitlistPublicLinks,
 } from "@/lib/waitlist/forms-store";
-import { OPS_HOST } from "@/lib/constants";
 import {
   notifyAdminPendingReview,
   syncPendingReviewNotifications,
@@ -3718,13 +3717,10 @@ export async function dispatchV1(method, segments, request, body) {
     const q = url.searchParams.get("q") || "";
     const status = url.searchParams.get("status") || "";
     const listed = await listWaitlistForms({ q, status });
-    const host =
-      process.env.NEXT_PUBLIC_OPS_HOST || OPS_HOST || "dashboard.triada-designs.com";
     return jsonOk({
       data: listed.data.map((form) => ({
         ...form,
-        short_path: waitlistShortPath(form),
-        short_url: `https://${host}${waitlistShortPath(form)}`,
+        ...waitlistPublicLinks(form),
       })),
       mode: listed.mode,
       source: "next_dual_run",
@@ -3738,8 +3734,6 @@ export async function dispatchV1(method, segments, request, body) {
         : {};
     try {
       const result = await upsertWaitlistForm(input);
-      const host =
-        process.env.NEXT_PUBLIC_OPS_HOST || OPS_HOST || "dashboard.triada-designs.com";
       await appendAuditEvent({
         action: "waitlist_forms.create",
         actor: "admin",
@@ -3749,8 +3743,7 @@ export async function dispatchV1(method, segments, request, body) {
       return jsonOk(
         {
           ...result.form,
-          short_path: waitlistShortPath(result.form),
-          short_url: `https://${host}${waitlistShortPath(result.form)}`,
+          ...waitlistPublicLinks(result.form),
           mode: result.mode,
           created: result.created,
         },
@@ -3771,12 +3764,9 @@ export async function dispatchV1(method, segments, request, body) {
   if (path.match(/^waitlist-forms\/[^/]+$/) && m === "GET") {
     const form = await getWaitlistForm(segments[1]);
     if (!form) return jsonErr("Waitlist form not found.", 404);
-    const host =
-      process.env.NEXT_PUBLIC_OPS_HOST || OPS_HOST || "dashboard.triada-designs.com";
     return jsonOk({
       ...form,
-      short_path: waitlistShortPath(form),
-      short_url: `https://${host}${waitlistShortPath(form)}`,
+      ...waitlistPublicLinks(form),
       source: "next_dual_run",
     });
   }
@@ -3794,12 +3784,9 @@ export async function dispatchV1(method, segments, request, body) {
         ...input,
         id: existing.id,
       });
-      const host =
-        process.env.NEXT_PUBLIC_OPS_HOST || OPS_HOST || "dashboard.triada-designs.com";
       return jsonOk({
         ...result.form,
-        short_path: waitlistShortPath(result.form),
-        short_url: `https://${host}${waitlistShortPath(result.form)}`,
+        ...waitlistPublicLinks(result.form),
         mode: result.mode,
         created: false,
       });

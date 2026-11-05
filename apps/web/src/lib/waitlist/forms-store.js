@@ -8,6 +8,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getLocalDataDir } from "@/lib/local-data-dir";
 import { getSharedKv, setSharedKv } from "@/lib/agents/shared-memory";
+import {
+  PRODUCTION_APP_HOST,
+  PRODUCTION_APP_URL,
+} from "@/lib/public-app-url";
 
 const WORKSPACE_ID = "triada-ops";
 const KV_KEY = "workspace.waitlist_forms";
@@ -116,12 +120,40 @@ export function presentPublicWaitlistForm(form) {
 }
 
 /**
- * Short shareable path for website / social.
+ * Short shareable path for website / social (`/f/{slug}`).
  * @param {WaitlistFormRecord | { slug?: string }} form
  */
 export function waitlistShortPath(form) {
   const slug = slugifyWaitlist(form?.slug || "");
   return slug ? `/f/${slug}` : "/f/";
+}
+
+/**
+ * Friendly alias path (`/waitlist/{slug}`).
+ * @param {WaitlistFormRecord | { slug?: string }} form
+ */
+export function waitlistAliasPath(form) {
+  const slug = slugifyWaitlist(form?.slug || "");
+  return slug ? `/waitlist/${slug}` : "/waitlist/";
+}
+
+/**
+ * Canonical absolute short URL for copy / social.
+ * Always dashboard.triada-designs.com — never ops.* or env OPS_HOST aliases.
+ * @param {WaitlistFormRecord | { slug?: string }} form
+ * @returns {{ short_path: string, alias_path: string, short_url: string, alias_url: string, host: string }}
+ */
+export function waitlistPublicLinks(form) {
+  const short_path = waitlistShortPath(form);
+  const alias_path = waitlistAliasPath(form);
+  const origin = PRODUCTION_APP_URL.replace(/\/$/, "");
+  return {
+    short_path,
+    alias_path,
+    short_url: `${origin}${short_path}`,
+    alias_url: `${origin}${alias_path}`,
+    host: PRODUCTION_APP_HOST,
+  };
 }
 
 /** @returns {Promise<WaitlistFormRecord[]>} */
