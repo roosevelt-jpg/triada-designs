@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
@@ -8,6 +9,12 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PUBLIC_SITE_URL } from "@/lib/constants";
+
+const LogoBubbles = dynamic(
+  () =>
+    import("@/components/brand/LogoBubbles").then((m) => m.LogoBubbles),
+  { ssr: false },
+);
 
 const EMPTY = {
   name: "",
@@ -124,14 +131,30 @@ export default function PublicWaitlistFormPage() {
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_10%_-10%,rgba(196,168,130,0.35),transparent_55%),radial-gradient(ellipse_60%_40%_at_100%_20%,rgba(154,121,88,0.12),transparent_50%),linear-gradient(165deg,#f7f3ee_0%,#efe6da_48%,#f3eee6_100%)]"
         aria-hidden
       />
-      <div className="relative z-[1] mx-auto flex min-h-screen w-full max-w-lg flex-col px-5 py-8 sm:px-6 sm:py-10">
+      <LogoBubbles
+        preferLive
+        density="rich"
+        className="z-[1] opacity-80"
+      />
+      <div className="relative z-[2] mx-auto flex min-h-screen w-full max-w-lg flex-col px-5 py-8 sm:px-6 sm:py-10">
         <header className="mb-8 flex flex-col items-start gap-4 sm:mb-10">
           <a
             href={siteUrl}
             className="inline-flex transition-opacity hover:opacity-80"
             aria-label="Triada Designs"
           >
-            <BrandLogo className="h-9 sm:h-10" />
+            {brand?.logo_url ? (
+              // Live wordmark from triada-designs.com (same asset as watermarks).
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={brand.logo_url}
+                alt="Triada Designs"
+                className="block h-9 w-auto shrink-0 object-contain object-left sm:h-10"
+                decoding="async"
+              />
+            ) : (
+              <BrandLogo className="h-9 sm:h-10" />
+            )}
           </a>
           {!loading && formMeta ? (
             <div className="space-y-2">

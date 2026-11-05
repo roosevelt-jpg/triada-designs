@@ -1,22 +1,53 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { BRAND, brandLogoUrl } from "@/lib/brand/identity";
 
 /**
- * Soft floating Triada logo watermarks behind the login chrome.
+ * Soft floating Triada logo watermarks (login / public waitlist chrome).
  * JS-driven drift only — decorative, pointer-events none, reduced-motion safe.
  */
 
 /* Quieter watermarks — fewer, softer, less glass-sphere theatre */
-const BUBBLES = [
-  { src: "/brand/triada-symbol.svg", x: 8, y: 16, size: 120, opacity: 0.16, speed: 26, ampX: 12, ampY: 10, phase: 0.2 },
-  { src: "/brand/triada-logo-primary.svg", x: 86, y: 12, size: 160, opacity: 0.12, speed: 32, ampX: 10, ampY: 14, phase: 1.1 },
-  { src: "/brand/triada-symbol.svg", x: 92, y: 68, size: 96, opacity: 0.14, speed: 22, ampX: 14, ampY: 8, phase: 2.4 },
-  { src: "/brand/triada-logo-primary.svg", x: 14, y: 84, size: 140, opacity: 0.11, speed: 36, ampX: 8, ampY: 12, phase: 0.7 },
-  { src: "/brand/triada-symbol.svg", x: 52, y: 92, size: 80, opacity: 0.13, speed: 24, ampX: 10, ampY: 8, phase: 1.8 },
+const BUBBLE_LAYOUT = [
+  { kind: "symbol", x: 8, y: 16, size: 120, opacity: 0.16, speed: 26, ampX: 12, ampY: 10, phase: 0.2 },
+  { kind: "wordmark", x: 86, y: 12, size: 160, opacity: 0.12, speed: 32, ampX: 10, ampY: 14, phase: 1.1 },
+  { kind: "symbol", x: 92, y: 68, size: 96, opacity: 0.14, speed: 22, ampX: 14, ampY: 8, phase: 2.4 },
+  { kind: "wordmark", x: 14, y: 84, size: 140, opacity: 0.11, speed: 36, ampX: 8, ampY: 12, phase: 0.7 },
+  { kind: "symbol", x: 52, y: 92, size: 80, opacity: 0.13, speed: 24, ampX: 10, ampY: 8, phase: 1.8 },
+  { kind: "wordmark", x: 48, y: 38, size: 150, opacity: 0.1, speed: 30, ampX: 11, ampY: 9, phase: 3.1 },
+  { kind: "symbol", x: 72, y: 48, size: 88, opacity: 0.12, speed: 28, ampX: 9, ampY: 11, phase: 0.4 },
 ];
 
-export function LogoBubbles({ className = "" }) {
+/**
+ * @param {{
+ *   className?: string,
+ *   preferLive?: boolean,
+ *   density?: "default" | "rich",
+ * }} props
+ */
+export function LogoBubbles({
+  className = "",
+  preferLive = false,
+  density = "default",
+}) {
+  const bubbles = useMemo(() => {
+    const liveWordmark = brandLogoUrl();
+    const wordmark = preferLive
+      ? liveWordmark || BRAND.logoUrlLive
+      : "/brand/triada-logo-primary.svg";
+    // Live site ships the wordmark SVG; reuse it for soft symbol watermarks too.
+    const symbol = preferLive
+      ? liveWordmark || BRAND.logoUrlLive
+      : "/brand/triada-symbol.svg";
+    const layout =
+      density === "rich" ? BUBBLE_LAYOUT : BUBBLE_LAYOUT.slice(0, 5);
+    return layout.map((b) => ({
+      ...b,
+      src: b.kind === "wordmark" ? wordmark : symbol,
+    }));
+  }, [preferLive, density]);
+
   const rootRef = useRef(null);
   const nodesRef = useRef([]);
 
@@ -32,7 +63,7 @@ export function LogoBubbles({ className = "" }) {
 
     if (reduce) {
       nodesRef.current.forEach((el, i) => {
-        const b = BUBBLES[i];
+        const b = bubbles[i];
         if (!el || !b) return;
         el.style.transform = "translate3d(0,0,0) scale(1)";
         el.style.opacity = String(b.opacity);
@@ -46,7 +77,7 @@ export function LogoBubbles({ className = "" }) {
     const tick = (now) => {
       const t = (now - start) / 1000;
       nodesRef.current.forEach((el, i) => {
-        const b = BUBBLES[i];
+        const b = bubbles[i];
         if (!el || !b) return;
         const ox = Math.sin(t / b.speed + b.phase) * b.ampX;
         const oy = Math.cos(t / (b.speed * 0.85) + b.phase * 1.3) * b.ampY;
@@ -64,7 +95,7 @@ export function LogoBubbles({ className = "" }) {
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [bubbles]);
 
   return (
     <div
@@ -72,7 +103,7 @@ export function LogoBubbles({ className = "" }) {
       aria-hidden
       className={`pointer-events-none absolute inset-0 overflow-hidden ${className}`}
     >
-      {BUBBLES.map((b, i) => (
+      {bubbles.map((b, i) => (
         <div
           key={i}
           data-bubble
