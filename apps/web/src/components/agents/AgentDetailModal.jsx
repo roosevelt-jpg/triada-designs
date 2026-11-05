@@ -4,12 +4,13 @@ import { useEffect } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { getAgentCapabilitySections } from "@/lib/agents/agent-features";
-
-function formatLabel(value) {
-  return String(value || "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
+import {
+  agentChannelLabel,
+  agentDisplayName,
+  agentRoleLabel,
+  agentStatusLabel,
+  agentToolLabel,
+} from "@/lib/agents/labels";
 
 /**
  * Detail view for an AI agent card — shows every capability described on the card.
@@ -70,10 +71,9 @@ export function AgentDetailModal({
             </h2>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Badge tone={agent.status === "active" ? "success" : "warning"}>
-                {agent.status}
+                {agentStatusLabel(agent.status)}
               </Badge>
-              <Badge tone="neutral">{formatLabel(agent.role)}</Badge>
-              {agent.key ? <Badge tone="brand">{agent.key}</Badge> : null}
+              <Badge tone="neutral">{agentRoleLabel(agent.role)}</Badge>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close agent detail">
@@ -129,7 +129,7 @@ export function AgentDetailModal({
               <ul className="mt-2 flex flex-wrap gap-2">
                 {sections.channels.map((channel) => (
                   <li key={channel}>
-                    <Badge tone="neutral">{formatLabel(channel)}</Badge>
+                    <Badge tone="neutral">{agentChannelLabel(channel)}</Badge>
                   </li>
                 ))}
               </ul>
@@ -144,7 +144,7 @@ export function AgentDetailModal({
               <ul className="mt-2 flex flex-wrap gap-2">
                 {sections.tools.map((tool) => (
                   <li key={tool}>
-                    <Badge tone="neutral">{formatLabel(tool)}</Badge>
+                    <Badge tone="neutral">{agentToolLabel(tool)}</Badge>
                   </li>
                 ))}
               </ul>
@@ -157,7 +157,7 @@ export function AgentDetailModal({
               <ul className="mt-2 flex flex-wrap gap-2">
                 {sections.peers.map((peer) => (
                   <li key={peer}>
-                    <Badge tone="neutral">{formatLabel(peer)}</Badge>
+                    <Badge tone="neutral">{agentDisplayName(peer)}</Badge>
                   </li>
                 ))}
               </ul>
@@ -185,7 +185,7 @@ export function AgentDetailModal({
                   onClose();
                 }}
               >
-                Open config
+                Edit prompt
               </Button>
             ) : null}
             <Button variant="ghost" size="sm" onClick={onClose}>

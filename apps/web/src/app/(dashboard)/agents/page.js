@@ -13,6 +13,19 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { featuresForAgent } from "@/lib/agents/agent-features";
 import {
+  AGENT_ROLE_OPTIONS,
+  activityMetaLabel,
+  activityRunLabel,
+  agentChannelLabel,
+  agentDisplayName,
+  agentRoleLabel,
+  agentStatusLabel,
+  memoryKeyLabel,
+  memoryValueLabel,
+  runModeLabel,
+  taskPriorityLabel,
+} from "@/lib/agents/labels";
+import {
   aiStatusSummary,
   connectionLabel,
 } from "@/lib/integrations/brand-labels";
@@ -259,6 +272,16 @@ export default function AgentsPage() {
     (t) => t.agent_id === selected?.id || t.agent_key === selected?.key,
   );
 
+  const channelPreview = (agent) =>
+    (agent.config?.channels || []).map(agentChannelLabel).filter(Boolean).join(", ") || "—";
+  const peerPreview = (agent) =>
+    (agent.config?.collaborates_with || [])
+      .map((peer) => agentDisplayName(peer, agents))
+      .filter(Boolean)
+      .join(", ");
+
+  const testModeLabel = runModeLabel(testResult?.mode);
+
   return (
     <DashboardShell
       title="AI agents"
@@ -316,6 +339,7 @@ export default function AgentsPage() {
           <div className="space-y-3">
             {agents.map((agent) => {
               const previewFeatures = featuresForAgent(agent).slice(0, 2);
+              const peers = peerPreview(agent);
               return (
               <div
                 key={agent.id}
@@ -335,8 +359,10 @@ export default function AgentsPage() {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="ops-section-title">{agent.name}</h2>
-                  <Badge tone={agent.status === "active" ? "success" : "warning"}>{agent.status}</Badge>
-                  <Badge tone="neutral">{agent.role}</Badge>
+                  <Badge tone={agent.status === "active" ? "success" : "warning"}>
+                    {agentStatusLabel(agent.status)}
+                  </Badge>
+                  <Badge tone="neutral">{agentRoleLabel(agent.role)}</Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted">{agent.description}</p>
                 {previewFeatures.length ? (
@@ -349,10 +375,8 @@ export default function AgentsPage() {
                   </ul>
                 ) : null}
                 <p className="mt-2 text-xs text-muted">
-                  Channels: {(agent.config?.channels || []).join(", ") || "—"}
-                  {(agent.config?.collaborates_with || []).length
-                    ? ` · Peers: ${agent.config.collaborates_with.join(", ")}`
-                    : ""}
+                  Channels: {channelPreview(agent)}
+                  {peers ? ` · Peers: ${peers}` : ""}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
@@ -388,11 +412,20 @@ export default function AgentsPage() {
                 value={agentForm.name}
                 onChange={(e) => setAgentForm((f) => ({ ...f, name: e.target.value }))}
               />
-              <Input
-                label="Role"
-                value={agentForm.role}
-                onChange={(e) => setAgentForm((f) => ({ ...f, role: e.target.value }))}
-              />
+              <label className="block text-sm">
+                <span className="mb-1.5 block text-[13px] font-medium text-ink">Role</span>
+                <select
+                  className="ops-field h-10 px-3"
+                  value={agentForm.role}
+                  onChange={(e) => setAgentForm((f) => ({ ...f, role: e.target.value }))}
+                >
+                  {AGENT_ROLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <Input
                 label="Description"
                 value={agentForm.description}
@@ -416,7 +449,7 @@ export default function AgentsPage() {
             {selected ? (
               <div className="surface-card space-y-4 p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="ops-section-title">{selected.name} config</h3>
+                  <h3 className="ops-section-title">{selected.name}</h3>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -443,7 +476,7 @@ export default function AgentsPage() {
                   hint={
                     llm?.status === "live" || llm?.has_credentials
                       ? "Dry run uses the connected AI path."
-                      : "Without an AI key, dry runs stay on local assistance."
+                      : "Without an AI connection, dry runs stay on local assistance."
                   }
                 />
                 <div className="ops-actions">
@@ -451,7 +484,7 @@ export default function AgentsPage() {
                     {busy === "test" ? "Running…" : "Test run (solo)"}
                   </Button>
                   <Button size="sm" disabled={busy === "collab"} onClick={() => runTest({ collaborate: true })}>
-                    {busy === "collab" ? "Collaborating…" : "Collaborate (shared memory)"}
+                    {busy === "collab" ? "Collaborating…" : "Collaborate with team"}
                   </Button>
                 </div>
                 {testResult ? (
@@ -473,11 +506,19 @@ export default function AgentsPage() {
                       <p className="text-xs">
                         Collaboration steps:{" "}
                         {(testResult.steps || [])
-                          .map((s) => `${s.agent_name || s.agent_key}:${s.step}`)
+                          .map((s) => {
+                            const who =
+                              s.agent_name ||
+                              agentDisplayName(s.agent_key || s.agent, agents);
+                            const step = String(s.step || s.purpose || "step")
+                              .replace(/[_-]+/g, " ")
+                              .trim();
+                            return `${who}: ${step}`;
+                          })
                           .join(" → ")}
                       </p>
                     ) : null}
-                    {testResult.mode ? <p className="text-xs">Mode: {testResult.mode}</p> : null}
+                    {testModeLabel ? <p className="text-xs">Mode: {testModeLabel}</p> : null}
                   </div>
                 ) : null}
               </div>
@@ -522,8 +563,10 @@ export default function AgentsPage() {
                       <li key={task.id} className="rounded-md border border-line px-3 py-2 text-xs">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium text-ink">{task.title}</span>
-                          <Badge tone="neutral">{task.priority}</Badge>
-                          <Badge tone={task.status === "done" ? "success" : "warning"}>{task.status}</Badge>
+                          <Badge tone="neutral">{taskPriorityLabel(task.priority)}</Badge>
+                          <Badge tone={task.status === "done" ? "success" : "warning"}>
+                            {agentStatusLabel(task.status)}
+                          </Badge>
                         </div>
                         {task.description ? <p className="mt-1 text-muted">{task.description}</p> : null}
                       </li>
@@ -536,24 +579,24 @@ export default function AgentsPage() {
             ) : null}
 
             <div className="surface-card p-5">
-              <h3 className="ops-section-title">Shared memory / kv</h3>
+              <h3 className="ops-section-title">Team context</h3>
               <p className="mt-1 text-sm text-muted">
-                Team context every agent can read and write during collaboration.
+                Notes the team shares while collaborating.
               </p>
               <div className="mt-3 max-h-56 space-y-2 overflow-auto">
                 {memory.length === 0 ? (
-                  <p className="text-xs text-muted">No shared keys yet.</p>
+                  <p className="text-xs text-muted">No shared notes yet.</p>
                 ) : (
                   memory.slice(0, 12).map((row) => (
                     <div key={row.key} className="rounded-md border border-line px-3 py-2 text-xs">
                       <div className="flex justify-between gap-2">
-                        <span className="font-medium text-ink">{row.key}</span>
-                        <span className="text-muted">{row.written_by || "system"}</span>
+                        <span className="font-medium text-ink">{memoryKeyLabel(row.key)}</span>
+                        <span className="text-muted">
+                          {agentDisplayName(row.written_by || "system", agents)}
+                        </span>
                       </div>
-                      <p className="mt-1 line-clamp-2 text-muted">
-                        {typeof row.value === "string"
-                          ? row.value
-                          : JSON.stringify(row.value)}
+                      <p className="mt-1 line-clamp-3 text-muted">
+                        {memoryValueLabel(row.value)}
                       </p>
                     </div>
                   ))
@@ -568,21 +611,26 @@ export default function AgentsPage() {
                 {activity.metrics?.open_tasks ?? tasks.filter((t) => t.status === "open").length}
               </p>
               <div className="mt-3 max-h-72 space-y-2 overflow-auto">
-                {(activity.data || []).slice(0, 12).map((run) => (
-                  <div key={run.id} className="rounded-md border border-line px-3 py-2 text-xs">
-                    <div className="flex justify-between gap-2">
-                      <span>
-                        {run.agent_key || run.agent} · {run.purpose || run.event}
-                      </span>
-                      <Badge tone={run.status === "completed" || run.status === "active" ? "success" : "warning"}>
-                        {run.status || run.event}
-                      </Badge>
+                {(activity.data || []).slice(0, 12).map((run) => {
+                  const meta = activityMetaLabel(run);
+                  return (
+                    <div key={run.id} className="rounded-md border border-line px-3 py-2 text-xs">
+                      <div className="flex justify-between gap-2">
+                        <span>{activityRunLabel(run, agents)}</span>
+                        <Badge
+                          tone={
+                            run.status === "completed" || run.status === "active"
+                              ? "success"
+                              : "warning"
+                          }
+                        >
+                          {agentStatusLabel(run.status || run.event)}
+                        </Badge>
+                      </div>
+                      {meta ? <p className="mt-1 text-muted">{meta}</p> : null}
                     </div>
-                    <p className="mt-1 text-muted">
-                      {run.provider} · {run.channel}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
