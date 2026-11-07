@@ -942,6 +942,7 @@ export async function dispatchV1(method, segments, request, body) {
             title: product.title,
             size: variant.size || null,
             color: variant.color || null,
+            color_hex: variant.color_hex || null,
             sku: variant.sku || product.sku,
             availability_status: product.availability_status,
             inventory_quantity: variant.inventory_quantity,

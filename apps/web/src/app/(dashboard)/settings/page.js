@@ -245,7 +245,7 @@ export default function SettingsPage() {
           ai_disclosure: bg.ai_disclosure || "",
         });
       }
-      setNotice("Greetings saved. Customer messages use this plain text.");
+      setNotice("Automated greetings saved. First replies use this plain text.");
     } catch (err) {
       setError(err.message || "Failed to save greetings");
     } finally {
@@ -462,10 +462,16 @@ export default function SettingsPage() {
           <section id="greetings" className="surface-card scroll-mt-24 p-5">
             <div className="ops-card-header">
               <div className="min-w-0">
-                <h2 className="font-display text-2xl">Greetings</h2>
+                <h2 className="font-display text-2xl">Automated greetings</h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted">
-                  Plain text only — used on first customer messages, follow-ups, invoices, and
-                  receipts. Edit the words customers see; no codes or placeholders.
+                  This is the only place to edit the plain-text first reply and warm greetings
+                  customers see on Instagram, WhatsApp, Messenger, and other channels — plus
+                  invoices and receipts. Do not use Channel templates for this; templates are
+                  only for approved Meta WhatsApp campaign message bodies.{" "}
+                  <Link href="/templates" className="text-brown-dark underline">
+                    Open channel templates
+                  </Link>
+                  .
                 </p>
               </div>
             </div>
@@ -547,7 +553,7 @@ export default function SettingsPage() {
               />
               <div className="ops-actions">
                 <Button type="submit" disabled={busy} size="sm">
-                  Save greetings
+                  Save automated greetings
                 </Button>
               </div>
             </form>
@@ -559,8 +565,9 @@ export default function SettingsPage() {
                 <h2 className="font-display text-2xl">Brand address & contact</h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted">
                   Shared footer for AI replies on Instagram, Messenger, WhatsApp and other channels,
-                  plus blank invoice address fields. Edit greetings in the section above. Saving an
-                  invoice with a custom address also updates this contact.
+                  plus blank invoice address fields. First-reply greetings are edited in Automated
+                  greetings above — not in Channel templates. Saving an invoice with a custom
+                  address also updates this contact.
                 </p>
               </div>
             </div>

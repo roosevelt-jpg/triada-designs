@@ -8,6 +8,7 @@
  * @typedef {{
  *   size: string,
  *   color: string,
+ *   color_hex: string | null,
  *   sku: string | null,
  *   inventory_quantity: number | null,
  *   price: number | null,
@@ -74,9 +75,17 @@ export function normalizeStockVariants(raw) {
       r.shopify_variant_id != null && String(r.shopify_variant_id).trim()
         ? String(r.shopify_variant_id).trim()
         : null;
+    let colorHex = null;
+    const hexRaw = r.color_hex ?? r.hex;
+    if (typeof hexRaw === "string" && /^#?[0-9a-fA-F]{3,8}$/.test(hexRaw.trim())) {
+      colorHex = hexRaw.trim().startsWith("#")
+        ? hexRaw.trim().toUpperCase()
+        : `#${hexRaw.trim().toUpperCase()}`;
+    }
     out.push({
       size,
       color,
+      color_hex: colorHex,
       sku,
       inventory_quantity: Number.isFinite(qty) ? qty : null,
       price: Number.isFinite(price) ? price : null,
@@ -124,6 +133,7 @@ export function expandVariantMatrix(input = {}) {
         prior || {
           size,
           color,
+          color_hex: null,
           sku: null,
           inventory_quantity: null,
           price: null,
@@ -234,6 +244,18 @@ export function mergeStockVariantsIntoMetadata(metadata, input = {}) {
   else if (colors.length > 1) specs.color = colors.join(", ");
   specs.size_options = sizes;
   specs.color_options = colors;
+  const colorSwatches = variants
+    .filter((v) => v.color && v.color_hex)
+    .map((v) => ({ name: v.color, hex: v.color_hex }));
+  if (colorSwatches.length) {
+    /** @type {Map<string, { name: string, hex: string }>} */
+    const byName = new Map();
+    for (const sw of colorSwatches) {
+      byName.set(sw.name.toLowerCase(), { name: sw.name, hex: /** @type {string} */ (sw.hex) });
+    }
+    base.color_swatches = [...byName.values()];
+    specs.color_swatches = [...byName.values()];
+  }
   const total = sumVariantInventory(variants);
   if (total != null) {
     base.inventory_quantity = total;

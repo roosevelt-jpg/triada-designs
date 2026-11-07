@@ -26,6 +26,9 @@ import {
   productPhotoUrls,
 } from "@/lib/commerce/product-specs";
 import {
+  normalizeJewelleryColors,
+} from "@/lib/commerce/jewellery-colors";
+import {
   extractProductStockVariants,
   mergeStockVariantsIntoMetadata,
   optionListsFromVariants,
@@ -53,8 +56,9 @@ const EMPTY_FORM = {
   barcode: "",
   inventory_quantity: "",
   size_options: "",
-  color_options: "",
-  /** @type {Array<{ size: string, color: string, sku: string | null, inventory_quantity: number | null }>} */
+  /** @type {Array<{ name: string, hex: string }>} */
+  color_options: [],
+  /** @type {Array<{ size: string, color: string, color_hex?: string | null, sku: string | null, inventory_quantity: number | null }>} */
   stock_variants: [],
   availability_status: "in_stock_snapshot",
   approved_claims: "",
@@ -209,6 +213,16 @@ export default function ProductsPage() {
       metalVariants.find((v) => /gold/i.test(v.metal))?.price ?? null;
     const stockVariants = extractProductStockVariants(item);
     const lists = optionListsFromVariants(stockVariants);
+    const meta =
+      item?.metadata && typeof item.metadata === "object" ? item.metadata : {};
+    const colorSwatches = normalizeJewelleryColors(
+      meta.color_swatches ||
+        meta.specs?.color_swatches ||
+        stockVariants.map((v) => ({
+          name: v.color,
+          hex: v.color_hex || "#C4A882",
+        })),
+    );
     setEditingId(item.id);
     setForm({
       mode: bundle?.is_bundle ? "bundle" : "single",
@@ -229,7 +243,9 @@ export default function ProductsPage() {
       barcode: metaString(item, "barcode"),
       inventory_quantity: metaNumber(item, "inventory_quantity"),
       size_options: lists.sizes.join(", "),
-      color_options: lists.colors.join(", "),
+      color_options: colorSwatches.length
+        ? colorSwatches
+        : normalizeJewelleryColors(lists.colors),
       stock_variants: stockVariants,
       availability_status: item.availability_status || "in_stock_snapshot",
       approved_claims: Array.isArray(item.approved_claims)
@@ -424,10 +440,22 @@ export default function ProductsPage() {
         : { is_bundle: false },
     );
     if (!isBundle) {
+      const colorNames = normalizeJewelleryColors(form.color_options).map(
+        (c) => c.name,
+      );
+      const variantsWithHex = (form.stock_variants || []).map((row) => {
+        const match = normalizeJewelleryColors(form.color_options).find(
+          (c) => c.name.toLowerCase() === String(row.color || "").toLowerCase(),
+        );
+        return {
+          ...row,
+          color_hex: match?.hex || row.color_hex || null,
+        };
+      });
       metadata = mergeStockVariantsIntoMetadata(metadata, {
         sizes: form.size_options,
-        colors: form.color_options,
-        variants: form.stock_variants,
+        colors: colorNames,
+        variants: variantsWithHex,
       });
     }
 
@@ -783,10 +811,10 @@ export default function ProductsPage() {
             {form.mode === "single" ? (
               <ProductVariantsField
                 sizesText={form.size_options}
-                colorsText={form.color_options}
+                colors={form.color_options}
                 variants={form.stock_variants}
                 onSizesChange={(text) => updateField("size_options", text)}
-                onColorsChange={(text) => updateField("color_options", text)}
+                onColorsChange={(next) => updateField("color_options", next)}
                 onVariantsChange={(rows) => updateField("stock_variants", rows)}
               />
             ) : null}

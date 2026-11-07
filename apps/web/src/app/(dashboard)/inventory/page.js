@@ -167,7 +167,22 @@ export default function InventoryPage() {
                       <td className="px-4 py-3 text-muted">{row.size || "—"}</td>
                     ) : null}
                     {hasSizeColor ? (
-                      <td className="px-4 py-3 text-muted">{row.color || "—"}</td>
+                      <td className="px-4 py-3 text-muted">
+                        {row.color ? (
+                          <span className="inline-flex items-center gap-2">
+                            {row.color_hex ? (
+                              <span
+                                className="inline-block h-4 w-4 border border-line"
+                                style={{ backgroundColor: row.color_hex }}
+                                aria-hidden
+                              />
+                            ) : null}
+                            {row.color}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                     ) : null}
                     <td className="px-4 py-3 text-muted">{row.sku || "—"}</td>
                     <td className="px-4 py-3">

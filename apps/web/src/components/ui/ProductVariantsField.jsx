@@ -2,6 +2,11 @@
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { JewelleryColorPicker } from "@/components/ui/JewelleryColorPicker";
+import {
+  jewelleryColorNames,
+  normalizeJewelleryColors,
+} from "@/lib/commerce/jewellery-colors";
 import {
   expandVariantMatrix,
   normalizeOptionValues,
@@ -10,21 +15,23 @@ import {
 } from "@/lib/commerce/product-variants";
 
 /**
- * Plain Size / Color stock editor — no Shopify option JSON visible.
+ * Size + jeweller colour stock editor — no Shopify option JSON visible.
  * @param {{
  *   sizesText: string,
- *   colorsText: string,
+ *   colors: Array<{ name: string, hex: string }>,
  *   variants: Array<{
  *     size: string,
  *     color: string,
+ *     color_hex?: string | null,
  *     sku: string | null,
  *     inventory_quantity: number | null,
  *   }>,
  *   onSizesChange: (text: string) => void,
- *   onColorsChange: (text: string) => void,
+ *   onColorsChange: (colors: Array<{ name: string, hex: string }>) => void,
  *   onVariantsChange: (rows: Array<{
  *     size: string,
  *     color: string,
+ *     color_hex?: string | null,
  *     sku: string | null,
  *     inventory_quantity: number | null,
  *   }>) => void,
@@ -32,21 +39,31 @@ import {
  */
 export function ProductVariantsField({
   sizesText,
-  colorsText,
+  colors,
   variants,
   onSizesChange,
   onColorsChange,
   onVariantsChange,
 }) {
   const rows = normalizeStockVariants(variants);
+  const colorList = normalizeJewelleryColors(colors);
 
-  function rebuild(nextSizesText, nextColorsText, existing = rows) {
-    const next = expandVariantMatrix({
+  function rebuild(nextSizesText, nextColors, existing = rows) {
+    const names = jewelleryColorNames(nextColors);
+    const withHex = expandVariantMatrix({
       sizes: nextSizesText,
-      colors: nextColorsText,
+      colors: names,
       existing,
+    }).map((row) => {
+      const match = nextColors.find(
+        (c) => c.name.toLowerCase() === String(row.color || "").toLowerCase(),
+      );
+      return {
+        ...row,
+        color_hex: match?.hex || row.color_hex || null,
+      };
     });
-    onVariantsChange(next);
+    onVariantsChange(withHex);
   }
 
   function updateRow(index, patch) {
@@ -55,39 +72,33 @@ export function ProductVariantsField({
   }
 
   function applyLists() {
-    rebuild(sizesText, colorsText, rows);
+    rebuild(sizesText, colorList, rows);
+  }
+
+  function handleColorsChange(nextColors) {
+    onColorsChange(nextColors);
+    rebuild(sizesText, nextColors, rows);
   }
 
   const lists = optionListsFromVariants(rows);
   const showSize = Boolean(sizesText.trim() || lists.sizes.length);
-  const showColor = Boolean(colorsText.trim() || lists.colors.length);
+  const showColor = Boolean(colorList.length || lists.colors.length);
 
   return (
-    <div className="md:col-span-2 space-y-3">
-      <div className="grid gap-4 md:grid-cols-2">
-        <Input
-          label="Sizes"
-          name="size_options"
-          value={sizesText}
-          onChange={(e) => {
-            onSizesChange(e.target.value);
-          }}
-          onBlur={applyLists}
-          placeholder="EU 54, EU 56, US 7"
-          hint="Separate with commas. Each size can have its own stock."
-        />
-        <Input
-          label="Colors"
-          name="color_options"
-          value={colorsText}
-          onChange={(e) => {
-            onColorsChange(e.target.value);
-          }}
-          onBlur={applyLists}
-          placeholder="Gold, Silver, Rose"
-          hint="Separate with commas. Combines with sizes for stock rows."
-        />
-      </div>
+    <div className="md:col-span-2 space-y-4">
+      <Input
+        label="Sizes"
+        name="size_options"
+        value={sizesText}
+        onChange={(e) => {
+          onSizesChange(e.target.value);
+        }}
+        onBlur={applyLists}
+        placeholder="EU 54, EU 56, US 7"
+        hint="Separate with commas. Each size can have its own stock."
+      />
+
+      <JewelleryColorPicker colors={colorList} onChange={handleColorsChange} />
 
       {rows.length ? (
         <div className="overflow-x-auto rounded-sm border border-line">
@@ -101,62 +112,79 @@ export function ProductVariantsField({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, index) => (
-                <tr key={`${row.size}-${row.color}-${index}`} className="border-b border-line/70">
-                  {showSize ? (
-                    <td className="px-3 py-2 text-ink">{row.size || "—"}</td>
-                  ) : null}
-                  {showColor ? (
-                    <td className="px-3 py-2 text-ink">{row.color || "—"}</td>
-                  ) : null}
-                  <td className="px-3 py-2">
-                    <Input
-                      name={`variant-qty-${index}`}
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={
-                        row.inventory_quantity == null
-                          ? ""
-                          : String(row.inventory_quantity)
-                      }
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        updateRow(index, {
-                          inventory_quantity:
-                            raw === ""
-                              ? null
-                              : Math.max(0, Math.floor(Number(raw)) || 0),
-                        });
-                      }}
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <Input
-                      name={`variant-sku-${index}`}
-                      value={row.sku || ""}
-                      onChange={(e) =>
-                        updateRow(index, {
-                          sku: e.target.value.trim() || null,
-                        })
-                      }
-                      placeholder="Optional"
-                    />
-                  </td>
-                </tr>
-              ))}
+              {rows.map((row, index) => {
+                const hex =
+                  row.color_hex ||
+                  colorList.find(
+                    (c) => c.name.toLowerCase() === String(row.color || "").toLowerCase(),
+                  )?.hex;
+                return (
+                  <tr key={`${row.size}-${row.color}-${index}`} className="border-b border-line/70">
+                    {showSize ? (
+                      <td className="px-3 py-2 text-ink">{row.size || "—"}</td>
+                    ) : null}
+                    {showColor ? (
+                      <td className="px-3 py-2 text-ink">
+                        <span className="inline-flex items-center gap-2">
+                          {hex ? (
+                            <span
+                              className="inline-block h-4 w-4 border border-line"
+                              style={{ backgroundColor: hex }}
+                              aria-hidden
+                            />
+                          ) : null}
+                          {row.color || "—"}
+                        </span>
+                      </td>
+                    ) : null}
+                    <td className="px-3 py-2">
+                      <Input
+                        name={`variant-qty-${index}`}
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={
+                          row.inventory_quantity == null
+                            ? ""
+                            : String(row.inventory_quantity)
+                        }
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          updateRow(index, {
+                            inventory_quantity:
+                              raw === ""
+                                ? null
+                                : Math.max(0, Math.floor(Number(raw)) || 0),
+                          });
+                        }}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <Input
+                        name={`variant-sku-${index}`}
+                        value={row.sku || ""}
+                        onChange={(e) =>
+                          updateRow(index, {
+                            sku: e.target.value.trim() || null,
+                          })
+                        }
+                        placeholder="Optional"
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       ) : (
         <p className="text-sm text-muted">
-          Add sizes and/or colors, then set stock for each combination. Saves sync to Shopify
+          Add sizes and/or colours, then set stock for each combination. Saves sync to Shopify
           when Connected.
         </p>
       )}
 
-      {normalizeOptionValues(sizesText).length ||
-      normalizeOptionValues(colorsText).length ? (
+      {normalizeOptionValues(sizesText).length || colorList.length ? (
         <Button type="button" size="sm" variant="secondary" onClick={applyLists}>
           Refresh stock rows
         </Button>

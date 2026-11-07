@@ -182,9 +182,14 @@ export default function ChannelTemplatesPage() {
   return (
     <DashboardShell
       title="Channel templates"
-      description="Create, approve, and publish message and post templates per platform."
+      description="Meta WhatsApp and other platform campaign message bodies — approve and publish here. Automated first replies and warm greetings are edited only under Settings → Automated greetings, not on this page."
       actions={
         <div className="ops-actions">
+          <Link href="/settings#greetings">
+            <Button size="sm" variant="secondary">
+              Automated greetings
+            </Button>
+          </Link>
           <Link href="/integrations/meta">
             <Button size="sm" variant="secondary">
               WhatsApp Cloud
@@ -291,12 +296,15 @@ export default function ChannelTemplatesPage() {
                   onChange={(category) => setForm((f) => ({ ...f, category }))}
                 />
                 <label className="block space-y-1.5">
-                  <span className="block text-[13px] font-medium text-ink">Body</span>
+                  <span className="block text-[13px] font-medium text-ink">Message body</span>
                   <textarea
                     className="ops-field min-h-[120px] px-3 py-2"
                     value={form.body}
                     onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
                   />
+                  <span className="block text-xs text-muted">
+                    Campaign / Meta template copy only — not the automated first reply.
+                  </span>
                 </label>
                 <div className="ops-actions">
                   <Button size="sm" disabled={!!busy} onClick={saveSelected}>
@@ -360,13 +368,16 @@ export default function ChannelTemplatesPage() {
                 onChange={(category) => setForm((f) => ({ ...f, category }))}
               />
               <label className="block space-y-1.5">
-                <span className="block text-[13px] font-medium text-ink">Body</span>
+                <span className="block text-[13px] font-medium text-ink">Message body</span>
                 <textarea
                   required
                   className="ops-field min-h-[100px] px-3 py-2"
                   value={form.body}
                   onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
                 />
+                <span className="block text-xs text-muted">
+                  For Meta WhatsApp and channel campaigns. Automated first replies live in Settings.
+                </span>
               </label>
               <Button type="submit" size="sm" disabled={busy === "create"}>
                 {form.platform === "whatsapp"

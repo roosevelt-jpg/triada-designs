@@ -538,7 +538,8 @@ export default function MetaIntegrationsPage() {
               <div>
                 <h2 className="font-display text-2xl">WhatsApp templates</h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted">
-                  Create and edit campaign templates, then submit for approval.
+                  Meta campaign message bodies for WhatsApp. Automated first replies and warm
+                  greetings are edited under Settings → Automated greetings — not here.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
