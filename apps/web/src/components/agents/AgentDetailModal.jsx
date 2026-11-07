@@ -185,7 +185,7 @@ export function AgentDetailModal({
                   onClose();
                 }}
               >
-                Edit prompt
+                Edit instructions
               </Button>
             ) : null}
             <Button variant="ghost" size="sm" onClick={onClose}>

@@ -431,7 +431,7 @@ export default function AgentsPage() {
                 onChange={(e) => setAgentForm((f) => ({ ...f, description: e.target.value }))}
               />
               <label className="block text-sm">
-                <span className="mb-1.5 block text-[13px] font-medium text-ink">System prompt</span>
+                <span className="mb-1.5 block text-[13px] font-medium text-ink">Agent instructions</span>
                 <textarea
                   className="ops-field min-h-[80px] px-3 py-2"
                   value={agentForm.system_prompt}
@@ -458,7 +458,7 @@ export default function AgentsPage() {
                   </Button>
                 </div>
                 <label className="block text-sm">
-                  <span className="mb-1.5 block text-[13px] font-medium text-ink">System prompt</span>
+                  <span className="mb-1.5 block text-[13px] font-medium text-ink">Agent instructions</span>
                   <textarea
                     className="ops-field min-h-[120px] px-3 py-2"
                     value={prompt}
@@ -466,7 +466,7 @@ export default function AgentsPage() {
                   />
                 </label>
                 <Button size="sm" disabled={busy === "prompt"} onClick={savePrompt}>
-                  Save prompt
+                  Save instructions
                 </Button>
                 <Input
                   label="Test message"

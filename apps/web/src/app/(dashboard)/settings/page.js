@@ -30,6 +30,18 @@ export default function SettingsPage() {
   const [addressLine, setAddressLine] = useState("");
   const [opsEmail, setOpsEmail] = useState("");
   const [phones, setPhones] = useState("");
+  const [greetings, setGreetings] = useState({
+    default: "",
+    first_touch: "",
+    follow_up: "",
+    thank_you: "",
+    after_sale: "",
+    invoice: "",
+    receipt: "",
+    first_message_body: "",
+    language_preference_question: "",
+    ai_disclosure: "",
+  });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -60,6 +72,19 @@ export default function SettingsPage() {
       setAddressLine(bc.address_line || "");
       setOpsEmail(bc.ops_email || "");
       setPhones(bc.phones || "");
+      const bg = data.brand_greetings || {};
+      setGreetings({
+        default: bg.default || "",
+        first_touch: bg.first_touch || "",
+        follow_up: bg.follow_up || "",
+        thank_you: bg.thank_you || "",
+        after_sale: bg.after_sale || "",
+        invoice: bg.invoice || "",
+        receipt: bg.receipt || "",
+        first_message_body: bg.first_message_body || "",
+        language_preference_question: bg.language_preference_question || "",
+        ai_disclosure: bg.ai_disclosure || "",
+      });
       setSystemNow(formatDateTime(nowDate()));
     } catch (err) {
       setError(err.message || "Failed to load settings");
@@ -183,10 +208,59 @@ export default function SettingsPage() {
     }
   }
 
+  async function saveBrandGreetings(e) {
+    e.preventDefault();
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      const data = await apiFetch("/v1/settings/brand-greetings", {
+        method: "PUT",
+        body: {
+          default: greetings.default.trim(),
+          first_touch: greetings.first_touch.trim(),
+          follow_up: greetings.follow_up.trim(),
+          thank_you: greetings.thank_you.trim(),
+          after_sale: greetings.after_sale.trim(),
+          invoice: greetings.invoice.trim(),
+          receipt: greetings.receipt.trim(),
+          first_message_body: greetings.first_message_body.trim(),
+          language_preference_question:
+            greetings.language_preference_question.trim(),
+          ai_disclosure: greetings.ai_disclosure.trim(),
+        },
+      });
+      if (data.brand_greetings) {
+        const bg = data.brand_greetings;
+        setGreetings({
+          default: bg.default || "",
+          first_touch: bg.first_touch || "",
+          follow_up: bg.follow_up || "",
+          thank_you: bg.thank_you || "",
+          after_sale: bg.after_sale || "",
+          invoice: bg.invoice || "",
+          receipt: bg.receipt || "",
+          first_message_body: bg.first_message_body || "",
+          language_preference_question: bg.language_preference_question || "",
+          ai_disclosure: bg.ai_disclosure || "",
+        });
+      }
+      setNotice("Greetings saved. Customer messages use this plain text.");
+    } catch (err) {
+      setError(err.message || "Failed to save greetings");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function updateGreeting(name, value) {
+    setGreetings((prev) => ({ ...prev, [name]: value }));
+  }
+
   return (
     <DashboardShell
       title="Settings"
-      description="Profile photo for admin replies, brand address, live support contacts, timezone, and emergency controls."
+      description="Profile photo for admin replies, greetings, brand address, live support contacts, timezone, and emergency controls."
     >
       {loading ? <Skeleton className="h-40" /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -385,22 +459,108 @@ export default function SettingsPage() {
             </div>
           </section>
 
+          <section id="greetings" className="surface-card scroll-mt-24 p-5">
+            <div className="ops-card-header">
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl">Greetings</h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted">
+                  Plain text only — used on first customer messages, follow-ups, invoices, and
+                  receipts. Edit the words customers see; no codes or placeholders.
+                </p>
+              </div>
+            </div>
+            <form className="mt-4 max-w-xl space-y-4" onSubmit={saveBrandGreetings}>
+              <Input
+                label="Default greeting"
+                name="greeting_default"
+                value={greetings.default}
+                onChange={(e) => updateGreeting("default", e.target.value)}
+                placeholder="Warm greetings from Triada Designs,"
+              />
+              <Input
+                label="First message greeting"
+                name="greeting_first"
+                value={greetings.first_touch}
+                onChange={(e) => updateGreeting("first_touch", e.target.value)}
+                placeholder="Hello, and warm greetings from Triada Designs,"
+              />
+              <label className="block text-sm text-ink">
+                <span className="mb-1.5 block font-medium">First message body</span>
+                <textarea
+                  name="first_message_body"
+                  rows={2}
+                  value={greetings.first_message_body}
+                  onChange={(e) => updateGreeting("first_message_body", e.target.value)}
+                  className="ops-field w-full"
+                  placeholder="Thanks for writing Triada Designs…"
+                />
+              </label>
+              <label className="block text-sm text-ink">
+                <span className="mb-1.5 block font-medium">Language preference question</span>
+                <textarea
+                  name="language_preference_question"
+                  rows={2}
+                  value={greetings.language_preference_question}
+                  onChange={(e) =>
+                    updateGreeting("language_preference_question", e.target.value)
+                  }
+                  className="ops-field w-full"
+                  placeholder="Which language do you prefer to chat in?"
+                />
+              </label>
+              <Input
+                label="AI disclosure line"
+                name="ai_disclosure"
+                value={greetings.ai_disclosure}
+                onChange={(e) => updateGreeting("ai_disclosure", e.target.value)}
+                placeholder="I’m Triada’s AI Support — say if you’d like a person instead."
+              />
+              <Input
+                label="Follow-up greeting"
+                name="greeting_follow_up"
+                value={greetings.follow_up}
+                onChange={(e) => updateGreeting("follow_up", e.target.value)}
+              />
+              <Input
+                label="Thank-you greeting"
+                name="greeting_thank_you"
+                value={greetings.thank_you}
+                onChange={(e) => updateGreeting("thank_you", e.target.value)}
+              />
+              <Input
+                label="After-sale greeting"
+                name="greeting_after_sale"
+                value={greetings.after_sale}
+                onChange={(e) => updateGreeting("after_sale", e.target.value)}
+              />
+              <Input
+                label="Invoice greeting"
+                name="greeting_invoice"
+                value={greetings.invoice}
+                onChange={(e) => updateGreeting("invoice", e.target.value)}
+              />
+              <Input
+                label="Receipt greeting"
+                name="greeting_receipt"
+                value={greetings.receipt}
+                onChange={(e) => updateGreeting("receipt", e.target.value)}
+              />
+              <div className="ops-actions">
+                <Button type="submit" disabled={busy} size="sm">
+                  Save greetings
+                </Button>
+              </div>
+            </form>
+          </section>
+
           <section id="brand" className="surface-card scroll-mt-24 p-5">
             <div className="ops-card-header">
               <div className="min-w-0">
                 <h2 className="font-display text-2xl">Brand address & contact</h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted">
                   Shared footer for AI replies on Instagram, Messenger, WhatsApp and other channels,
-                  plus blank invoice address fields. Logo and warm greetings stay branded from{" "}
-                  <a
-                    href="https://triada-designs.com"
-                    className="text-brown-dark underline"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    triada-designs.com
-                  </a>
-                  . Saving an invoice with a custom address also updates this contact.
+                  plus blank invoice address fields. Edit greetings in the section above. Saving an
+                  invoice with a custom address also updates this contact.
                 </p>
               </div>
             </div>

@@ -12,6 +12,7 @@ import { resolvePublicAppUrl } from "@/lib/public-app-url";
  *   weight_grams: number | null,
  *   stone: string | null,
  *   size: string | null,
+ *   color: string | null,
  *   collection: string | null,
  *   compare_at_price: number | null,
  *   inventory_quantity: number | null,
@@ -271,6 +272,7 @@ export function extractProductSpecs(product = {}) {
     weight_grams: pickNumber("weight_grams", "weight"),
     stone: pickString("stone", "gemstone"),
     size: pickString("size", "ring_size"),
+    color: pickString("color", "colour", "finish"),
     collection: pickString("collection"),
     compare_at_price: pickNumber("compare_at_price"),
     inventory_quantity: pickNumber("inventory_quantity", "qty", "stock"),
@@ -328,6 +330,7 @@ export function mergeSpecsIntoMetadata(metadata = {}, specsInput = {}) {
   assignNumber("weight_grams", specsInput.weight_grams);
   assignString("stone", specsInput.stone);
   assignString("size", specsInput.size);
+  assignString("color", specsInput.color);
   assignString("collection", specsInput.collection);
   assignNumber("compare_at_price", specsInput.compare_at_price);
   assignNumber("inventory_quantity", specsInput.inventory_quantity);
@@ -412,6 +415,7 @@ export function specsDisplayRows(specs, product = {}) {
   }
   push("stone", "Stone", specs.stone);
   push("size", "Size", specs.size);
+  push("color", "Color", specs.color);
   push("barcode", "Barcode", specs.barcode);
 
   return rows;

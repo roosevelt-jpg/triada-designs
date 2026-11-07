@@ -11,6 +11,7 @@ import { CurrencySelect } from "@/components/ui/CurrencySelect";
 import { Input } from "@/components/ui/Input";
 import { ListSearch } from "@/components/ui/ListSearch";
 import { ProductPhotosField } from "@/components/ui/ProductPhotosField";
+import { ProductVariantsField } from "@/components/ui/ProductVariantsField";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api-client";
 import {
@@ -24,6 +25,12 @@ import {
   isSalePrice,
   productPhotoUrls,
 } from "@/lib/commerce/product-specs";
+import {
+  extractProductStockVariants,
+  mergeStockVariantsIntoMetadata,
+  optionListsFromVariants,
+  sumVariantInventory,
+} from "@/lib/commerce/product-variants";
 import { formatCurrency } from "@/lib/formatters";
 import { DEFAULT_CURRENCY } from "@/lib/locale/preferred-currency";
 
@@ -45,6 +52,10 @@ const EMPTY_FORM = {
   size: "",
   barcode: "",
   inventory_quantity: "",
+  size_options: "",
+  color_options: "",
+  /** @type {Array<{ size: string, color: string, sku: string | null, inventory_quantity: number | null }>} */
+  stock_variants: [],
   availability_status: "in_stock_snapshot",
   approved_claims: "",
   publish: true,
@@ -196,6 +207,8 @@ export default function ProductsPage() {
       metalVariants.find((v) => /silver/i.test(v.metal))?.price ?? null;
     const gold =
       metalVariants.find((v) => /gold/i.test(v.metal))?.price ?? null;
+    const stockVariants = extractProductStockVariants(item);
+    const lists = optionListsFromVariants(stockVariants);
     setEditingId(item.id);
     setForm({
       mode: bundle?.is_bundle ? "bundle" : "single",
@@ -215,6 +228,9 @@ export default function ProductsPage() {
       size: metaString(item, "size"),
       barcode: metaString(item, "barcode"),
       inventory_quantity: metaNumber(item, "inventory_quantity"),
+      size_options: lists.sizes.join(", "),
+      color_options: lists.colors.join(", "),
+      stock_variants: stockVariants,
       availability_status: item.availability_status || "in_stock_snapshot",
       approved_claims: Array.isArray(item.approved_claims)
         ? item.approved_claims.join(", ")
@@ -365,6 +381,9 @@ export default function ProductsPage() {
       (metalVariants.length === 1 ? metalVariants[0].metal : null) ||
       null;
 
+    const variantTotal = !isBundle
+      ? sumVariantInventory(form.stock_variants)
+      : null;
     const specs = {
       ...priorSpecs,
       category: form.category.trim() || (isBundle ? "Bundles" : "Jewellery"),
@@ -376,7 +395,11 @@ export default function ProductsPage() {
       size: form.size.trim() || null,
       barcode: form.barcode.trim() || null,
       inventory_quantity:
-        form.inventory_quantity === "" ? null : Number(form.inventory_quantity),
+        variantTotal != null
+          ? variantTotal
+          : form.inventory_quantity === ""
+            ? null
+            : Number(form.inventory_quantity),
       compare_at_price: suggestedCompare,
       photo_url,
       photo_urls,
@@ -400,6 +423,13 @@ export default function ProductsPage() {
           }
         : { is_bundle: false },
     );
+    if (!isBundle) {
+      metadata = mergeStockVariantsIntoMetadata(metadata, {
+        sizes: form.size_options,
+        colors: form.color_options,
+        variants: form.stock_variants,
+      });
+    }
 
     const payload = {
       title: form.title.trim(),
@@ -696,16 +726,23 @@ export default function ProductsPage() {
               onChange={(e) => updateField("collection", e.target.value)}
               placeholder={form.mode === "bundle" ? "Bundles" : "Salt & Spirit"}
             />
-            <Input
-              label="Inventory qty"
-              name="inventory_quantity"
-              type="number"
-              step="1"
-              min="0"
-              value={form.inventory_quantity}
-              onChange={(e) => updateField("inventory_quantity", e.target.value)}
-              placeholder="On-hand units"
-            />
+            {form.mode === "bundle" || form.stock_variants.length === 0 ? (
+              <Input
+                label="Inventory qty"
+                name="inventory_quantity"
+                type="number"
+                step="1"
+                min="0"
+                value={form.inventory_quantity}
+                onChange={(e) => updateField("inventory_quantity", e.target.value)}
+                placeholder="On-hand units"
+                hint={
+                  form.mode === "single"
+                    ? "Use Sizes and Colors below when stock differs by size or color."
+                    : undefined
+                }
+              />
+            ) : null}
             <Input
               label="Metal"
               name="metal"
@@ -734,13 +771,25 @@ export default function ProductsPage() {
               onChange={(e) => updateField("stone", e.target.value)}
               placeholder="Diamond, emerald…"
             />
-            <Input
-              label="Size"
-              name="size"
-              value={form.size}
-              onChange={(e) => updateField("size", e.target.value)}
-              placeholder="EU 54 / US 7"
-            />
+            {form.mode === "bundle" ? (
+              <Input
+                label="Size"
+                name="size"
+                value={form.size}
+                onChange={(e) => updateField("size", e.target.value)}
+                placeholder="EU 54 / US 7"
+              />
+            ) : null}
+            {form.mode === "single" ? (
+              <ProductVariantsField
+                sizesText={form.size_options}
+                colorsText={form.color_options}
+                variants={form.stock_variants}
+                onSizesChange={(text) => updateField("size_options", text)}
+                onColorsChange={(text) => updateField("color_options", text)}
+                onVariantsChange={(rows) => updateField("stock_variants", rows)}
+              />
+            ) : null}
             <Input
               label="Product URL"
               name="product_url"

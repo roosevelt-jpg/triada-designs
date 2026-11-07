@@ -114,6 +114,18 @@ export const WARM_GREETINGS_BY_LANG = {
   },
 };
 
+/** @type {Partial<typeof WARM_GREETINGS> | null} */
+let englishGreetingOverrides = null;
+
+/**
+ * Applied by Settings greeting store (avoids circular import).
+ * @param {Partial<typeof WARM_GREETINGS> | null | undefined} table
+ */
+export function setEnglishGreetingOverrides(table) {
+  englishGreetingOverrides =
+    table && typeof table === "object" ? { ...table } : null;
+}
+
 /**
  * @param {keyof typeof WARM_GREETINGS | string} [kind]
  * @param {{ customerName?: string, language?: string }} [opts]
@@ -123,6 +135,20 @@ export function warmGreeting(kind = "default", opts = {}) {
     .trim()
     .toLowerCase()
     .split(/[-_]/)[0];
+
+  // English admin Settings overrides (plain text) take precedence for en.
+  if ((lang === "en" || !lang) && englishGreetingOverrides) {
+    const key = /** @type {keyof typeof WARM_GREETINGS} */ (kind || "default");
+    const overridden = String(
+      englishGreetingOverrides[key] || englishGreetingOverrides.default || "",
+    ).trim();
+    if (overridden) {
+      const name = String(opts.customerName || "").trim();
+      if (!name) return overridden;
+      return overridden.replace(/[,،]$/, "") + ` ${name},`;
+    }
+  }
+
   const table =
     WARM_GREETINGS_BY_LANG[/** @type {keyof typeof WARM_GREETINGS_BY_LANG} */ (lang)] ||
     WARM_GREETINGS;

@@ -29,6 +29,12 @@ import {
   shopifyRemoteImageSrcs,
   specsDisplayRows,
 } from "./product-specs.js";
+import {
+  extractProductStockVariants,
+  hasSizeColorOptions,
+  toShopifySizeColorVariantRows,
+  variantOptionKey,
+} from "./product-variants.js";
 
 const DEFAULT_SHOP = "jwtjzw-nu.myshopify.com";
 const DEFAULT_API_VERSION = "2025-01";
@@ -302,6 +308,7 @@ export function buildShopifyMetafields(product, specs) {
  * @param {{
  *   variantId?: string | number | null,
  *   variantIdsByMetal?: Record<string, string | number>,
+ *   variantIdsBySizeColor?: Record<string, string | number>,
  *   includeMetafields?: boolean,
  * }} [opts]
  */
@@ -320,12 +327,16 @@ export function toShopifyProductPayload(product, opts = {}) {
         : null;
 
   const metalRows = pricedMetalVariants(bundle?.metal_variants || []);
+  const stockVariants = extractProductStockVariants(product);
+  const useSizeColor =
+    metalRows.length < 2 && hasSizeColorOptions(stockVariants);
   /** @type {Record<string, unknown>[]} */
   let variants;
   /** @type {Array<{ name: string, values: string[] }> | undefined} */
   let options;
 
   if (metalRows.length >= 2) {
+    // Bundles: Metal pricing options take precedence over Size/Color matrix.
     options = [{ name: "Metal", values: metalRows.map((row) => row.metal) }];
     variants = metalRows.map((row) => {
       /** @type {Record<string, unknown>} */
@@ -355,20 +366,43 @@ export function toShopifyProductPayload(product, opts = {}) {
       }
       return variant;
     });
+  } else if (useSizeColor) {
+    const built = toShopifySizeColorVariantRows({
+      product: { sku: product.sku, price: product.price },
+      variants: stockVariants,
+      compareAt,
+      weightGrams: specs.weight_grams,
+      barcode: specs.barcode,
+      variantIdsByKey: opts.variantIdsBySizeColor || {},
+    });
+    options = built.options;
+    variants = built.variants;
   } else {
     const singlePrice =
       metalRows.length === 1 && metalRows[0].price != null
         ? metalRows[0].price
         : product.price;
     const price = formatShopifyPrice(singlePrice);
+    const qtyRaw =
+      specs.inventory_quantity ??
+      product.metadata?.inventory_quantity ??
+      product.inventory_quantity;
+    const qty =
+      qtyRaw === null || qtyRaw === undefined || qtyRaw === ""
+        ? null
+        : Number(qtyRaw);
     /** @type {Record<string, unknown>} */
     const variant = {
       price,
       sku: product.sku ? String(product.sku) : undefined,
       barcode: specs.barcode || undefined,
-      inventory_management: null,
+      inventory_management:
+        qty != null && Number.isFinite(qty) ? "shopify" : null,
       requires_shipping: true,
     };
+    if (qty != null && Number.isFinite(qty)) {
+      variant.inventory_quantity = Math.max(0, Math.floor(qty));
+    }
     if (metalRows.length === 1) {
       variant.option1 = metalRows[0].metal;
       options = [{ name: "Metal", values: [metalRows[0].metal] }];
@@ -529,6 +563,8 @@ export async function upsertShopifyProduct(product) {
     let variantId = null;
     /** @type {Record<string, string | number>} */
     const variantIdsByMetal = {};
+    /** @type {Record<string, string | number>} */
+    const variantIdsBySizeColor = {};
     if (isRemoteId) {
       const current = await adminRequest(
         "GET",
@@ -542,13 +578,27 @@ export async function upsertShopifyProduct(product) {
         if (Array.isArray(variants)) {
           for (const remoteVariant of variants) {
             if (!remoteVariant || remoteVariant.id == null) continue;
-            const option =
+            const option1 =
               remoteVariant.option1 != null
                 ? String(remoteVariant.option1).trim()
                 : "";
-            if (!option) continue;
-            variantIdsByMetal[option] = remoteVariant.id;
-            variantIdsByMetal[option.toLowerCase()] = remoteVariant.id;
+            const option2 =
+              remoteVariant.option2 != null
+                ? String(remoteVariant.option2).trim()
+                : "";
+            if (option1) {
+              variantIdsByMetal[option1] = remoteVariant.id;
+              variantIdsByMetal[option1.toLowerCase()] = remoteVariant.id;
+            }
+            const key = variantOptionKey(option1, option2);
+            variantIdsBySizeColor[key] = remoteVariant.id;
+            if (option1 && !option2) {
+              // Size-only or Color-only: key is "size::" or "::color"
+              variantIdsBySizeColor[variantOptionKey(option1, "")] =
+                remoteVariant.id;
+              variantIdsBySizeColor[variantOptionKey("", option1)] =
+                remoteVariant.id;
+            }
           }
         }
       }
@@ -557,14 +607,21 @@ export async function upsertShopifyProduct(product) {
     const metalCount = pricedMetalVariants(
       extractProductBundle(product)?.metal_variants || [],
     ).length;
+    const sizeColorCount = extractProductStockVariants(product).length;
+    const useSizeColor = metalCount < 2 && sizeColorCount > 0;
     const payload = toShopifyProductPayload(product, {
-      variantId: isRemoteId && metalCount < 2 ? variantId : null,
+      variantId:
+        isRemoteId && metalCount < 2 && !useSizeColor ? variantId : null,
       variantIdsByMetal:
         isRemoteId && metalCount >= 2 && Object.keys(variantIdsByMetal).length
           ? variantIdsByMetal
           : isRemoteId && metalCount >= 2
             ? {}
             : undefined,
+      variantIdsBySizeColor:
+        isRemoteId && useSizeColor
+          ? variantIdsBySizeColor
+          : undefined,
       includeMetafields: !isRemoteId,
     });
 

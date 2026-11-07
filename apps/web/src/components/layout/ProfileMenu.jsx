@@ -176,6 +176,16 @@ export function ProfileMenu({ user, onLogout, canViewSettings = true }) {
                 <li>
                   <Link
                     role="menuitem"
+                    href="/settings#greetings"
+                    onClick={() => setOpen(false)}
+                    className="block px-3.5 py-2 pl-10 text-[13px] text-ink transition-colors duration-150 hover:bg-ivory"
+                  >
+                    Greetings
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    role="menuitem"
                     href="/settings#brand"
                     onClick={() => setOpen(false)}
                     className="block px-3.5 py-2 pl-10 text-[13px] text-ink transition-colors duration-150 hover:bg-ivory"

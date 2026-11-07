@@ -10,6 +10,13 @@ import {
   normalizeLangCode,
   SUPPORTED_CUSTOMER_LANGUAGES,
 } from "./detect-language";
+import {
+  DEFAULT_AI_DISCLOSURE,
+  DEFAULT_FIRST_MESSAGE_BODY,
+  DEFAULT_LANGUAGE_PREFERENCE_QUESTION,
+  getBrandGreetingSettings,
+  getBrandGreetingSync,
+} from "@/lib/brand/brand-greeting-settings";
 import { ensureBrandedOutboundText } from "@/lib/brand/wrap-message";
 import { patchConversation } from "@/lib/crm/conversations-store";
 import { getContact, upsertContacts } from "@/lib/crm/contacts-store";
@@ -65,8 +72,17 @@ const NAME_TO_CODE = {
   pl: "pl",
 };
 
-export const LANGUAGE_PREFERENCE_ASK_EN =
-  "Which language do you prefer to chat in? Reply with English, Arabic, Romanian, German, French, Russian, Spanish, Portuguese — or simply write in your preferred language.";
+/** Fallback constant — runtime prefers Settings plain-text override. */
+export const LANGUAGE_PREFERENCE_ASK_EN = DEFAULT_LANGUAGE_PREFERENCE_QUESTION;
+
+function firstContactCopy() {
+  const g = getBrandGreetingSync();
+  return {
+    body: g.first_message_body || DEFAULT_FIRST_MESSAGE_BODY,
+    ask: g.language_preference_question || DEFAULT_LANGUAGE_PREFERENCE_QUESTION,
+    disclose: g.ai_disclosure || DEFAULT_AI_DISCLOSURE,
+  };
+}
 
 const LOCKED_ACK = {
   en: "Perfect — we’ll continue in English. How can we help with Salt & Spirit or a custom piece today?",
@@ -282,13 +298,13 @@ export function isLanguageChoiceOnly(text) {
  */
 export async function draftFirstContactLanguageAsk(input = {}) {
   const started = Date.now();
-  const core = [
-    "Thanks for writing Triada Designs. How can we help with Salt & Spirit or a custom piece today?",
-    "",
-    LANGUAGE_PREFERENCE_ASK_EN,
-    "",
-    AI_DISCLOSE.en,
-  ].join("\n");
+  try {
+    await getBrandGreetingSettings();
+  } catch {
+    /* defaults via sync cache */
+  }
+  const copy = firstContactCopy();
+  const core = [copy.body, "", copy.ask, "", copy.disclose].join("\n");
 
   const branded = await ensureBrandedOutboundText(core, {
     greetingKind: "first_touch",

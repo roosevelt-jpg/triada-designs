@@ -75,13 +75,21 @@ export default function InventoryPage() {
     setError("");
     setNotice("");
     try {
+      /** @type {Record<string, unknown>} */
+      const body = {
+        product_id: row.product_id || row.id,
+        inventory_quantity: qty,
+      };
+      if (row.size) body.size = row.size;
+      if (row.color) body.color = row.color;
       const result = await apiFetch("/v1/inventory", {
         method: "PUT",
-        body: { product_id: row.id, inventory_quantity: qty },
+        body,
       });
+      const label = [row.title, row.size, row.color].filter(Boolean).join(" · ");
       setNotice(
         result.shopify_auto_synced
-          ? `Inventory for “${row.title}” set to ${qty} on Shopify.`
+          ? `Inventory for “${label}” set to ${qty} on Shopify.`
           : `Saved qty ${qty}.`,
       );
       await load();
@@ -92,10 +100,12 @@ export default function InventoryPage() {
     }
   }
 
+  const hasSizeColor = items.some((row) => row.size || row.color);
+
   return (
     <DashboardShell
       title="Inventory"
-      description="Set stock quantities per product. Saves sync to Shopify when Connected."
+      description="Set stock by product, size, and color. Saves sync to Shopify when Connected."
       actions={
         <div className="ops-actions">
           {shopify ? (
@@ -123,7 +133,7 @@ export default function InventoryPage() {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No products to stock"
-          description="Add products first, then set inventory quantities here."
+          description="Add products first, then set inventory quantities here. Add sizes and colors on the product to track stock per option."
         />
       ) : null}
 
@@ -133,6 +143,12 @@ export default function InventoryPage() {
             <thead className="border-b border-line bg-stone/40 text-[13px] text-muted">
               <tr>
                 <th className="px-4 py-3 font-medium">Product</th>
+                {hasSizeColor ? (
+                  <th className="px-4 py-3 font-medium">Size</th>
+                ) : null}
+                {hasSizeColor ? (
+                  <th className="px-4 py-3 font-medium">Color</th>
+                ) : null}
                 <th className="px-4 py-3 font-medium">SKU</th>
                 <th className="px-4 py-3 font-medium">Qty</th>
                 <th className="px-4 py-3 font-medium">Shopify</th>
@@ -147,6 +163,12 @@ export default function InventoryPage() {
                 return (
                   <tr key={row.id} className="border-b border-line/70">
                     <td className="px-4 py-3 font-medium text-ink">{row.title}</td>
+                    {hasSizeColor ? (
+                      <td className="px-4 py-3 text-muted">{row.size || "—"}</td>
+                    ) : null}
+                    {hasSizeColor ? (
+                      <td className="px-4 py-3 text-muted">{row.color || "—"}</td>
+                    ) : null}
                     <td className="px-4 py-3 text-muted">{row.sku || "—"}</td>
                     <td className="px-4 py-3">
                       <Input
@@ -163,7 +185,7 @@ export default function InventoryPage() {
                     <td className="px-4 py-3">
                       <Badge tone={syncTone(status)}>{syncLabel(status)}</Badge>
                       {row.shopify_product_id ? (
-                        <p className="mt-1 text-xs text-muted">#{row.shopify_product_id}</p>
+                        <p className="mt-1 text-xs text-muted">Synced product</p>
                       ) : (
                         <p className="mt-1 text-xs text-muted">Sync product first</p>
                       )}

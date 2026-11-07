@@ -185,6 +185,10 @@ import {
   saveBrandContactSettings,
 } from "@/lib/brand/brand-contact-settings";
 import {
+  getBrandGreetingSettings,
+  saveBrandGreetingSettings,
+} from "@/lib/brand/brand-greeting-settings";
+import {
   getAdminProfileSettings,
   saveAdminProfileSettings,
 } from "@/lib/agents/admin-profile-settings";
@@ -574,15 +578,18 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "settings" && m === "GET") {
-    const [humanHandoff, brandContact, adminProfile] = await Promise.all([
-      getHumanHandoffSettings(),
-      getBrandContactSettings(),
-      getAdminProfileSettings(),
-    ]);
+    const [humanHandoff, brandContact, brandGreetings, adminProfile] =
+      await Promise.all([
+        getHumanHandoffSettings(),
+        getBrandContactSettings(),
+        getBrandGreetingSettings(),
+        getAdminProfileSettings(),
+      ]);
     return jsonOk({
       workspace: { ...WORKSPACE, timezone: runtimeState.timezone },
       human_handoff: humanHandoff,
       brand_contact: brandContact,
+      brand_greetings: brandGreetings,
       admin_profile: adminProfile,
       source: "next_dual_run",
     });
@@ -624,6 +631,25 @@ export async function dispatchV1(method, segments, request, body) {
         : {};
     const brandContact = await saveBrandContactSettings(patch);
     return jsonOk({ brand_contact: brandContact, ok: true });
+  }
+
+  if (path === "settings/brand-greetings" && m === "GET") {
+    const brandGreetings = await getBrandGreetingSettings();
+    return jsonOk({ brand_greetings: brandGreetings, ok: true });
+  }
+
+  if (
+    path === "settings/brand-greetings" &&
+    (m === "PATCH" || m === "PUT" || m === "POST")
+  ) {
+    const patch =
+      body && typeof body === "object"
+        ? body.brand_greetings && typeof body.brand_greetings === "object"
+          ? body.brand_greetings
+          : body
+        : {};
+    const brandGreetings = await saveBrandGreetingSettings(patch);
+    return jsonOk({ brand_greetings: brandGreetings, ok: true });
   }
 
   if (path === "settings/profile" && m === "GET") {
@@ -732,6 +758,16 @@ export async function dispatchV1(method, segments, request, body) {
       });
     }
 
+    let brandGreetings = await getBrandGreetingSettings();
+    if (
+      body &&
+      typeof body === "object" &&
+      body.brand_greetings &&
+      typeof body.brand_greetings === "object"
+    ) {
+      brandGreetings = await saveBrandGreetingSettings(body.brand_greetings);
+    }
+
     let adminProfile = await getAdminProfileSettings();
     let channelSync = adminProfile.channel_sync;
     if (
@@ -761,6 +797,7 @@ export async function dispatchV1(method, segments, request, body) {
       workspace: { ...WORKSPACE, timezone: runtimeState.timezone },
       human_handoff: humanHandoff,
       brand_contact: brandContact,
+      brand_greetings: brandGreetings,
       admin_profile: adminProfile,
       channel_sync: channelSync,
       ok: true,
@@ -875,31 +912,66 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "inventory" && m === "GET") {
+    const { extractProductStockVariants, sumVariantInventory } = await import(
+      "@/lib/commerce/product-variants"
+    );
     const listed = await listProducts();
     const capabilities = await getShopifySyncCapabilities().catch(() => null);
-    const rows = listed.data.map((product) => {
+    /** @type {Record<string, unknown>[]} */
+    const rows = [];
+    for (const product of listed.data) {
       const meta =
         product.metadata && typeof product.metadata === "object"
           ? product.metadata
           : {};
       const specs =
         meta.specs && typeof meta.specs === "object" ? meta.specs : {};
+      const stockVariants = extractProductStockVariants(product);
       const qtyRaw =
         meta.inventory_quantity ??
         specs.inventory_quantity ??
         product.inventory_quantity;
-      return {
-        id: product.id,
-        title: product.title,
-        sku: product.sku,
-        availability_status: product.availability_status,
-        inventory_quantity:
-          qtyRaw == null || qtyRaw === "" ? null : Number(qtyRaw),
-        shopify_product_id: product.channel_sync?.shopify?.external_id || null,
-        shopify_inventory_sync: meta.shopify_inventory_sync || null,
-        channel_sync: product.channel_sync?.shopify || null,
-      };
-    });
+      const totalQty =
+        sumVariantInventory(stockVariants) ??
+        (qtyRaw == null || qtyRaw === "" ? null : Number(qtyRaw));
+      if (stockVariants.length) {
+        for (const variant of stockVariants) {
+          rows.push({
+            id: `${product.id}::${variant.size || ""}::${variant.color || ""}`,
+            product_id: product.id,
+            title: product.title,
+            size: variant.size || null,
+            color: variant.color || null,
+            sku: variant.sku || product.sku,
+            availability_status: product.availability_status,
+            inventory_quantity: variant.inventory_quantity,
+            product_inventory_quantity: totalQty,
+            shopify_product_id:
+              product.channel_sync?.shopify?.external_id || null,
+            shopify_inventory_sync: meta.shopify_inventory_sync || null,
+            channel_sync: product.channel_sync?.shopify || null,
+            is_variant: true,
+          });
+        }
+      } else {
+        rows.push({
+          id: product.id,
+          product_id: product.id,
+          title: product.title,
+          size: null,
+          color: null,
+          sku: product.sku,
+          availability_status: product.availability_status,
+          inventory_quantity: totalQty,
+          product_inventory_quantity: totalQty,
+          shopify_product_id:
+            product.channel_sync?.shopify?.external_id || null,
+          shopify_inventory_sync: meta.shopify_inventory_sync || null,
+          channel_sync: product.channel_sync?.shopify || null,
+          is_variant: false,
+        });
+      }
+    }
     return jsonOk({
       data: rows,
       mode: listed.mode,
@@ -909,11 +981,19 @@ export async function dispatchV1(method, segments, request, body) {
   }
 
   if (path === "inventory" && (m === "PUT" || m === "PATCH" || m === "POST")) {
+    const {
+      extractProductStockVariants,
+      mergeStockVariantsIntoMetadata,
+      optionListsFromVariants,
+      sumVariantInventory,
+    } = await import("@/lib/commerce/product-variants");
     const input =
       body && typeof body === "object"
         ? /** @type {Record<string, unknown>} */ (body)
         : {};
-    const productId = String(input.product_id || input.id || "").trim();
+    const productId = String(input.product_id || input.id || "")
+      .split("::")[0]
+      .trim();
     if (!productId) return jsonErr("product_id is required", 422);
     if (input.inventory_quantity == null || input.inventory_quantity === "") {
       return jsonErr("inventory_quantity is required", 422);
@@ -924,23 +1004,62 @@ export async function dispatchV1(method, segments, request, body) {
     }
     const existing = await getProduct(productId);
     if (!existing) return jsonErr("Product not found", 404);
+
+    const size = String(input.size || "").trim();
+    const color = String(input.color || "").trim();
+    let metadata = { ...(existing.metadata || {}) };
+    if (size || color) {
+      const prior = extractProductStockVariants(existing);
+      const nextVariants = prior.length
+        ? prior.map((row) => {
+            if (
+              row.size.toLowerCase() === size.toLowerCase() &&
+              row.color.toLowerCase() === color.toLowerCase()
+            ) {
+              return { ...row, inventory_quantity: qty };
+            }
+            return row;
+          })
+        : [
+            {
+              size,
+              color,
+              sku: null,
+              inventory_quantity: qty,
+              price: null,
+              shopify_variant_id: null,
+            },
+          ];
+      const lists = optionListsFromVariants(nextVariants);
+      metadata = mergeStockVariantsIntoMetadata(metadata, {
+        sizes: lists.sizes,
+        colors: lists.colors,
+        variants: nextVariants,
+      });
+    } else {
+      metadata = {
+        ...metadata,
+        inventory_quantity: qty,
+        specs: {
+          ...((metadata.specs &&
+            typeof metadata.specs === "object" &&
+            metadata.specs) ||
+            {}),
+          inventory_quantity: qty,
+        },
+      };
+    }
+
+    const totalQty =
+      sumVariantInventory(extractProductStockVariants({ metadata })) ?? qty;
+
     const result = await saveAndMaybePublishProduct(
       {
         ...existing,
-        metadata: {
-          ...(existing.metadata || {}),
-          inventory_quantity: qty,
-          specs: {
-            ...((existing.metadata &&
-              typeof existing.metadata.specs === "object" &&
-              existing.metadata.specs) ||
-              {}),
-            inventory_quantity: qty,
-          },
-        },
-        inventory_quantity: qty,
+        metadata,
+        inventory_quantity: totalQty,
         availability_status:
-          qty > 0
+          totalQty > 0
             ? "in_stock_snapshot"
             : existing.availability_status || "out_of_stock_snapshot",
       },
@@ -955,7 +1074,7 @@ export async function dispatchV1(method, segments, request, body) {
         ...product,
         metadata: {
           ...(product.metadata || {}),
-          inventory_quantity: qty,
+          inventory_quantity: totalQty,
           shopify_inventory_sync: inventory,
         },
       }).catch(() => null);
@@ -963,7 +1082,10 @@ export async function dispatchV1(method, segments, request, body) {
     }
     return jsonOk({
       ...product,
-      inventory_quantity: qty,
+      inventory_quantity: totalQty,
+      variant_inventory_quantity: qty,
+      size: size || null,
+      color: color || null,
       shopify_auto_synced: inventory?.status === "synced",
       shopify_inventory: inventory
         ? {

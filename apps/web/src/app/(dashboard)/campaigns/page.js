@@ -255,7 +255,7 @@ export default function CampaignsPage() {
                 name="body"
                 value={form.body}
                 onChange={(e) => updateField("body", e.target.value)}
-                placeholder="Warm greetings… Shop: {{product_url}}"
+                placeholder="Warm greetings… Add your shop link here"
               />
             </label>
             <label className="text-sm">

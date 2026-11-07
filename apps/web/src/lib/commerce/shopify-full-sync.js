@@ -394,11 +394,16 @@ export async function upsertShopifyCollectionForProduct(product) {
 }
 
 /**
- * Push inventory quantity for a product's Shopify variant (when inventory scopes granted).
+ * Push inventory quantity for a product's Shopify variant(s) (when inventory scopes granted).
+ * Size/Color stock rows sync to matching Shopify option variants; otherwise first variant.
  * @param {import("./products-store.js").ProductRecord} product
  */
 export async function upsertShopifyInventoryForProduct(product) {
   const runtime = await getShopifyRuntime();
+  const { extractProductStockVariants, variantOptionKey } = await import(
+    "./product-variants.js"
+  );
+  const stockVariants = extractProductStockVariants(product);
   const qtyRaw =
     product.metadata?.inventory_quantity ??
     product.metadata?.specs?.inventory_quantity ??
@@ -411,7 +416,10 @@ export async function upsertShopifyInventoryForProduct(product) {
   if (!runtime.ready) {
     return scopePendingState("inventory");
   }
-  if (qty == null || !Number.isFinite(qty)) {
+  const hasVariantQty = stockVariants.some(
+    (row) => row.inventory_quantity != null && Number.isFinite(row.inventory_quantity),
+  );
+  if (!hasVariantQty && (qty == null || !Number.isFinite(qty))) {
     return shopifySyncState({
       status: "synced",
       mode: runtime.mode,
@@ -446,17 +454,9 @@ export async function upsertShopifyInventoryForProduct(product) {
         message: `Product lookup HTTP ${productRes.status}`,
       });
     }
-    const variant = Array.isArray(productRes.json?.product?.variants)
-      ? productRes.json.product.variants[0]
-      : null;
-    const inventoryItemId = variant?.inventory_item_id;
-    if (!inventoryItemId) {
-      return shopifySyncState({
-        status: "error",
-        mode: runtime.mode,
-        message: "Waiting credentials.",
-      });
-    }
+    const remoteVariants = Array.isArray(productRes.json?.product?.variants)
+      ? productRes.json.product.variants
+      : [];
 
     const locations = await shopifyAdminRequest("GET", "locations.json");
     if (!locations.ok) {
@@ -479,25 +479,81 @@ export async function upsertShopifyInventoryForProduct(product) {
       });
     }
 
-    const set = await shopifyAdminRequest("POST", "inventory_levels/set.json", {
-      location_id: location.id,
-      inventory_item_id: inventoryItemId,
-      available: Math.max(0, Math.floor(qty)),
-    });
-    if (!set.ok) {
-      if (isShopifyScopeFailure(set)) return scopePendingState("inventory");
-      return shopifySyncState({
-        status: "error",
-        mode: runtime.mode,
-        message: `Inventory set HTTP ${set.status}`,
+    /** @type {Array<{ inventory_item_id: unknown, available: number }>} */
+    const levels = [];
+
+    if (stockVariants.length && remoteVariants.length > 1) {
+      /** @type {Map<string, { inventory_item_id: unknown }>} */
+      const byKey = new Map();
+      for (const remote of remoteVariants) {
+        if (!remote?.inventory_item_id) continue;
+        const o1 = remote.option1 != null ? String(remote.option1).trim() : "";
+        const o2 = remote.option2 != null ? String(remote.option2).trim() : "";
+        byKey.set(variantOptionKey(o1, o2), remote);
+        if (o1 && !o2) {
+          byKey.set(variantOptionKey(o1, ""), remote);
+          byKey.set(variantOptionKey("", o1), remote);
+        }
+      }
+      for (const row of stockVariants) {
+        if (row.inventory_quantity == null) continue;
+        const match =
+          byKey.get(variantOptionKey(row.size, row.color)) ||
+          byKey.get(variantOptionKey(row.size, "")) ||
+          byKey.get(variantOptionKey("", row.color));
+        if (!match?.inventory_item_id) continue;
+        levels.push({
+          inventory_item_id: match.inventory_item_id,
+          available: Math.max(0, Math.floor(row.inventory_quantity)),
+        });
+      }
+    }
+
+    if (!levels.length) {
+      const variant = remoteVariants.find((v) => v?.inventory_item_id) || remoteVariants[0];
+      const inventoryItemId = variant?.inventory_item_id;
+      if (!inventoryItemId) {
+        return shopifySyncState({
+          status: "error",
+          mode: runtime.mode,
+          message: "Waiting credentials.",
+        });
+      }
+      const available =
+        hasVariantQty && stockVariants[0]?.inventory_quantity != null
+          ? Math.max(0, Math.floor(stockVariants[0].inventory_quantity))
+          : Math.max(0, Math.floor(/** @type {number} */ (qty)));
+      levels.push({ inventory_item_id: inventoryItemId, available });
+    }
+
+    let lastItemId = null;
+    let synced = 0;
+    for (const level of levels) {
+      const set = await shopifyAdminRequest("POST", "inventory_levels/set.json", {
+        location_id: location.id,
+        inventory_item_id: level.inventory_item_id,
+        available: level.available,
       });
+      if (!set.ok) {
+        if (isShopifyScopeFailure(set)) return scopePendingState("inventory");
+        return shopifySyncState({
+          status: "error",
+          mode: runtime.mode,
+          message: `Inventory set HTTP ${set.status}`,
+        });
+      }
+      lastItemId = level.inventory_item_id;
+      synced += 1;
     }
 
     return shopifySyncState({
       status: "synced",
       mode: runtime.mode,
-      external_id: String(inventoryItemId),
-      message: `Inventory set to ${Math.floor(qty)} at ${location.name || location.id}.`,
+      external_id: lastItemId != null ? String(lastItemId) : null,
+      message:
+        synced > 1
+          ? `Inventory set for ${synced} size/color variants at ${location.name || location.id}.`
+          : `Inventory set to ${levels[0]?.available ?? 0} at ${location.name || location.id}.`,
     });
   } catch (err) {
     return shopifySyncState({

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { CollectionProductsField } from "@/components/ui/CollectionProductsField";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
@@ -16,7 +17,7 @@ const EMPTY_FORM = {
   handle: "",
   body_html: "",
   published: true,
-  product_ids: "",
+  product_ids: /** @type {string[]} */ ([]),
 };
 
 function syncTone(status) {
@@ -36,6 +37,8 @@ function syncLabel(status) {
 
 export default function CollectionsPage() {
   const [items, setItems] = useState([]);
+  const [catalog, setCatalog] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const [shopify, setShopify] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -59,9 +62,25 @@ export default function CollectionsPage() {
     }
   }, []);
 
+  const loadCatalog = useCallback(async () => {
+    setCatalogLoading(true);
+    try {
+      const response = await apiFetch("/v1/products");
+      setCatalog(response.data || []);
+    } catch {
+      setCatalog([]);
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (showForm) loadCatalog();
+  }, [showForm, loadCatalog]);
 
   function openCreate() {
     setEditingId(null);
@@ -77,7 +96,7 @@ export default function CollectionsPage() {
       handle: item.handle || "",
       body_html: item.body_html || "",
       published: item.published !== false,
-      product_ids: Array.isArray(item.product_ids) ? item.product_ids.join(", ") : "",
+      product_ids: Array.isArray(item.product_ids) ? item.product_ids.map(String) : [],
     });
     setShowForm(true);
   }
@@ -96,10 +115,7 @@ export default function CollectionsPage() {
       handle: form.handle.trim() || undefined,
       body_html: form.body_html.trim(),
       published: Boolean(form.published),
-      product_ids: form.product_ids
-        .split(/[,\n]/)
-        .map((s) => s.trim())
-        .filter(Boolean),
+      product_ids: form.product_ids,
     };
     try {
       const path = editingId ? `/v1/collections/${editingId}` : "/v1/collections";
@@ -144,10 +160,16 @@ export default function CollectionsPage() {
     }
   }
 
+  function pieceTitles(item) {
+    const ids = Array.isArray(item.product_ids) ? item.product_ids : [];
+    if (!ids.length) return "No pieces linked";
+    return `${ids.length} piece${ids.length === 1 ? "" : "s"} linked`;
+  }
+
   return (
     <DashboardShell
       title="Collections"
-      description="Product collections for the storefront. Saves sync to Shopify when Connected."
+      description="Group jewellery pieces for the storefront. Add pieces by name — saves sync to Shopify when Connected."
       actions={
         <div className="ops-actions">
           {shopify ? (
@@ -155,6 +177,11 @@ export default function CollectionsPage() {
               Shopify · {shopify.label || syncLabel(shopify.status)}
             </Badge>
           ) : null}
+          <Link href="/products">
+            <Button size="sm" variant="secondary">
+              Products
+            </Button>
+          </Link>
           <Link href="/integrations/shopify">
             <Button size="sm" variant="secondary">
               Shopify sync
@@ -185,18 +212,11 @@ export default function CollectionsPage() {
               placeholder="Gold essentials"
             />
             <Input
-              label="Handle"
+              label="Storefront link name"
               name="handle"
               value={form.handle}
               onChange={(e) => updateField("handle", e.target.value)}
-              hint="Optional storefront URL handle."
-            />
-            <Input
-              label="Product IDs"
-              name="product_ids"
-              value={form.product_ids}
-              onChange={(e) => updateField("product_ids", e.target.value)}
-              hint="Comma-separated product ids to include."
+              hint="Optional short name for the collection page URL."
             />
             <label className="flex items-center gap-2 pt-7 text-sm text-ink">
               <input
@@ -206,6 +226,12 @@ export default function CollectionsPage() {
               />
               Published on Shopify
             </label>
+            <CollectionProductsField
+              productIds={form.product_ids}
+              catalog={catalog}
+              catalogLoading={catalogLoading}
+              onChange={(ids) => updateField("product_ids", ids)}
+            />
           </div>
           <label className="block space-y-1.5">
             <span className="block text-[13px] font-medium text-ink">Description</span>
@@ -239,7 +265,7 @@ export default function CollectionsPage() {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="No collections yet"
-          description="Add a collection here or set Collection on a product."
+          description="Add a collection, then search and add jewellery pieces by name."
         />
       ) : null}
 
@@ -259,10 +285,7 @@ export default function CollectionsPage() {
                 {item.body_html ? (
                   <p className="mt-2 flex-1 text-sm text-muted line-clamp-3">{item.body_html}</p>
                 ) : null}
-                <p className="mt-3 text-xs text-muted">
-                  {(item.product_ids || []).length} linked products
-                  {sync.external_id ? ` · Shopify #${sync.external_id}` : ""}
-                </p>
+                <p className="mt-3 text-xs text-muted">{pieceTitles(item)}</p>
                 <div className="mt-4 ops-actions">
                   <Button size="sm" variant="secondary" onClick={() => openEdit(item)}>
                     Edit

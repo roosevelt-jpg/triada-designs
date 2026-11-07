@@ -143,6 +143,12 @@ export function brandedWhatsAppTemplateComponents(opts) {
  */
 export async function ensureBrandedOutboundText(text, opts = {}) {
   const contact = opts.contact || (await getBrandContactSettings());
+  try {
+    const { getBrandGreetingSettings } = await import("./brand-greeting-settings.js");
+    await getBrandGreetingSettings();
+  } catch {
+    /* identity defaults */
+  }
   const raw = String(text || "").trim();
   const opsEmail = String(contact.ops_email || "").trim();
   const addressBit = String(contact.address_line || "")
