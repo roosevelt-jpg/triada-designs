@@ -18,12 +18,31 @@ import { nowDate, syncSystemTime } from "@/lib/system-time";
 
 function modeTone(mode) {
   const label = creativeModeLabel(mode);
-  if (label === "Live AI" || mode === "live" || mode === "gemini" || mode === "anthropic") {
+  if (
+    label === "Live AI" ||
+    mode === "live" ||
+    mode === "gemini" ||
+    mode === "higgsfield" ||
+    mode === "anthropic"
+  ) {
     return "success";
   }
   if (mode === "local_sim" || mode === "local" || mode === "local_seed") return "warning";
   return "neutral";
 }
+
+const DEFAULT_PRO = {
+  video_model: "bytedance/seedance-2.5/text-to-video",
+  image_model: "higgsfield-ai/soul/v2/standard",
+  resolution: "720p",
+  aspect_ratio: "9:16",
+  duration_sec: 5,
+  seed: "",
+  style_id: "",
+  image_url: "",
+  enhance_prompt: true,
+  generate_audio: true,
+};
 
 function mediaUrl(url) {
   if (!url) return null;
@@ -43,6 +62,25 @@ export default function ContentPage() {
   const [notice, setNotice] = useState("");
   const [scheduleDrafts, setScheduleDrafts] = useState({});
   const [preview, setPreview] = useState(null);
+  const [proParams, setProParams] = useState(DEFAULT_PRO);
+
+  function creativeBody(extra = {}) {
+    const durationSec = Number(proParams.duration_sec) || 5;
+    return {
+      resolution: proParams.resolution || "720p",
+      aspect_ratio: proParams.aspect_ratio || undefined,
+      seed: proParams.seed !== "" ? Number(proParams.seed) : undefined,
+      style_id: proParams.style_id || undefined,
+      enhance_prompt: Boolean(proParams.enhance_prompt),
+      generate_audio: Boolean(proParams.generate_audio),
+      image_model: proParams.image_model || undefined,
+      video_model: proParams.video_model || undefined,
+      image_url: proParams.image_url || undefined,
+      duration: durationSec,
+      duration_ms: durationSec * 1000,
+      ...extra,
+    };
+  }
 
   const refreshMedia = useCallback(async (itemId) => {
     try {
@@ -218,10 +256,10 @@ export default function ContentPage() {
     try {
       const result = await apiFetch(`/v1/content/${item.id}/generate-image`, {
         method: "POST",
-        body: {
+        body: creativeBody({
           product: item.product_context?.name || "Triada Designs jewellery",
           materials: item.product_context?.materials || "gold, refined stones",
-        },
+        }),
       });
       const nextItem = result.content || { ...item, status: "in_review" };
       const media = await refreshMedia(item.id);
@@ -245,7 +283,7 @@ export default function ContentPage() {
     try {
       const result = await apiFetch(`/v1/content/${item.id}/generate-variants`, {
         method: "POST",
-        body: {},
+        body: creativeBody({}),
       });
       const count = result.variants?.length || 0;
       const nextItem = result.content || { ...item, status: "in_review" };
@@ -270,11 +308,11 @@ export default function ContentPage() {
     try {
       const result = await apiFetch(`/v1/content/${item.id}/generate-video`, {
         method: "POST",
-        body: {
+        body: creativeBody({
           product: item.product_context?.name || "Triada Designs jewellery",
           storyboard:
             "0-1s jewellery hook close-up; mid soft Gulf light + desire beat; end calm CTA frame.",
-        },
+        }),
       });
       const nextItem = result.content || { ...item, status: "in_review" };
       const media = await refreshMedia(item.id);
@@ -298,13 +336,12 @@ export default function ContentPage() {
     try {
       const result = await apiFetch(`/v1/content/${item.id}/generate-ugc-video`, {
         method: "POST",
-        body: {
+        body: creativeBody({
           product: item.product_context?.name || "Triada Designs jewellery",
           style: "ugc",
           storyboard:
             bodyStoryboardUgc(item.product_context?.name || "jewellery"),
-          duration_ms: 8000,
-        },
+        }),
       });
       const nextItem = result.content || { ...item, status: "in_review" };
       const media = await refreshMedia(item.id);
@@ -332,10 +369,10 @@ export default function ContentPage() {
     try {
       const result = await apiFetch(`/v1/content/${item.id}/generate-animation`, {
         method: "POST",
-        body: {
+        body: creativeBody({
           product: item.product_context?.name || "Triada Designs jewellery",
           storyboard: "Subtle jewellery motion loop for feed and stories.",
-        },
+        }),
       });
       const nextItem = result.content || { ...item, status: "in_review" };
       const media = await refreshMedia(item.id);
@@ -359,12 +396,12 @@ export default function ContentPage() {
     try {
       const result = await apiFetch(`/v1/content/${item.id}/ensure-creative`, {
         method: "POST",
-        body: {
+        body: creativeBody({
           force: true,
           with_video: true,
           with_animation: true,
           product: item.product_context?.name || "Triada Designs jewellery",
-        },
+        }),
       });
       const variantCount = result.variants?.length || 0;
       const nextItem = result.content || { ...item, status: "in_review" };
@@ -430,7 +467,7 @@ export default function ContentPage() {
       ) : null}
 
       {!loading && creativeStatus ? (
-        <section className="mb-6 surface-card space-y-3 p-5">
+        <section className="mb-6 surface-card space-y-4 p-5">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="ops-section-title">Creative AI</h2>
             <Badge tone={modeTone(imageMode)}>
@@ -439,6 +476,178 @@ export default function ContentPage() {
             <Badge tone={modeTone(videoMode)}>
               Video: {creativeStatus.video?.mode_label || creativeModeLabel(videoMode)}
             </Badge>
+          </div>
+          <p className="text-sm text-muted">
+            Anthropic writes scripts · Higgsfield Soul V2 / Seedance mint pixels · you approve
+            before publish.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="block text-sm">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink">Image model</span>
+              <select
+                className="ops-field h-10 px-3"
+                value={proParams.image_model}
+                onChange={(e) =>
+                  setProParams((p) => ({ ...p, image_model: e.target.value }))
+                }
+              >
+                {(creativeStatus.models?.image || creativeStatus.image?.models || []).map(
+                  (m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ),
+                )}
+                {!creativeStatus.models?.image?.length ? (
+                  <option value="higgsfield-ai/soul/v2/standard">Soul V2</option>
+                ) : null}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink">Video model</span>
+              <select
+                className="ops-field h-10 px-3"
+                value={proParams.video_model}
+                onChange={(e) =>
+                  setProParams((p) => ({ ...p, video_model: e.target.value }))
+                }
+              >
+                {(creativeStatus.models?.video || creativeStatus.video?.models || []).map(
+                  (m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ),
+                )}
+                {!creativeStatus.models?.video?.length ? (
+                  <>
+                    <option value="bytedance/seedance-2.5/text-to-video">
+                      Seedance 2.5 · Text → Video
+                    </option>
+                    <option value="bytedance/seedance-2.5/image-to-video">
+                      Seedance 2.5 · Image → Video
+                    </option>
+                  </>
+                ) : null}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink">Resolution</span>
+              <select
+                className="ops-field h-10 px-3"
+                value={proParams.resolution}
+                onChange={(e) =>
+                  setProParams((p) => ({ ...p, resolution: e.target.value }))
+                }
+              >
+                {(creativeStatus.models?.resolutions || ["480p", "720p", "1080p"]).map(
+                  (r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink">Aspect ratio</span>
+              <select
+                className="ops-field h-10 px-3"
+                value={proParams.aspect_ratio}
+                onChange={(e) =>
+                  setProParams((p) => ({ ...p, aspect_ratio: e.target.value }))
+                }
+              >
+                {(
+                  creativeStatus.models?.video_aspect_ratios || [
+                    "9:16",
+                    "16:9",
+                    "1:1",
+                    "4:3",
+                    "3:4",
+                  ]
+                ).map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink">
+                Duration (seconds)
+              </span>
+              <input
+                type="number"
+                min={4}
+                max={30}
+                className="ops-field h-10 px-3"
+                value={proParams.duration_sec}
+                onChange={(e) =>
+                  setProParams((p) => ({ ...p, duration_sec: e.target.value }))
+                }
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink">
+                Seed (optional)
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={1000000}
+                className="ops-field h-10 px-3"
+                placeholder="Random"
+                value={proParams.seed}
+                onChange={(e) => setProParams((p) => ({ ...p, seed: e.target.value }))}
+              />
+            </label>
+            <label className="block text-sm sm:col-span-2">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink">
+                Style ID (Soul V2)
+              </span>
+              <input
+                className="ops-field h-10 px-3"
+                placeholder="Leave blank for default Higgsfield style"
+                value={proParams.style_id}
+                onChange={(e) =>
+                  setProParams((p) => ({ ...p, style_id: e.target.value }))
+                }
+              />
+            </label>
+            <label className="block text-sm sm:col-span-2 lg:col-span-3">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink">
+                Reference image URL (image → video)
+              </span>
+              <input
+                className="ops-field h-10 px-3"
+                placeholder="https://… public still for Seedance image-to-video"
+                value={proParams.image_url}
+                onChange={(e) =>
+                  setProParams((p) => ({ ...p, image_url: e.target.value }))
+                }
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={Boolean(proParams.enhance_prompt)}
+                onChange={(e) =>
+                  setProParams((p) => ({ ...p, enhance_prompt: e.target.checked }))
+                }
+              />
+              Enhance image prompt
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={Boolean(proParams.generate_audio)}
+                onChange={(e) =>
+                  setProParams((p) => ({ ...p, generate_audio: e.target.checked }))
+                }
+              />
+              Generate video audio
+            </label>
           </div>
         </section>
       ) : null}

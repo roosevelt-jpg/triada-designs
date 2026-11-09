@@ -28,13 +28,14 @@ export const AGENT_FEATURES_BY_KEY = {
     "Matches the customer’s language on every reply",
   ],
   content_creator: [
-    "Drafts viral UGC scripts and high-converting captions",
+    "Drafts viral UGC scripts and high-converting captions with Anthropic Claude",
     "Writes creative briefs and platform variants for Meta, IG, TikTok, WhatsApp, LinkedIn",
-    "Produces image, short video, UGC, and animation creatives for review",
+    "Mints photoreal stills via Higgsfield Soul V2 and cinematic clips via Seedance 2.5",
+    "Runs generate_image / generate_short_video / generate_ugc_video tools from orchestration",
+    "Exposes pro controls: model, resolution, duration, seed, style, image→video refs",
     "Auto-resizes media for each publishing channel",
     "Requires human approval before anything goes live",
     "Collaborates with Marketing, Quality Control, and Compliance",
-    "Stays grounded in brand niche and approved catalog facts",
   ],
   follow_up: [
     "Sends friendly cart and sizing abandonment reminders",

@@ -87,7 +87,7 @@ export const TEAM_ROSTER = [
     name: "Content creator / Creative",
     role: "creative",
     description:
-      "Drafts viral UGC scripts, high-converting captions, creative briefs, and platform variants for Meta/IG/TikTok/WhatsApp. Human approval before publish.",
+      "Drafts viral UGC scripts with Anthropic, then mints photoreal Soul V2 stills and Seedance videos via Higgsfield. Human approval before publish.",
     features: AGENT_FEATURES_BY_KEY.content_creator,
     status: "active",
     config: {

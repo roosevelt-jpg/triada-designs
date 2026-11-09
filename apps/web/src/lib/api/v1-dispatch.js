@@ -288,6 +288,10 @@ import {
 import { runAgentOrchestration } from "@/lib/agents/orchestrator";
 import { runTeamCollaboration } from "@/lib/agents/team-orchestrator";
 import {
+  creativeToolsCatalog,
+  runCreativeTool,
+} from "@/lib/agents/creative-tools";
+import {
   assignTask,
   createAgent,
   listAgents,
@@ -300,6 +304,7 @@ import {
   listSharedKv,
   setSharedKv,
 } from "@/lib/agents/shared-memory";
+import { higgsfieldModelCatalog } from "@/lib/creative/higgsfield-models";
 import {
   deleteTrainingDoc,
   listTrainingDocs,
@@ -2025,8 +2030,14 @@ export async function dispatchV1(method, segments, request, body) {
         : geminiKeyed
           ? "quota_limited"
           : "local_sim";
-    const videoLive = geminiLive;
-    const videoMode = videoLive ? "gemini" : geminiKeyed ? "quota_limited" : "local_sim";
+    const videoLive = higgsfieldKeyed || geminiLive;
+    const videoMode = higgsfieldKeyed
+      ? "higgsfield"
+      : videoLive
+        ? "gemini"
+        : geminiKeyed
+          ? "quota_limited"
+          : "local_sim";
     const overallLive = imageLive || videoLive;
     const mode = higgsfieldKeyed
       ? "higgsfield"
@@ -2039,6 +2050,7 @@ export async function dispatchV1(method, segments, request, body) {
       ? "Media generation hit a provider limit. Pixels stay local until billing/quota is raised."
       : null;
     const billing = geminiBillingEnablementNotes();
+    const models = higgsfieldModelCatalog();
     return jsonOk({
       mode,
       mode_label: creativeModeLabel(
@@ -2052,6 +2064,12 @@ export async function dispatchV1(method, segments, request, body) {
         : geminiKeyed
           ? "gemini"
           : "local",
+      preferred_video_provider: higgsfieldKeyed
+        ? "higgsfield"
+        : geminiKeyed
+          ? "gemini"
+          : "local",
+      models,
       quota_warning: quota,
       prefer_paid_models: preferPaidGeminiModels(),
       image_model_cascade: resolveGeminiImageCascade().slice(0, 5),
@@ -2066,7 +2084,7 @@ export async function dispatchV1(method, segments, request, body) {
           ? warn
           : imageLive
             ? higgsfieldKeyed
-              ? "Image generation is connected."
+              ? "Image generation is connected (Higgsfield Soul V2)."
               : "Image generation is connected."
             : "Image generation is local.",
         provider: higgsfieldKeyed
@@ -2077,19 +2095,33 @@ export async function dispatchV1(method, segments, request, body) {
         credential_source: higgsfieldKeyed
           ? higgsfieldCredSource.source
           : undefined,
+        models: models.image,
       },
       video: {
         mode: videoMode === "quota_limited" ? "local_sim" : videoMode,
-        mode_label: creativeModeLabel(videoLive ? "gemini" : "local_sim"),
+        mode_label: creativeModeLabel(
+          videoLive ? (higgsfieldKeyed ? "higgsfield" : "gemini") : "local_sim",
+        ),
         message: warn
           ? warn
           : videoLive
-            ? "Video generation is connected."
+            ? higgsfieldKeyed
+              ? "Video generation is connected (Higgsfield Seedance 2.5)."
+              : "Video generation is connected."
             : "Video generation is local.",
-        provider: geminiKeyed ? "gemini" : "local",
+        provider: higgsfieldKeyed
+          ? "higgsfield"
+          : geminiKeyed
+            ? "gemini"
+            : "local",
+        credential_source: higgsfieldKeyed
+          ? higgsfieldCredSource.source
+          : undefined,
+        models: models.video,
       },
       resize_engine: "triada",
-      summary: "Generate, preview, approve, schedule, and publish.",
+      summary:
+        "Anthropic scripts → Higgsfield Soul V2 / Seedance pixels → preview → approve → publish.",
     });
   }
 
@@ -4723,6 +4755,24 @@ export async function dispatchV1(method, segments, request, body) {
     });
   }
 
+  if (path === "agents/creative-tools" && m === "GET") {
+    return jsonOk(creativeToolsCatalog());
+  }
+
+  if (path === "agents/creative-tools/run" && m === "POST") {
+    const result = await runCreativeTool({
+      agent_key: String(body?.agent_key || body?.agent_id || "content_creator"),
+      tool: String(body?.tool || ""),
+      content_id: body?.content_id ? String(body.content_id) : undefined,
+      payload: body?.payload && typeof body.payload === "object" ? body.payload : body || {},
+      dry_run: Boolean(body?.dry_run),
+    });
+    if (result.ok === false && result.error === "tool_not_allowed") {
+      return { status: 403, body: result };
+    }
+    return jsonOk(result);
+  }
+
   if (path === "agents/test-run" && m === "POST") {
     await hydrateAgents();
     const agentId = String(body?.agent_id || body?.agent_key || "");
@@ -4745,6 +4795,10 @@ export async function dispatchV1(method, segments, request, body) {
           purpose: String(body?.purpose || "draft_reply"),
           message: String(body?.message || ""),
           dry_run: body?.dry_run !== false,
+          tool: body?.tool ? String(body.tool) : undefined,
+          content_id: body?.content_id ? String(body.content_id) : undefined,
+          creative:
+            body?.creative && typeof body.creative === "object" ? body.creative : undefined,
           context: body?.context && typeof body.context === "object" ? body.context : {},
         });
     return jsonOk(result);
@@ -4768,6 +4822,10 @@ export async function dispatchV1(method, segments, request, body) {
           purpose: String(body?.purpose || "draft_reply"),
           message: String(body?.message || ""),
           dry_run: Boolean(body?.dry_run),
+          tool: body?.tool ? String(body.tool) : undefined,
+          content_id: body?.content_id ? String(body.content_id) : undefined,
+          creative:
+            body?.creative && typeof body.creative === "object" ? body.creative : undefined,
           context: body?.context && typeof body.context === "object" ? body.context : {},
         });
     return jsonOk(result);

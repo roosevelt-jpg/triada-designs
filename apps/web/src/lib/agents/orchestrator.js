@@ -23,6 +23,11 @@ import {
   buildLanguageMatchingBlock,
   detectCustomerLanguage,
 } from "./detect-language";
+import {
+  creativeToolAllowed,
+  inferCreativeTool,
+  runCreativeTool,
+} from "./creative-tools";
 
 /**
  * @param {{
@@ -34,6 +39,9 @@ import {
  *   context?: Record<string, unknown>,
  *   latency_mode?: "fast" | "full",
  *   max_tokens?: number,
+ *   tool?: string,
+ *   content_id?: string,
+ *   creative?: Record<string, unknown>,
  * }} input
  */
 export async function runAgentOrchestration(input = {}) {
@@ -50,6 +58,78 @@ export async function runAgentOrchestration(input = {}) {
     resolveAgent(agentKey, seeded) ||
     seeded[0] ||
     { name: "Triada assistant", config: {} };
+
+  // Creative / Marketing agents can execute media tools (Anthropic → Higgsfield).
+  const inferredTool = inferCreativeTool({
+    tool: input.tool || input.context?.tool,
+    purpose,
+    message,
+  });
+  if (inferredTool && creativeToolAllowed(agentKey, inferredTool)) {
+    const creativePayload = {
+      ...(input.creative && typeof input.creative === "object" ? input.creative : {}),
+      ...(input.context?.creative && typeof input.context.creative === "object"
+        ? input.context.creative
+        : {}),
+      product:
+        input.creative?.product ||
+        input.context?.product ||
+        input.context?.product_name ||
+        undefined,
+      caption: message || input.context?.caption || undefined,
+      storyboard: input.context?.storyboard || undefined,
+      channel: input.context?.channel || undefined,
+    };
+    const toolResult = await runCreativeTool({
+      agent_key: agentKey,
+      tool: inferredTool,
+      content_id: String(input.content_id || input.context?.content_id || ""),
+      payload: creativePayload,
+      dry_run: Boolean(input.dry_run),
+    });
+
+    const summaryParts = [
+      toolResult.message || `Ran ${inferredTool}.`,
+      toolResult.script?.hook ? `Hook: ${toolResult.script.hook}` : "",
+      toolResult.script?.caption ? `Caption: ${toolResult.script.caption}` : "",
+      toolResult.mode_label ? `Media: ${toolResult.mode_label}` : "",
+      toolResult.preview_required
+        ? "Preview required before approval — nothing was published."
+        : "",
+    ].filter(Boolean);
+
+    return {
+      ok: toolResult.ok !== false,
+      agent_key: agentKey,
+      agent_name: agent?.name || "Triada assistant",
+      purpose: inferredTool,
+      tool: inferredTool,
+      tool_result: toolResult,
+      provider: toolResult.mode === "higgsfield" ? "higgsfield" : "anthropic",
+      model: toolResult.asset?.model || undefined,
+      mode: toolResult.mode || (input.dry_run ? "dry_run" : "live"),
+      live: toolResult.mode === "higgsfield" || toolResult.mode === "gemini",
+      text: summaryParts.join("\n"),
+      output: summaryParts.join("\n"),
+      content_id: toolResult.content_id,
+      script: toolResult.script || null,
+      asset: toolResult.asset || null,
+      variants: toolResult.variants || [],
+      preview_required: Boolean(toolResult.preview_required),
+      review_url: toolResult.review_url || "/content/review",
+      dry_run: Boolean(input.dry_run),
+      latency_ms: Date.now() - started,
+      error: toolResult.error || null,
+      rules: {
+        no_fabrication: true,
+        retrieve_when_unsure: true,
+        brand_wrappers: true,
+        human_approval_before_publish: true,
+        anthropic_scripts: true,
+        higgsfield_pixels: true,
+      },
+    };
+  }
 
   // Prefer explicit customer_message (team reviews wrap drafts in English instructions).
   const languageSource = String(

@@ -93,6 +93,7 @@ const TOOL_LABELS = {
   generate_short_video: "Generate short video",
   generate_ugc_video: "Generate UGC video",
   generate_animation: "Generate animation",
+  ensure_creative_pack: "Ensure creative pack",
 };
 
 /** @type {Record<string, string>} */

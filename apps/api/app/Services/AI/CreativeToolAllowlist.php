@@ -13,6 +13,7 @@ class CreativeToolAllowlist
         'generate_image',
         'generate_platform_variants',
         'generate_short_video',
+        'generate_ugc_video',
         'generate_animation',
         'ensure_creative_pack',
     ];
@@ -52,11 +53,15 @@ class CreativeToolAllowlist
             ],
             [
                 'name' => 'generate_short_video',
-                'description' => 'Generate a short marketing video. Local stub without VIDEO_API_KEY.',
+                'description' => 'Generate a short marketing video (Next dual-run prefers Higgsfield Seedance).',
+            ],
+            [
+                'name' => 'generate_ugc_video',
+                'description' => 'Generate a vertical UGC-style video with Anthropic script + Seedance motion.',
             ],
             [
                 'name' => 'generate_animation',
-                'description' => 'Generate a marketing animation (animated SVG locally; live motion with VIDEO_API_KEY).',
+                'description' => 'Generate a marketing animation / motion loop (Higgsfield video path on Next).',
             ],
             [
                 'name' => 'ensure_creative_pack',

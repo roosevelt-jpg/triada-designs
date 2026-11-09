@@ -563,6 +563,7 @@ TXT);
             'generate_image',
             'generate_platform_variants',
             'generate_short_video',
+            'generate_ugc_video',
             'generate_animation',
             'ensure_creative_pack',
         ];
@@ -605,6 +606,9 @@ TXT);
                 $payload['platforms'] ?? null
             ),
             'generate_short_video' => $creative->generateVideo($workspace, $item, $payload),
+            'generate_ugc_video' => $creative->generateVideo($workspace, $item, array_merge($payload, [
+                'style' => $payload['style'] ?? 'ugc',
+            ])),
             'generate_animation' => $creative->generateAnimation($workspace, $item, $payload),
             'ensure_creative_pack' => $creative->ensureCreativePack($workspace, $item, $payload),
             default => ['ok' => false, 'error' => 'Unknown tool'],

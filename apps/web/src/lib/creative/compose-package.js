@@ -1,6 +1,6 @@
 /**
  * Compose Content Studio packages: Claude for copy/scripts;
- * image pixels prefer Higgsfield when keyed, else Gemini; video stays Gemini.
+ * image + video pixels prefer Higgsfield when keyed, else Gemini.
  * UI must stay product-facing (generate → approve → schedule → publish).
  */
 
@@ -22,31 +22,81 @@ import {
   ugcScriptUserPrompt,
 } from "./jewellery-prompts";
 import { generateGeminiMedia, resolveGeminiApiKey } from "./gemini-media";
-import { generateHiggsfieldImage } from "./higgsfield-media";
+import {
+  generateHiggsfieldImage,
+  generateHiggsfieldVideo,
+} from "./higgsfield-media";
 import { previewSvgDataUrl } from "./preview-svg";
 
 /**
- * Image pixels: Higgsfield first when Key ID + Secret present, else Gemini.
- * Video / animation stay on Gemini (Higgsfield wired for stills only).
+ * Extract shared pro-generation params from the request body.
+ * @param {Record<string, unknown>} body
+ */
+function proParamsFromBody(body = {}) {
+  return {
+    model: body.model || body.image_model || body.video_model || undefined,
+    image_model: body.image_model || body.model || undefined,
+    video_model: body.video_model || body.model || undefined,
+    resolution: body.resolution || undefined,
+    aspect_ratio: body.aspect_ratio || undefined,
+    seed: body.seed != null ? Number(body.seed) : undefined,
+    style_id: body.style_id || undefined,
+    style_strength:
+      body.style_strength != null ? Number(body.style_strength) : undefined,
+    enhance_prompt:
+      body.enhance_prompt === undefined
+        ? undefined
+        : Boolean(body.enhance_prompt),
+    batch_size: body.batch_size != null ? Number(body.batch_size) : undefined,
+    custom_reference_id: body.custom_reference_id || undefined,
+    custom_reference_strength:
+      body.custom_reference_strength != null
+        ? Number(body.custom_reference_strength)
+        : undefined,
+    image_url: body.image_url || undefined,
+    end_image_url: body.end_image_url || undefined,
+    generate_audio:
+      body.generate_audio === undefined
+        ? undefined
+        : Boolean(body.generate_audio),
+    bitrate_mode: body.bitrate_mode || undefined,
+    output_format: body.output_format || undefined,
+  };
+}
+
+/**
+ * Image pixels: Higgsfield Soul V2 first when keyed, else Gemini.
+ * Video / animation: Higgsfield Seedance first when keyed, else Gemini.
  * @param {{
  *   prompt: string,
  *   kind: "image"|"video"|"animation",
  *   width?: number,
  *   height?: number,
  *   durationMs?: number,
+ *   pro?: Record<string, unknown>,
  * }} input
  */
 async function generateCreativePixels(input) {
   const kind = input.kind === "animation" ? "video" : input.kind;
-  // Store (supabase_table) or env — hasHiggsfieldCredentials resolves both.
+  const pro = input.pro || {};
+
   if (kind === "image" && (await hasHiggsfieldCredentials())) {
     const hf = await generateHiggsfieldImage({
       prompt: input.prompt,
       width: input.width,
       height: input.height,
+      model: pro.image_model || pro.model,
+      aspect_ratio: pro.aspect_ratio,
+      resolution: pro.resolution,
+      seed: pro.seed,
+      style_id: pro.style_id,
+      style_strength: pro.style_strength,
+      enhance_prompt: pro.enhance_prompt,
+      batch_size: pro.batch_size,
+      custom_reference_id: pro.custom_reference_id,
+      custom_reference_strength: pro.custom_reference_strength,
     });
     if (hf.ok && hf.dataUrl) return hf;
-    // Prefer Gemini fallback when Higgsfield is keyed but fails.
     if (hasGeminiEnv() || resolveGeminiApiKey()) {
       const gemini = await generateGeminiMedia(input);
       if (gemini.ok && gemini.dataUrl) {
@@ -59,7 +109,6 @@ async function generateCreativePixels(input) {
             : "higgsfield_fallback_gemini",
         };
       }
-      // Surface BOTH failures — do not let Gemini quota hide a store-key HF error.
       const parts = [];
       if (hf.error) parts.push(`higgsfield(${hf.credential_source || "store"}): ${hf.error}`);
       if (gemini.error) parts.push(`gemini_fallback: ${gemini.error}`);
@@ -74,6 +123,85 @@ async function generateCreativePixels(input) {
     }
     return hf;
   }
+
+  if (kind === "video" && (await hasHiggsfieldCredentials())) {
+    // Prefer image-to-video only when a public http(s) still is provided.
+    const imageUrl = String(pro.image_url || "").trim();
+    const wantI2v =
+      String(pro.video_model || pro.model || "").includes("image-to-video") ||
+      Boolean(imageUrl && /^https?:\/\//i.test(imageUrl));
+    const videoModel = wantI2v
+      ? pro.video_model ||
+        pro.model ||
+        "bytedance/seedance-2.5/image-to-video"
+      : pro.video_model ||
+        pro.model ||
+        "bytedance/seedance-2.5/text-to-video";
+
+    const hf = await generateHiggsfieldVideo({
+      prompt: input.prompt,
+      width: input.width,
+      height: input.height,
+      duration_ms: input.durationMs,
+      model: videoModel,
+      aspect_ratio: pro.aspect_ratio,
+      resolution: pro.resolution,
+      image_url: wantI2v ? imageUrl : undefined,
+      end_image_url: pro.end_image_url,
+      generate_audio: pro.generate_audio,
+      bitrate_mode: pro.bitrate_mode,
+      output_format: pro.output_format,
+    });
+    if (hf.ok && hf.dataUrl) return hf;
+
+    // If image-to-video failed for missing public URL, retry text-to-video once.
+    if (
+      wantI2v &&
+      hf.error === "higgsfield_image_to_video_requires_public_image_url"
+    ) {
+      const retry = await generateHiggsfieldVideo({
+        prompt: input.prompt,
+        width: input.width,
+        height: input.height,
+        duration_ms: input.durationMs,
+        model: "bytedance/seedance-2.5/text-to-video",
+        aspect_ratio: pro.aspect_ratio,
+        resolution: pro.resolution,
+        generate_audio: pro.generate_audio,
+        bitrate_mode: pro.bitrate_mode,
+        output_format: pro.output_format,
+      });
+      if (retry.ok && retry.dataUrl) return retry;
+      hf.error = retry.error || hf.error;
+    }
+
+    if (hasGeminiEnv() || resolveGeminiApiKey()) {
+      const gemini = await generateGeminiMedia(input);
+      if (gemini.ok && gemini.dataUrl) {
+        return {
+          ...gemini,
+          higgsfield_error: hf.error || undefined,
+          credential_source: hf.credential_source || undefined,
+          path: gemini.path
+            ? `higgsfield_fallback_${gemini.path}`
+            : "higgsfield_fallback_gemini",
+        };
+      }
+      const parts = [];
+      if (hf.error) parts.push(`higgsfield(${hf.credential_source || "store"}): ${hf.error}`);
+      if (gemini.error) parts.push(`gemini_fallback: ${gemini.error}`);
+      return {
+        ok: false,
+        error: parts.join(" | ") || "video_generation_failed",
+        mode: "error",
+        higgsfield_error: hf.error || undefined,
+        credential_source: hf.credential_source || undefined,
+        gemini_error: gemini.error || undefined,
+      };
+    }
+    return hf;
+  }
+
   return generateGeminiMedia(input);
 }
 
@@ -109,6 +237,7 @@ export async function composeCreativePackage(input) {
   const item = input.item || {};
   const body = input.body || {};
   const action = String(input.action || "");
+  const pro = proParamsFromBody(body);
   const isUgc =
     action === "generate-ugc-video" ||
     String(body.style || "").toLowerCase() === "ugc";
@@ -134,7 +263,10 @@ export async function composeCreativePackage(input) {
   );
   const channel = String(body.channel || item.channel || "instagram");
   const caption = String(body.caption || item.body || item.title || "");
-  const durationMs = Number(body.duration_ms || 8000);
+  const durationMs = Number(
+    body.duration_ms ||
+      (body.duration != null ? Number(body.duration) * 1000 : 8000),
+  );
   const seconds = Math.max(2, Math.round(durationMs / 1000));
   const style = String(body.style || (isUgc ? "ugc" : "editorial")).toLowerCase();
   const objective = String(body.objective || item.objective || "conversion");
@@ -156,7 +288,10 @@ export async function composeCreativePackage(input) {
   const geminiReady = hasGeminiEnv() || Boolean(resolveGeminiApiKey());
   const higgsfieldReady = await hasHiggsfieldCredentials();
   const imageProviderReady = higgsfieldReady || geminiReady;
-  const mediaProviderReady = isVideo ? geminiReady : imageProviderReady;
+  // Video now prefers Higgsfield Seedance when keyed.
+  const mediaProviderReady = isVideo
+    ? higgsfieldReady || geminiReady
+    : imageProviderReady;
 
   if (isUgc || isVideo || action === "ensure-creative") {
     const fallback = localUgcPackage({
@@ -262,6 +397,7 @@ export async function composeCreativePackage(input) {
   let posterOnly = false;
   let credentialSource = null;
   let higgsfieldError = null;
+  let mediaParams = null;
 
   if (mediaProviderReady) {
     const media = await generateCreativePixels({
@@ -270,6 +406,7 @@ export async function composeCreativePackage(input) {
       width,
       height,
       durationMs,
+      pro,
     });
 
     if (media.ok && media.dataUrl) {
@@ -281,6 +418,7 @@ export async function composeCreativePackage(input) {
       mediaPath = media.path || null;
       posterOnly = Boolean(media.poster_only);
       credentialSource = media.credential_source || null;
+      mediaParams = media.params || null;
       if (media.video_error) {
         mediaError = media.video_error;
       }
@@ -289,7 +427,6 @@ export async function composeCreativePackage(input) {
         mediaError = media.higgsfield_error;
       }
     } else {
-      // Keyed but failed — do not pretend SVG is live provider output.
       mediaMode = "error";
       mediaError = media.error || "Media generation failed";
       higgsfieldError = media.higgsfield_error || null;
@@ -332,7 +469,6 @@ export async function composeCreativePackage(input) {
       { key: "tiktok", w: 1080, h: 1920, ratio: "9:16" },
     ];
 
-    // Prefer one live hero image, then crop-label variants from that asset URL.
     let heroUrl = previewUrl;
     if (imageProviderReady && liveMedia && kind !== "image") {
       const hero = await generateCreativePixels({
@@ -340,6 +476,7 @@ export async function composeCreativePackage(input) {
         kind: "image",
         width: 1080,
         height: 1080,
+        pro,
       });
       if (hero.ok && hero.dataUrl) heroUrl = hero.dataUrl;
     } else if (imageProviderReady && !liveMedia) {
@@ -348,6 +485,7 @@ export async function composeCreativePackage(input) {
         kind: "image",
         width: 1080,
         height: 1080,
+        pro,
       });
       if (hero.ok && hero.dataUrl) {
         heroUrl = hero.dataUrl;
@@ -357,6 +495,7 @@ export async function composeCreativePackage(input) {
         mimeType = hero.mimeType || "image/png";
         mediaModel = hero.model;
         mediaPath = hero.path;
+        mediaParams = hero.params || mediaParams;
       }
     }
 
@@ -411,6 +550,7 @@ export async function composeCreativePackage(input) {
       media_model: mediaModel,
       media_path: mediaPath,
       media_provider: mediaProvider || undefined,
+      media_params: mediaParams || undefined,
       credential_source: credentialSource || undefined,
       updated_at: new Date().toISOString(),
       prompt_version: CREATIVE_PROMPT_VERSION,
@@ -422,7 +562,9 @@ export async function composeCreativePackage(input) {
       mode: finalLive ? mediaMode : "local_sim",
       width,
       height,
-      aspect_ratio: height === width ? "1:1" : height > width ? "9:16" : "16:9",
+      aspect_ratio:
+        pro.aspect_ratio ||
+        (height === width ? "1:1" : height > width ? "9:16" : "16:9"),
       duration_ms: isVideo ? durationMs : null,
       url: previewUrl,
       mime_type: mimeType,
@@ -436,6 +578,7 @@ export async function composeCreativePackage(input) {
         poster_only: posterOnly || undefined,
         media_error: mediaError || undefined,
         higgsfield_error: higgsfieldError || undefined,
+        media_params: mediaParams || undefined,
         realistic_3d: finalLive,
       },
     },
@@ -445,6 +588,7 @@ export async function composeCreativePackage(input) {
           placeholder_mp4: !finalLive,
           animation_svg: !finalLive,
           poster_only: posterOnly || undefined,
+          provider: mediaProvider || undefined,
         }
       : {
           credential_source: credentialSource || undefined,

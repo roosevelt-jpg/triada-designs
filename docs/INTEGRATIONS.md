@@ -182,50 +182,57 @@ Gates: human approval + approval_version check before publish. UI: Content Studi
 
 Cron worker: `POST /api/v1/cron/content-publish/process` (Bearer `CRON_SECRET`) drains due `scheduled` items without skipping approval gates.
 
-## Creative AI (image / video dual path)
+## Creative AI (Anthropic scripts → Higgsfield pixels)
 
-**Honest split:** Anthropic Claude (Integrations / `ANTHROPIC_API_KEY`) writes captions, UGC scripts, and storyboards. **Claude cannot render video or image pixels alone.**
+**Honest split:** Anthropic Claude writes captions, UGC scripts, and storyboards. **Claude cannot render pixels alone.** Higgsfield mints professional stills (Soul V2) and videos (Seedance 2.5) the same way end users do via the Higgsfield API. Gemini remains fallback when Higgsfield is unset or fails.
 
 | Layer | Env / UI | Role |
 |---|---|---|
 | Scripts / briefs | Anthropic on Integrations, or `ANTHROPIC_*` | Text intelligence |
-| Image pixels (preferred) | Higgsfield Key ID + Secret — **Vercel env or Integrations `supabase_table` store** (same path as Anthropic/Shopify) | Still frames via `https://api.higgsfield.ai` (Soul V2) |
-| Image pixels (fallback) | `GEMINI_API_KEY` / Gemini media models | Still frames when Higgsfield unset or fails |
-| Video pixels | Gemini Omni (`VIDEO_MODEL` / `GEMINI_API_KEY`) | Motion frames |
+| Image pixels (preferred) | Higgsfield Key ID + Secret — env or Integrations store | Soul V2 stills (`higgsfield-ai/soul/v2/standard`) |
+| Video pixels (preferred) | Same Higgsfield credentials | Seedance 2.5 text-to-video / image-to-video |
+| Image / video fallback | `GEMINI_API_KEY` / Gemini media models | When Higgsfield unset or fails |
 | Local animation | no keys | SVG motion + placeholder (local mock) |
+
+**Creative Agent tools (Next):** `GET/POST /api/v1/agents/creative-tools` — Content Creator / Marketing can execute `generate_image`, `generate_short_video`, `generate_ugc_video`, etc. Orchestration also infers tools from purpose/message. Output always enters Content Studio `in_review` (never auto-publishes).
+
+**Pro params** (Content Studio + tool payload): `model` / `image_model` / `video_model`, `resolution`, `aspect_ratio`, `duration` / `duration_ms`, `seed`, `style_id`, `custom_reference_id`, `image_url` (public URL for image→video), `enhance_prompt`, `generate_audio`, `bitrate_mode`.
 
 ### Higgsfield (status-only)
 
-**Never paste credentials in the dashboard.** Preferred: set on Vercel Production. When `VERCEL_TOKEN` is unavailable, keys may be applied via the Integrations encrypted store (`integration_secrets` / `supabase_table`) — Creative image gen resolves **env first, then store** (same pattern as Anthropic/Shopify).
+**Never paste credentials in the dashboard.** Preferred: set on Vercel Production. When `VERCEL_TOKEN` is unavailable, keys may be applied via the Integrations encrypted store (`integration_secrets` / `supabase_table`) — Creative media resolves **env first, then store** (same pattern as Anthropic/Shopify).
 
 ```bash
 HIGGSFIELD_API_KEY_ID=
 HIGGSFIELD_API_KEY_SECRET=
 # Optional:
 # HIGGSFIELD_BASE_URL=https://api.higgsfield.ai
-# HIGGSFIELD_TIMEOUT=120   # seconds or ms; Soul V2 poll floor is 90s
-# HIGGSFIELD_WEBHOOK_SECRET=   # whsec_… if using inbound webhooks later
+# HIGGSFIELD_IMAGE_ENDPOINT=higgsfield-ai/soul/v2/standard
+# HIGGSFIELD_VIDEO_ENDPOINT=bytedance/seedance-2.5/text-to-video
+# HIGGSFIELD_RESOLUTION=720p
+# HIGGSFIELD_VIDEO_RESOLUTION=720p
+# HIGGSFIELD_TIMEOUT=120          # Soul V2 poll floor 90s
+# HIGGSFIELD_VIDEO_TIMEOUT=180    # Seedance poll floor 120s
+# HIGGSFIELD_WEBHOOK_SECRET=      # whsec_… if using inbound webhooks later
 # HF_API_KEY_ID= / HF_API_KEY_SECRET=  # aliases
 ```
 
 Auth header (official): `Authorization: Key ${HIGGSFIELD_API_KEY_ID}:${HIGGSFIELD_API_KEY_SECRET}`.
 
-Integrations shows **Connected** when both Key ID and Secret are present in **env or store**; otherwise **Waiting credentials**. Content Studio prefers Higgsfield for images when Connected; Gemini remains fallback + video.
+Integrations shows **Connected** when both Key ID and Secret are present in **env or store**; otherwise **Waiting credentials**. Content Studio prefers Higgsfield for **images and videos** when Connected; Gemini remains fallback.
 
 ```bash
 # Scripts (required for live agent/creative intelligence)
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-sonnet-4-20250514
 
-# Video pixels — pick one provider (not Claude)
-VIDEO_PROVIDER=local          # local | animation | http | gemini | veo | runway | luma
-VIDEO_API_KEY=                # or GEMINI_API_KEY when provider=gemini|veo
-VIDEO_MODEL=veo-2.0-generate-001
-VIDEO_BASE_URL=               # optional gateway; Runway/Luma defaults exist in config
-INTEGRATION_MODE=live         # required for live provider HTTP
+# Optional Gemini fallback for pixels
+GEMINI_API_KEY=
+IMAGE_MODEL=gemini-3-pro-image
+VIDEO_MODEL=gemini-omni-1.1-flash
 ```
 
-Without a video key, Content Studio still generates operable local_sim UGC stubs and queues them for approval.
+Without Higgsfield or Gemini keys, Content Studio still generates operable local_sim stubs and queues them for approval.
 
 ## Meta App Review
 

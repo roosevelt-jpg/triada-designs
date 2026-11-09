@@ -20,6 +20,7 @@ import {
   agentDisplayName,
   agentRoleLabel,
   agentStatusLabel,
+  agentToolLabel,
   memoryKeyLabel,
   memoryValueLabel,
   runModeLabel,
@@ -63,6 +64,12 @@ export default function AgentsPage() {
   const [taskForm, setTaskForm] = useState(emptyTaskForm);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailAgent, setDetailAgent] = useState(null);
+  const [creativeTools, setCreativeTools] = useState(null);
+  const [creativeTool, setCreativeTool] = useState("generate_short_video");
+  const [creativeProduct, setCreativeProduct] = useState(
+    "Triada Designs gold hoop earrings",
+  );
+  const [creativeResult, setCreativeResult] = useState(null);
   const configRef = useRef(null);
 
   const openAgentDetail = useCallback((agent) => {
@@ -247,6 +254,69 @@ export default function AgentsPage() {
       ]);
       setActivity(activityData);
       setMemory(memData.data || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const isCreativeAgent =
+    selected?.key === "content_creator" ||
+    selected?.role === "creative" ||
+    selected?.key === "marketing";
+
+  useEffect(() => {
+    if (!isCreativeAgent) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const catalog = await apiFetch("/v1/agents/creative-tools");
+        if (!cancelled) setCreativeTools(catalog);
+      } catch {
+        /* optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isCreativeAgent]);
+
+  async function runCreativeToolAction({ dryRun }) {
+    if (!selected || !isCreativeAgent) return;
+    setBusy(dryRun ? "creative-dry" : "creative-run");
+    setCreativeResult(null);
+    setError("");
+    setNotice("");
+    try {
+      const result = await apiFetch("/v1/agents/creative-tools/run", {
+        method: "POST",
+        body: {
+          agent_key: selected.key,
+          tool: creativeTool,
+          dry_run: Boolean(dryRun),
+          payload: {
+            product: creativeProduct,
+            caption: testMessage,
+            channel: "instagram",
+            style: creativeTool === "generate_ugc_video" ? "ugc" : "editorial",
+            duration: 5,
+            resolution: "720p",
+            aspect_ratio: "9:16",
+            video_model: "bytedance/seedance-2.5/text-to-video",
+            image_model: "higgsfield-ai/soul/v2/standard",
+          },
+        },
+      });
+      setCreativeResult(result);
+      setNotice(
+        dryRun
+          ? `Dry run planned for ${agentToolLabel(creativeTool)}.`
+          : result.message ||
+              `${agentToolLabel(creativeTool)} finished — preview before approval.`,
+      );
+      const activityData = await apiFetch("/v1/agents/activity");
+      setActivity(activityData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -518,6 +588,86 @@ export default function AgentsPage() {
                       </p>
                     ) : null}
                     {testModeLabel ? <p className="text-xs">Mode: {testModeLabel}</p> : null}
+                  </div>
+                ) : null}
+
+                {isCreativeAgent ? (
+                  <div className="space-y-3 border-t border-line pt-4">
+                    <h4 className="text-[13px] font-medium text-ink">
+                      Creative tools (Anthropic → Higgsfield)
+                    </h4>
+                    <p className="text-xs text-muted">
+                      Runs the real media path: Claude script, then Soul V2 / Seedance pixels.
+                      Output lands in Content Studio as in review — never auto-publishes.
+                    </p>
+                    <label className="block text-sm">
+                      <span className="mb-1.5 block text-[13px] font-medium text-ink">Tool</span>
+                      <select
+                        className="ops-field h-10 px-3"
+                        value={creativeTool}
+                        onChange={(e) => setCreativeTool(e.target.value)}
+                      >
+                        {(creativeTools?.tools || [
+                          { name: "generate_short_video" },
+                          { name: "generate_ugc_video" },
+                          { name: "generate_image" },
+                          { name: "generate_platform_variants" },
+                          { name: "generate_animation" },
+                          { name: "ensure_creative_pack" },
+                          { name: "propose_creative_brief" },
+                        ]).map((tool) => (
+                          <option key={tool.name} value={tool.name}>
+                            {agentToolLabel(tool.name)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <Input
+                      label="Product focus"
+                      value={creativeProduct}
+                      onChange={(e) => setCreativeProduct(e.target.value)}
+                    />
+                    <div className="ops-actions">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={busy === "creative-dry"}
+                        onClick={() => runCreativeToolAction({ dryRun: true })}
+                      >
+                        {busy === "creative-dry" ? "Planning…" : "Dry-run tool"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={busy === "creative-run"}
+                        onClick={() => runCreativeToolAction({ dryRun: false })}
+                      >
+                        {busy === "creative-run" ? "Generating…" : "Generate creative"}
+                      </Button>
+                    </div>
+                    {creativeResult ? (
+                      <div className="space-y-2 rounded-md border border-line bg-stone/40 p-3 text-sm text-muted">
+                        <p className="text-ink">
+                          {creativeResult.message || "Creative tool finished."}
+                        </p>
+                        {creativeResult.script?.hook ? (
+                          <p className="text-xs">Hook: {creativeResult.script.hook}</p>
+                        ) : null}
+                        {creativeResult.mode_label ? (
+                          <p className="text-xs">Mode: {creativeResult.mode_label}</p>
+                        ) : null}
+                        {creativeResult.content_id ? (
+                          <p className="text-xs">
+                            Content: {creativeResult.content_id} ·{" "}
+                            <Link href="/content/review" className="underline">
+                              Open review
+                            </Link>
+                          </p>
+                        ) : null}
+                        {creativeResult.error ? (
+                          <p className="text-xs text-brown-dark">{creativeResult.error}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
