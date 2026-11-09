@@ -49,3 +49,4 @@ coverage/
 # misc
 tmp/
 .tmp/
+agent-tools/
