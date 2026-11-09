@@ -261,13 +261,11 @@ export default function AgentsPage() {
     }
   }
 
-  const isCreativeAgent =
-    selected?.key === "content_creator" ||
-    selected?.role === "creative" ||
-    selected?.key === "marketing";
+  // Every Triada agent can run Anthropic → Higgsfield creative tools / quote cards.
+  const canRunCreativeTools = Boolean(selected?.key);
 
   useEffect(() => {
-    if (!isCreativeAgent) return undefined;
+    if (!canRunCreativeTools) return undefined;
     let cancelled = false;
     (async () => {
       try {
@@ -280,10 +278,10 @@ export default function AgentsPage() {
     return () => {
       cancelled = true;
     };
-  }, [isCreativeAgent]);
+  }, [canRunCreativeTools, selected?.key]);
 
   async function runCreativeToolAction({ dryRun }) {
-    if (!selected || !isCreativeAgent) return;
+    if (!selected || !canRunCreativeTools) return;
     setBusy(dryRun ? "creative-dry" : "creative-run");
     setCreativeResult(null);
     setError("");
@@ -591,14 +589,16 @@ export default function AgentsPage() {
                   </div>
                 ) : null}
 
-                {isCreativeAgent ? (
+                {canRunCreativeTools ? (
                   <div className="space-y-3 border-t border-line pt-4">
                     <h4 className="text-[13px] font-medium text-ink">
                       Creative tools (Anthropic → Higgsfield)
                     </h4>
                     <p className="text-xs text-muted">
-                      Runs the real media path: Claude script, then Soul V2 / Seedance pixels.
-                      Output lands in Content Studio as in review — never auto-publishes.
+                      Any agent can run this path: Claude scripts / quote copy, then Soul V2 /
+                      Seedance pixels. Output lands in Content Studio as in review — never
+                      auto-publishes. Assigning a creative task also triggers this when the
+                      description asks for image, video, UGC, or quote cards.
                     </p>
                     <label className="block text-sm">
                       <span className="mb-1.5 block text-[13px] font-medium text-ink">Tool</span>
@@ -611,6 +611,7 @@ export default function AgentsPage() {
                           { name: "generate_short_video" },
                           { name: "generate_ugc_video" },
                           { name: "generate_image" },
+                          { name: "generate_quote_inspiration" },
                           { name: "generate_platform_variants" },
                           { name: "generate_animation" },
                           { name: "ensure_creative_pack" },

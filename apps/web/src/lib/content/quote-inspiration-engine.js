@@ -7,8 +7,12 @@
 import { completeAnthropic } from "@/lib/agents/anthropic-client";
 import { ensureBrandedOutboundText } from "@/lib/brand/wrap-message";
 import { BRAND } from "@/lib/brand/identity";
-import { creativeModeLabel } from "@/lib/integrations/brand-labels";
+import {
+  creativeModeLabel,
+  isLiveCreativeMediaMode,
+} from "@/lib/integrations/brand-labels";
 import { hasGeminiEnv } from "@/lib/integrations/env-presence";
+import { hasHiggsfieldCredentials } from "@/lib/integrations/higgsfield-credentials";
 import {
   extractWhatsAppMediaInput,
   sendWhatsAppMediaMessage,
@@ -19,6 +23,11 @@ import { listWhatsAppCampaignRecipients } from "@/lib/crm/contacts-store";
 import { toWhatsAppRecipient } from "@/lib/crm/phone-e164";
 import { upsertMediaAsset } from "@/lib/creative/media-store";
 import { quoteCardBase64, quoteCardDataUrl } from "@/lib/creative/quote-card";
+import { generateHiggsfieldImage } from "@/lib/creative/higgsfield-media";
+import {
+  generateGeminiMedia,
+  resolveGeminiApiKey,
+} from "@/lib/creative/gemini-media";
 import {
   QUOTE_PROMPT_VERSION,
   forQuoteCardImage,
@@ -82,6 +91,7 @@ export async function loadQuoteTrainingContext(opts = {}) {
 
 /**
  * Generate a quote + designed card; creates a Content Studio item in_review.
+ * Copy: Anthropic · Pixels: Higgsfield Soul V2 (Gemini fallback · SVG last resort).
  * @param {{
  *   theme?: string,
  *   language?: string,
@@ -89,6 +99,12 @@ export async function loadQuoteTrainingContext(opts = {}) {
  *   customer_hint?: string,
  *   schedule?: boolean,
  *   approve?: boolean,
+ *   resolution?: string,
+ *   seed?: number,
+ *   style_id?: string,
+ *   enhance_prompt?: boolean,
+ *   image_model?: string,
+ *   aspect_ratio?: string,
  * }} [input]
  */
 export async function generateQuoteInspiration(input = {}) {
@@ -135,7 +151,9 @@ export async function generateQuoteInspiration(input = {}) {
     theme,
     visual_mood: visualMood,
   });
-  const cardUrl = quoteCardDataUrl({
+
+  // Prefer Higgsfield Soul V2 for a professional quote card, then Gemini, then SVG.
+  const svgFallback = quoteCardDataUrl({
     quote,
     attribution,
     theme,
@@ -143,10 +161,72 @@ export async function generateQuoteInspiration(input = {}) {
     width: 1080,
     height: 1080,
   });
+  let cardUrl = svgFallback;
+  let mimeType = "image/svg+xml";
+  let mediaMode = "local_sim";
+  let mediaModel = null;
+  let mediaPath = null;
+  let mediaError = null;
+  let credentialSource = null;
+  let remoteUrl = null;
 
-  const geminiReady = hasGeminiEnv();
-  const mediaMode = geminiReady ? "gemini" : "local_sim";
-  const overallMode = copyLive || geminiReady ? (geminiReady ? "gemini" : "live") : "local_sim";
+  const higgsfieldReady = await hasHiggsfieldCredentials();
+  const geminiReady = hasGeminiEnv() || Boolean(resolveGeminiApiKey());
+
+  if (higgsfieldReady) {
+    const hf = await generateHiggsfieldImage({
+      prompt: imagePrompt,
+      width: 1080,
+      height: 1080,
+      aspect_ratio: String(input.aspect_ratio || "1:1"),
+      resolution: input.resolution || "720p",
+      seed: input.seed != null ? Number(input.seed) : undefined,
+      style_id: input.style_id || undefined,
+      enhance_prompt:
+        input.enhance_prompt === undefined ? true : Boolean(input.enhance_prompt),
+      model: input.image_model || undefined,
+    });
+    if (hf.ok && hf.dataUrl) {
+      cardUrl = hf.dataUrl;
+      mimeType = hf.mimeType || "image/png";
+      mediaMode = "higgsfield";
+      mediaModel = hf.model || null;
+      mediaPath = hf.path || null;
+      credentialSource = hf.credential_source || null;
+      remoteUrl = hf.remote_url || null;
+    } else {
+      mediaError = hf.error || "higgsfield_failed";
+      credentialSource = hf.credential_source || null;
+    }
+  }
+
+  if (!isLiveCreativeMediaMode(mediaMode) && geminiReady) {
+    const gemini = await generateGeminiMedia({
+      prompt: imagePrompt,
+      kind: "image",
+      width: 1080,
+      height: 1080,
+    });
+    if (gemini.ok && gemini.dataUrl) {
+      cardUrl = gemini.dataUrl;
+      mimeType = gemini.mimeType || "image/png";
+      mediaMode = "gemini";
+      mediaModel = gemini.model || null;
+      mediaPath = gemini.path
+        ? mediaError
+          ? `higgsfield_fallback_${gemini.path}`
+          : gemini.path
+        : null;
+    } else if (!mediaError) {
+      mediaError = gemini.error || "gemini_failed";
+    }
+  }
+
+  const overallMode = isLiveCreativeMediaMode(mediaMode)
+    ? mediaMode
+    : copyLive
+      ? "live"
+      : "local_sim";
 
   const contentId = createQuoteContentId();
   const scheduledFor =
@@ -197,6 +277,10 @@ export async function generateQuoteInspiration(input = {}) {
       theme,
       visual_mood: visualMood,
       image_prompt: imagePrompt,
+      media_model: mediaModel,
+      media_path: mediaPath,
+      media_provider: isLiveCreativeMediaMode(mediaMode) ? mediaMode : undefined,
+      credential_source: credentialSource || undefined,
       prompt_version: QUOTE_PROMPT_VERSION,
       training_doc_ids: docs.map((d) => d.id),
       language,
@@ -218,13 +302,19 @@ export async function generateQuoteInspiration(input = {}) {
     height: 1080,
     aspect_ratio: "1:1",
     url: cardUrl,
-    mime_type: "image/svg+xml",
+    mime_type: mimeType,
     prompt: imagePrompt,
     preview_ready: true,
+    model: mediaModel,
     metadata: {
       quote_card: true,
       quote,
       attribution,
+      media_path: mediaPath || undefined,
+      credential_source: credentialSource || undefined,
+      media_error: mediaError || undefined,
+      remote_url: remoteUrl || undefined,
+      realistic: isLiveCreativeMediaMode(mediaMode),
     },
   });
 
@@ -239,6 +329,7 @@ export async function generateQuoteInspiration(input = {}) {
     scheduled_for: content.scheduled_for || scheduledFor,
     weekday: scheduledFor ? isoWeekday(new Date(scheduledFor)) : null,
     training_doc_ids: docs.map((d) => d.id),
+    media_mode: mediaMode,
   });
 
   await saveQuoteInspirationSettings({
@@ -272,10 +363,13 @@ export async function generateQuoteInspiration(input = {}) {
     })),
     next_send_at: scheduledFor,
     preview_required: content.status === "in_review",
-    review_url: "/content/review",
+    review_url: "/content/inspiration",
+    error: mediaError || null,
     message:
       content.status === "in_review"
-        ? "Quote card ready — preview and approve before weekday broadcast."
+        ? isLiveCreativeMediaMode(mediaMode)
+          ? "Quote card ready (live pixels) — preview and approve before weekday broadcast."
+          : "Quote card ready — preview and approve before weekday broadcast."
         : "Quote card generated and queued for the next selected weekday.",
   };
 }
@@ -379,11 +473,22 @@ export async function broadcastQuoteInspiration(input = {}) {
 
   if (cardUrl) {
     if (cardUrl.startsWith("data:")) {
+      const mimeMatch = /^data:([^;,]+)/i.exec(cardUrl);
+      const mimeType =
+        String(cardAsset?.mime_type || mimeMatch?.[1] || "image/png").split(";")[0] ||
+        "image/png";
+      const ext = mimeType.includes("svg")
+        ? "svg"
+        : mimeType.includes("jpeg") || mimeType.includes("jpg")
+          ? "jpg"
+          : mimeType.includes("webp")
+            ? "webp"
+            : "png";
       const uploaded = await uploadWhatsAppMedia({
         media_base64: quoteCardBase64(cardUrl),
-        mime_type: "image/svg+xml",
+        mime_type: mimeType,
         media_type: "image",
-        filename: `triada-quote-${content.id}.svg`,
+        filename: `triada-quote-${content.id}.${ext}`,
       });
       mediaId = uploaded.media_id || null;
       uploadMode = uploaded.mode || uploadMode;

@@ -194,7 +194,9 @@ Cron worker: `POST /api/v1/cron/content-publish/process` (Bearer `CRON_SECRET`) 
 | Image / video fallback | `GEMINI_API_KEY` / Gemini media models | When Higgsfield unset or fails |
 | Local animation | no keys | SVG motion + placeholder (local mock) |
 
-**Creative Agent tools (Next):** `GET/POST /api/v1/agents/creative-tools` — Content Creator / Marketing can execute `generate_image`, `generate_short_video`, `generate_ugc_video`, etc. Orchestration also infers tools from purpose/message. Output always enters Content Studio `in_review` (never auto-publishes).
+**All AI agents (Next):** `GET/POST /api/v1/agents/creative-tools` — every roster agent can execute `generate_image`, `generate_short_video`, `generate_ugc_video`, `generate_quote_inspiration`, etc. Orchestration and **Assign task** also infer tools from purpose/message/title and run Anthropic → Higgsfield when creative intent is detected. Output always enters Content Studio / Inspiration `in_review` (never auto-publishes).
+
+**Quote / Inspiration:** Anthropic writes the quote + caption; Higgsfield Soul V2 mints the card (Gemini fallback, SVG last resort). Same credential path as Content Studio.
 
 **Pro params** (Content Studio + tool payload): `model` / `image_model` / `video_model`, `resolution`, `aspect_ratio`, `duration` / `duration_ms`, `seed`, `style_id`, `custom_reference_id`, `image_url` (public URL for image→video), `enhance_prompt`, `generate_audio`, `bitrate_mode`.
 

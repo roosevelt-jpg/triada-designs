@@ -47,6 +47,7 @@ export const AGENT_FEATURES_BY_KEY = {
   ],
   marketing: [
     "Shapes campaign concepts and channel-ready copy",
+    "Runs Anthropic → Higgsfield creatives (Soul V2 stills, Seedance video, quote cards)",
     "Proposes calendar placements for human approval",
     "Coordinates Content Studio, Campaigns, and Calendar",
     "Partners with Creative for assets and with QC/Compliance for review",

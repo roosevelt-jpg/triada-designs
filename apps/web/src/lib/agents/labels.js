@@ -94,6 +94,7 @@ const TOOL_LABELS = {
   generate_ugc_video: "Generate UGC video",
   generate_animation: "Generate animation",
   ensure_creative_pack: "Ensure creative pack",
+  generate_quote_inspiration: "Generate quote inspiration",
 };
 
 /** @type {Record<string, string>} */

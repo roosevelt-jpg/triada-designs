@@ -6,6 +6,18 @@
 import { AGENT_FEATURES_BY_KEY } from "./agent-features";
 import { TEAM_PROMPT_VERSION, systemPromptForRole } from "./role-prompts";
 
+/** Shared Anthropic → Higgsfield tools available to every seeded agent. */
+export const SHARED_CREATIVE_TOOLS = [
+  "propose_creative_brief",
+  "generate_image",
+  "generate_platform_variants",
+  "generate_short_video",
+  "generate_ugc_video",
+  "generate_animation",
+  "ensure_creative_pack",
+  "generate_quote_inspiration",
+];
+
 /** @typedef {{
  *   id: string,
  *   key: string,
@@ -52,6 +64,7 @@ export const TEAM_ROSTER = [
       ],
       prompt_version: TEAM_PROMPT_VERSION,
       system_prompt: systemPromptForRole("ai_support"),
+      allowed_tools: [...SHARED_CREATIVE_TOOLS],
     },
   },
   {
@@ -78,7 +91,12 @@ export const TEAM_ROSTER = [
       ],
       prompt_version: TEAM_PROMPT_VERSION,
       system_prompt: systemPromptForRole("social_media_manager"),
-      allowed_tools: ["sweep_unanswered_dms", "draft_dm_reply", "handoff_escalation"],
+      allowed_tools: [
+        "sweep_unanswered_dms",
+        "draft_dm_reply",
+        "handoff_escalation",
+        ...SHARED_CREATIVE_TOOLS,
+      ],
     },
   },
   {
@@ -102,14 +120,7 @@ export const TEAM_ROSTER = [
       collaborates_with: ["marketing", "quality_control", "compliance"],
       prompt_version: TEAM_PROMPT_VERSION,
       system_prompt: systemPromptForRole("content_creator"),
-      allowed_tools: [
-        "propose_creative_brief",
-        "generate_image",
-        "generate_platform_variants",
-        "generate_short_video",
-        "generate_ugc_video",
-        "generate_animation",
-      ],
+      allowed_tools: [...SHARED_CREATIVE_TOOLS],
     },
   },
   {
@@ -126,6 +137,7 @@ export const TEAM_ROSTER = [
       collaborates_with: ["ai_support", "marketing", "leads_qualification", "compliance"],
       prompt_version: TEAM_PROMPT_VERSION,
       system_prompt: systemPromptForRole("follow_up"),
+      allowed_tools: [...SHARED_CREATIVE_TOOLS],
     },
   },
   {
@@ -134,7 +146,7 @@ export const TEAM_ROSTER = [
     name: "Marketing",
     role: "marketing",
     description:
-      "Campaign concepts, channel-ready copy, and calendar proposals for human approval.",
+      "Campaign concepts, channel-ready copy, calendar proposals, and Higgsfield creatives for human approval.",
     features: AGENT_FEATURES_BY_KEY.marketing,
     status: "active",
     config: {
@@ -142,6 +154,7 @@ export const TEAM_ROSTER = [
       collaborates_with: ["content_creator", "quality_control", "compliance"],
       prompt_version: TEAM_PROMPT_VERSION,
       system_prompt: systemPromptForRole("marketing"),
+      allowed_tools: [...SHARED_CREATIVE_TOOLS],
     },
   },
   {
@@ -158,6 +171,7 @@ export const TEAM_ROSTER = [
       collaborates_with: ["ai_support", "content_creator", "marketing", "compliance", "follow_up"],
       prompt_version: TEAM_PROMPT_VERSION,
       system_prompt: systemPromptForRole("quality_control"),
+      allowed_tools: [...SHARED_CREATIVE_TOOLS],
     },
   },
   {
@@ -174,6 +188,7 @@ export const TEAM_ROSTER = [
       collaborates_with: ["ai_support", "follow_up", "marketing", "escalation_officer", "quality_control"],
       prompt_version: TEAM_PROMPT_VERSION,
       system_prompt: systemPromptForRole("compliance"),
+      allowed_tools: [...SHARED_CREATIVE_TOOLS],
     },
   },
   {
@@ -191,6 +206,7 @@ export const TEAM_ROSTER = [
       collaborates_with: ["ai_support", "follow_up", "escalation_officer"],
       prompt_version: TEAM_PROMPT_VERSION,
       system_prompt: systemPromptForRole("leads_qualification"),
+      allowed_tools: [...SHARED_CREATIVE_TOOLS],
     },
   },
   {
@@ -207,6 +223,7 @@ export const TEAM_ROSTER = [
       collaborates_with: ["ai_support", "compliance", "leads_qualification", "quality_control"],
       prompt_version: TEAM_PROMPT_VERSION,
       system_prompt: systemPromptForRole("escalation_officer"),
+      allowed_tools: [...SHARED_CREATIVE_TOOLS],
     },
   },
 ];

@@ -16,17 +16,35 @@ class CreativeToolAllowlist
         'generate_ugc_video',
         'generate_animation',
         'ensure_creative_pack',
+        'generate_quote_inspiration',
     ];
 
+    /** Every Triada agent may invoke Anthropic → media tools (Next prefers Higgsfield). */
     public const AGENT_KEYS = [
-        'marketing',
-        'content',
+        'ai_support',
+        'social_media_manager',
         'content_creator',
+        'follow_up',
+        'marketing',
+        'quality_control',
+        'compliance',
+        'leads_qualification',
+        'escalation_officer',
+        'content',
+        'creative',
     ];
 
     public static function allows(string $agentKey, string $tool): bool
     {
-        if (! in_array($agentKey, self::AGENT_KEYS, true) && $agentKey !== 'content') {
+        $normalized = match ($agentKey) {
+            'content', 'creative', 'creative_media' => 'content_creator',
+            'support', 'answer_bot' => 'ai_support',
+            'sales' => 'leads_qualification',
+            'meta_messaging', 'social' => 'social_media_manager',
+            default => $agentKey,
+        };
+
+        if (! in_array($normalized, self::AGENT_KEYS, true) && ! in_array($agentKey, self::AGENT_KEYS, true)) {
             return false;
         }
 
@@ -66,6 +84,10 @@ class CreativeToolAllowlist
             [
                 'name' => 'ensure_creative_pack',
                 'description' => 'Ensure post-aligned image + platform variants + video + animation exist for a content item.',
+            ],
+            [
+                'name' => 'generate_quote_inspiration',
+                'description' => 'Generate inspirational quote copy + designed card (Next: Anthropic + Higgsfield Soul V2).',
             ],
         ];
     }

@@ -289,6 +289,7 @@ import { runAgentOrchestration } from "@/lib/agents/orchestrator";
 import { runTeamCollaboration } from "@/lib/agents/team-orchestrator";
 import {
   creativeToolsCatalog,
+  executeCreativeTaskIfNeeded,
   runCreativeTool,
 } from "@/lib/agents/creative-tools";
 import {
@@ -4616,8 +4617,40 @@ export async function dispatchV1(method, segments, request, body) {
       const assigned = await assignTask(
         body && typeof body === "object" ? /** @type {any} */ (body) : { title: "" },
       );
+      // When the task describes creative work, run Anthropic → Higgsfield for any agent.
+      const creativeExec = await executeCreativeTaskIfNeeded({
+        agent_key: assigned.agent?.key || body?.agent_key || "",
+        title: assigned.task?.title,
+        description: assigned.task?.description,
+        tool: body?.tool ? String(body.tool) : undefined,
+        execute: body?.execute !== false,
+        dry_run: Boolean(body?.dry_run),
+        payload:
+          body?.payload && typeof body.payload === "object" ? body.payload : {},
+      });
+      if (creativeExec && !creativeExec.skipped && assigned.task?.id) {
+        try {
+          await updateTask(assigned.task.id, {
+            status: creativeExec.ok ? "done" : "failed",
+            result: {
+              tool: creativeExec.tool || creativeExec.inferred_tool,
+              content_id: creativeExec.content_id,
+              mode: creativeExec.mode,
+              error: creativeExec.error || null,
+            },
+          });
+        } catch {
+          /* task update is best-effort */
+        }
+      }
       return jsonOk(
-        { ok: true, task: assigned.task, agent: assigned.agent, storage: assigned.storage },
+        {
+          ok: true,
+          task: assigned.task,
+          agent: assigned.agent,
+          storage: assigned.storage,
+          creative: creativeExec,
+        },
         201,
       );
     } catch (err) {
