@@ -5,10 +5,9 @@ export const PUBLIC_SITE_URL =
 /** Production host for this admin/ops dashboard (never trycloudflare / preview). */
 export const OPS_HOST =
   process.env.NEXT_PUBLIC_OPS_HOST || "dashboard.triada-designs.com";
-/** Local seed admin (documented in README; not shown as "demo" in the UI). */
+/** Seed admin email only — password never ships in source; use env / Supabase Auth. */
 export const SEED_ADMIN = {
   email: "info@triada-designs.com",
-  password: "triada-local",
 };
 
 /**

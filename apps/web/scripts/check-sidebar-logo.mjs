@@ -1,16 +1,30 @@
 import { chromium } from "playwright";
+
+const password = process.env.E2E_PASSWORD || process.env.TRIADA_SEED_ADMIN_PASSWORD || "";
+if (!password) {
+  console.error("Set E2E_PASSWORD or TRIADA_SEED_ADMIN_PASSWORD before running.");
+  process.exit(1);
+}
+
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 await page.goto("http://127.0.0.1:43127/login", { waitUntil: "networkidle" });
 await page.fill('input[name="email"]', "info@triada-designs.com");
-await page.fill('input[name="password"]', "triada-local");
+await page.fill('input[name="password"]', password);
 await Promise.all([
   page.waitForURL("**/overview", { timeout: 25000 }),
   page.click('button[type="submit"]'),
 ]);
 await page.waitForTimeout(2000);
-const logos = await page.locator('img[alt="Triada Designs"]').evaluateAll(els =>
-  els.map(e => ({ src: e.getAttribute("src"), w: e.naturalWidth, h: e.naturalHeight, cw: e.clientWidth, ch: e.clientHeight, display: getComputedStyle(e).display }))
+const logos = await page.locator('img[alt="Triada Designs"]').evaluateAll((els) =>
+  els.map((e) => ({
+    src: e.getAttribute("src"),
+    w: e.naturalWidth,
+    h: e.naturalHeight,
+    cw: e.clientWidth,
+    ch: e.clientHeight,
+    display: getComputedStyle(e).display,
+  })),
 );
 console.log(JSON.stringify(logos, null, 2));
 const aside = await page.locator("aside").first().boundingBox();

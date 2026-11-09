@@ -3,6 +3,7 @@ import {
   hydrateContentFromSupabase,
   processDueContentPublish,
 } from "@/lib/content-schedule-store";
+import { requireCronSecret } from "@/lib/security/request-auth";
 
 /**
  * Vercel Cron Jobs target: GET /api/cron/content-publish
@@ -17,12 +18,12 @@ export async function POST(request) {
 }
 
 async function handle(request) {
-  const auth = request.headers.get("authorization") || "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  const alt = (request.headers.get("x-cron-secret") || "").trim();
-  const expected = (process.env.CRON_SECRET || "").trim();
-  if (!expected || (bearer !== expected && alt !== expected)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const auth = requireCronSecret(request);
+  if (!auth.ok) {
+    return NextResponse.json(
+      { ok: false, error: auth.error },
+      { status: auth.status },
+    );
   }
 
   await hydrateContentFromSupabase();

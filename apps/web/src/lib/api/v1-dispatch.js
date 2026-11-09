@@ -2377,7 +2377,7 @@ export async function dispatchV1(method, segments, request, body) {
         health: buildIntegrationsHealth({ meta: result.meta }).meta,
         storage: result.storage,
         message: "Meta credentials saved. Channels marked Connected.",
-        verify_token_hint: "triada-meta-verify-2026",
+        verify_token_hint: (process.env.META_VERIFY_TOKEN || process.env.META_HUB_VERIFY_TOKEN) ? "(configured)" : "(set META_VERIFY_TOKEN)",
         inbox_backfill,
       });
     }
@@ -2385,7 +2385,7 @@ export async function dispatchV1(method, segments, request, body) {
       ok: true,
       mode: "next_dual_run",
       message: "Meta connect accepted.",
-      verify_token_hint: "triada-meta-verify-2026",
+      verify_token_hint: (process.env.META_VERIFY_TOKEN || process.env.META_HUB_VERIFY_TOKEN) ? "(configured)" : "(set META_VERIFY_TOKEN)",
     });
   }
 
@@ -2443,7 +2443,7 @@ export async function dispatchV1(method, segments, request, body) {
         meta: result.meta,
         health: buildIntegrationsHealth({ meta: result.meta }).meta,
         message: "Stored Meta credentials cleared.",
-        verify_token_hint: "triada-meta-verify-2026",
+        verify_token_hint: (process.env.META_VERIFY_TOKEN || process.env.META_HUB_VERIFY_TOKEN) ? "(configured)" : "(set META_VERIFY_TOKEN)",
       });
     }
     if (path === "integrations/meta/simulate-inbound") {
@@ -2486,7 +2486,7 @@ export async function dispatchV1(method, segments, request, body) {
               body: inboundBody,
             },
           ],
-          verify_token_hint: "triada-meta-verify-2026",
+          verify_token_hint: (process.env.META_VERIFY_TOKEN || process.env.META_HUB_VERIFY_TOKEN) ? "(configured)" : "(set META_VERIFY_TOKEN)",
         });
       }
       if (SUPPORT_PAGE_MESSAGING_CHANNELS.includes(channel)) {
@@ -2521,7 +2521,7 @@ export async function dispatchV1(method, segments, request, body) {
               body: inboundBody,
             },
           ],
-          verify_token_hint: "triada-meta-verify-2026",
+          verify_token_hint: (process.env.META_VERIFY_TOKEN || process.env.META_HUB_VERIFY_TOKEN) ? "(configured)" : "(set META_VERIFY_TOKEN)",
         });
       }
       if (SUPPORT_TEXT_CHANNELS.includes(channel)) {
@@ -2568,7 +2568,7 @@ export async function dispatchV1(method, segments, request, body) {
               body: inboundBody,
             },
           ],
-          verify_token_hint: "triada-meta-verify-2026",
+          verify_token_hint: (process.env.META_VERIFY_TOKEN || process.env.META_HUB_VERIFY_TOKEN) ? "(configured)" : "(set META_VERIFY_TOKEN)",
         });
       }
       if (SOCIAL_DM_CHANNELS.includes(channel)) {
@@ -2592,7 +2592,7 @@ export async function dispatchV1(method, segments, request, body) {
               body: inboundBody,
             },
           ],
-          verify_token_hint: "triada-meta-verify-2026",
+          verify_token_hint: (process.env.META_VERIFY_TOKEN || process.env.META_HUB_VERIFY_TOKEN) ? "(configured)" : "(set META_VERIFY_TOKEN)",
         });
       }
     }
@@ -2609,7 +2609,7 @@ export async function dispatchV1(method, segments, request, body) {
         return jsonOk({
           ...result,
           mode: result.mode || "next_dual_run",
-          verify_token_hint: "triada-meta-verify-2026",
+          verify_token_hint: (process.env.META_VERIFY_TOKEN || process.env.META_HUB_VERIFY_TOKEN) ? "(configured)" : "(set META_VERIFY_TOKEN)",
         });
       } catch (err) {
         return jsonErr(
@@ -2624,7 +2624,7 @@ export async function dispatchV1(method, segments, request, body) {
       ok: true,
       mode: "next_dual_run",
       message: "Request accepted.",
-      verify_token_hint: "triada-meta-verify-2026",
+      verify_token_hint: (process.env.META_VERIFY_TOKEN || process.env.META_HUB_VERIFY_TOKEN) ? "(configured)" : "(set META_VERIFY_TOKEN)",
     });
   }
 

@@ -77,9 +77,8 @@ function authorizeCapture(request, body) {
 
   // First-party Triada hosts always allowed (marketing site + ops public pages).
   if (fromTriada) return { ok: true };
-  // Optional shared widget token (same idea as webchat/messages).
+  // Shared widget token required when not on a Triada origin.
   if (expected && token && token === expected) return { ok: true };
-  if (!expected && token) return { ok: true };
 
   return {
     ok: false,

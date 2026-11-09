@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { processQuoteInspirationCron } from "@/lib/content/quote-inspiration-engine";
+import { requireCronSecret } from "@/lib/security/request-auth";
 
 /**
  * Vercel Cron: weekday Quote / Inspiration broadcast.
@@ -15,16 +16,16 @@ export async function POST(request) {
 }
 
 async function handle(request) {
-  const auth = request.headers.get("authorization") || "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  const alt = (request.headers.get("x-cron-secret") || "").trim();
-  const expected = (process.env.CRON_SECRET || "").trim();
+  const auth = requireCronSecret(request);
+  if (!auth.ok) {
+    return NextResponse.json(
+      { ok: false, error: auth.error },
+      { status: auth.status },
+    );
+  }
+
   const url = new URL(request.url);
   const force = url.searchParams.get("force") === "1";
-
-  if (expected && bearer !== expected && alt !== expected) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
 
   try {
     const result = await processQuoteInspirationCron({

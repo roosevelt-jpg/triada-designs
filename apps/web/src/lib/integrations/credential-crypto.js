@@ -6,12 +6,22 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
  */
 
 function secretsKeyMaterial() {
-  return (
+  const fromEnv =
     process.env.INTEGRATION_SECRETS_KEY?.trim() ||
     process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
     process.env.SUPABASE_SECRET_KEY?.trim() ||
     process.env.SUPABASE_JWT_SECRET?.trim() ||
-    "triada-local-dev-only-not-for-production"
+    "";
+  if (fromEnv) return fromEnv;
+  // Never ship a fixed production fallback. Local/dev only when explicitly allowed.
+  if (
+    process.env.NODE_ENV !== "production" &&
+    process.env.TRIADA_ALLOW_INSECURE_SECRETS_KEY === "1"
+  ) {
+    return `triada-dev-${process.cwd()}`;
+  }
+  throw new Error(
+    "INTEGRATION_SECRETS_KEY (or Supabase service/JWT secret) is required to encrypt credentials.",
   );
 }
 

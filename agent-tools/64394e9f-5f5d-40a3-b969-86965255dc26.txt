@@ -1,0 +1,1085 @@
+CICD / CICD · GitLab
+
+```
+Fixed Readme
+
+See merge request cicd6840819/cicd!2
+```
+
+| Name | Last commit | Last update |
+| --- | --- | --- |
+| fastlane | Edited fastlane | 2 years ago |
+| images | Added project info | 2 years ago |
+| .gitignore | Added project info | 2 years ago |
+| .gitlab-ci-template.yml | Update .gitlab-ci-template.yml | 2 years ago |
+| Gemfile | Configuration | 2 years ago |
+| Gemfile.lock | CICD final | 2 years ago |
+| README.md | Fixed Readme | 2 years ago |
+
+# A simple but detailed guide on setting up CI/CD for several iOS projects
+
+Hi, my name is Dmitry, and I am an iOS developer at Triada. In this article, I will guide you on how to set up CI/CD for your iOS application and provide a step-by-step instruction on how to do it right the first time – so you won’t have to redo it.
+
+We will set up CI/CD for an iOS project with a repository on GitLab using Fastlane. The builds will be sent to TestFlight and Firebase if you have it configured. The full code solution is available here. What we need:
+
+1. Three GitLab repositories: 
+
+1. A repository with the project for which we are setting up CI/CD (PROJECT repo). It is assumed that the project has a linter configured, although its absence is not critical. Unit tests will also be used for project testing.
+2. You will need to create: 
+
+1. A repository to store certificates (CERTS repo)
+2. A repository with CI/CD files (If you are working exclusively with one project, the scripts can be placed in the project repository. For this article, we'll assume you are working with multiple projects)
+2. A MacOS machine on which the CI/CD will run (CI/CD SERVER).
+3. An Apple ID with access to the projects under which the app will be published.
+4. (Optional) Firebase Service Account - for access to projects. CI/CD authorization will occur on behalf of this user. Firebase will be used here exclusively for providing builds to testers.
+5. (Optional) GitLab (Premium or Ultimate) for using GitLab API requests to send messages.
+6. (Optional) Discord server - note that privileges for creating webhooks are necessary only for the setup.
+7. (Optional) Jira - as task management is handled through Jira in this solution, an account with read access to tasks will be required.
+
+We will need two auxiliary repositories - one for secure storage of certificates and the other for storing CI/CD scripts. In the first part of the article, I will describe the overall process of setting up CI/CD, and in the second part, I will detail each step:
+
+1. Creating and configuring the repository for storing certificates
+2. Creating the repository for CI/CD scripts
+3. Configuring the iOS project to work with GitLab
+4. Setting up the machine (host) for CI/CD runners
+
+## Introduction
+
+Let's consider the following pipeline: When a merge request (MR) is opened, the current branch is automatically built and tests are run. After their successful completion, the pipeline waits for the manual trigger of the next step, allowing the developer to make any necessary code adjustments. In the first stage of the pipeline, you can also run a linter/formatter. If changes are made to the MR, the pipeline restarts. Upon triggering the next stage, create_archive, the app version is incremented, a .ipa archive is generated, and release notes for Firebase are created. This archive is then sent to Firebase and TestFlight for testing. Overall, our CI/CD process looks something like this: As mentioned earlier, in our implementation, during the build stage, the .swift files involved in the MR are checked by a linter. If any conflicts are found, corresponding messages are sent to the MR. It's important to note that regardless of whether the linter finds any issues, the pipeline does not get blocked. If we want the linter check status to appear in the MR on GitLab, we need a subscription; otherwise, we won't have a token for the GitLab API. The linter messages look like this: 
+
+Where possible, the linter opens a thread in the MR.
+
+ In the current implementation, there are no guarantees that a diff comment with the code will be created for each conflict. This is due to the somewhat inconvenient organization of diff comment submission in the Gitlab API: it is necessary to specify the start and end positions of the code blocks in both the old and new files, additionally providing the SHA-1 for the file. However, if you have time to experiment with the Gitlab API, you can write a few more dozen lines of code and solve this interesting task. You can read more about the Gitlab API here. 
+
+The `deploy_to_fb` and `deploy_to_tf` steps are responsible for sending the application archive to Firebase and TestFlight, respectively. For Firebase, a notification to the group of testers is additionally set up, and release notes are attached. A few words about the release notes: If a task is found in Jira, the task number and a link to it will be provided. If the task also has an epic, it will be included in a similar format. The last line always contains the version and build number.
+
+A few words about the release notes
+
+ If the task is not found, the release notes will only include information about the version and build number. 
+
+For the archive being sent to TestFlight in this example, notifications are disabled.
+
+## Configuration
+
+Well, now we are ready to start. Let's configure our repositories.
+
+### Setting up [CERTS repo]
+
+First of all, we need a repository for certificates. This repository will be used to store certificates, and it should not be publicly accessible. Access to it needs to be restricted to specific individuals and the CI/CD server only. Therefore, we create a repository in GitLab and make it private. Voilà - you're amazing. With that, the setup of the certificate repository is complete.
+
+### Setting up [CI/CD repo]
+
+We create a repository and make it private. The files listed here are provided for reference only. Upon completion of the setup, the repository should contain the following files, which you can retrieve from the repository.
+
+Fastlane path would contain the following files:
+
+Please take a glance at .gitlab-ci-template.yml - this file provides the necessary information about our pipeline and will be used by any project with CI/CD. As you can notice it is rather small and there are not so many variables in it - they should be declared later in your project CI/CD settings. You can adjust the file in a way that suits you, for example, adding conditions everywhere on branch naming, as was done in the create_archive step, or removing it altogether.
+
+If you are not planning to use Firebase or Testflight for the test deployment please remove the following lines: For Firebase:
+
+For Testflight:
+
+## Setting up [PROJECT repo]
+
+Let's assume we already have a ready project with a configured linter. All we need to do is:
+
+1. Ensure that it is configured correctly.
+2. Set up a few variables.
+3. Create a new pipeline.
+4. Set up runners for it.
+5. Configure the Appfile.
+
+### 1. Ensure that the project is configured correctly
+
+Now let's verify that the project is configured correctly.
+
+#### Configuration of schemes and targets
+
+The project should have, in addition to the main target, a target for testing with an associated scheme. In this guide, there will be a project with 2 targets:
+
+As mentioned earlier, the target for testing in our case is responsible for unit tests. However, if you desire or need to deploy UI tests, you should additionally create a target and scheme for it. For our version of the project to work with CI/CD, we need to create at least the first two schemes:
+
+1. Scheme for building the project.
+2. Scheme for running tests.
+3. Scheme for development. Thus, we have three working schemes. Make sure that all of them are set to "shared," otherwise, the scheme will only be visible to you.
+
+#### Firebase integration
+
+We assume the project is already linked to Firebase, so feel free to skip this section if everything is ready or if Firebase usage is not planned.
+
+Steps to set up integration with Firebase.
+
+ To begin, navigate to the Firebase page. If a Firebase project has not been created yet, it needs to be created by clicking "Add project." After creating the project, associate it with our iOS project by clicking "Add app" within the project and selecting the iOS project. At this stage, there will be 5 steps displayed, with the most important one for us being "Apple bundle ID" - we take this from the project settings in Xcode. On the second step, don't forget to add the downloaded GoogleService-Info.plist to the project. After completing all the specified steps, the project is ready to work. 
+
+##### Let's add the ability to deploy projects to Firebase.
+
+Navigate to the "Release & Monitor" tab and select "App Distribution."
+
+In the opened window, click "Get started." The setup is almost complete. Navigate to the "Testers & Groups" tab and add a testing group by clicking "Add group." If desired, you can add yourself to this group. With this, the setup of testing groups is complete. Copy the name of the group as it will be needed for configuring GitLab CI/CD. Next, go to the project settings:
+
+In the "General" tab, you'll find information about the project and the apps associated with it. We need the section "Your apps," where you can find information about the project. If necessary, you can make changes here. It's worth noting that you cannot change the Bundle ID for the app, so if you need to change it, you'll have to link a new app. Copy the value of the "App ID" - it will be needed later for configuration.
+
+### 2. Let's set up variables for the project.
+
+To ensure the proper functioning of CI/CD, we need to create 3 variables within the GitLab project. Navigate to "SETTINGS" → "CI/CD" → "Variables" → "Expand" → "Add variable".
+
+| Variable | Description | Example |
+| --- | --- | --- |
+| PROJECT_NAME | Project name | FastlaneProject |
+| PROJECT_REPO_URL | A link to the project repository will be used to clone the project | https://gitlab.com/XXXXXX/YYYYYY.git. Place your values instead of X and Y |
+| XCWORKSPACE | If pods are installed, you need to provide the name of the .xcworkspace file including the extension. | FastlaneProject.xcworkspace |
+
+As a result, it should look something like this:
+
+Setting 'Masked' is not mandatory; it is only done to hide the address in the logs.
+
+### 3. Creating pipeline
+
+We create /.gitlab-ci.yml and populate it with the following lines:
+
+```yaml
+include:
+- project: 'cicdXXXXXX/cicd'
+  file: '/.gitlab-ci-template.yml'
+```
+
+This file references ".gitlab-ci-template.yml" from the project "cicdXXXXXX/cicd", which in my case is used as [CI/CD repo]. Thus, we are using “.gitlab-ci-template.yml” as our CI/CD pipeline
+
+### 4. Setting up project runners
+
+In the GitLab project, navigate to "Settings" -> "CI/CD" and open the "Runners" section.
+
+Since we cannot find the necessary runners with the tags, let's create them by clicking on "New project runner." You need to specify tags for the runner. For the names of the runners, I suggest using the following notation for their identification: PROJECT_NAME/JOB_NAME/NUMBER.
+
+After clicking "Create runner," you will be prompted to execute several commands in the environment where you plan to run the runner. Skipping this step is not advisable for proper configuration. We will execute these commands on the [CI/CD SERVER]. During the registration of runners, it's important not to run the command under sudo, as this may lead to incorrect runner behavior later on. Choose shell as the executor. As a result, the runners will be registered, and the configuration file can be found here:
+
+```shell
+➜  ~ ls -ltrh ~/.gitlab-runner/config.toml
+-rw-------@ 1 User  staff   900B May  4 19:55 /Users/CICDUser/.gitlab-runner/config.toml
+```
+
+Inside the `config.toml`, we can see entries of the following format associated with each created runner:
+
+```shell
+concurrent = 1
+check_interval = 0
+ 
+[[runners]]
+  name = “Runner_name”
+  limit = 1
+  id = XXXXXXXX
+  url = "https://gitlab.com/"
+  token = “xxxx-XXXXXXXXXXXXXXXXXXXX”
+  executor = "shell"
+  [runners.custom_build_dir]
+    enabled = true
+  [runners.cache]
+    [runners.cache.s3]
+    [runners.cache.gcs]
+    [runners.cache.azure]
+```
+
+Filled example:
+
+```shell
+[[runners]] 
+name = "FastlaneProject/create_archive/1"
+  limit = 1
+  url = "https://gitlab.com"
+  id = 36354822
+  token = "XXXXXXXXXXXXX"
+  token_obtained_at = 2024-05-07T14:48:23Z
+  token_expires_at = 0001-01-01T00:00:00Z
+  executor = "shell"
+  builds_dir = "/Users/CICDUser/YYYYYY/ZZZZZZZ/cicd/builds"
+  cache_dir = "/Users/CICDUser/YYYYYY/ZZZZZZZ/cicd/cache"
+  [runners.custom_build_dir]
+    enabled = true
+```
+
+Here, it is also worth noting several parameters:
+
+| Variable | Description |
+| --- | --- |
+| concurrent = 1 | restriction on the number of concurrently running runners |
+| limit = 1 | restriction for the runner on the number of concurrently running jobs |
+| builds_dir = "/Users/CICDUser/YYYYYY/ZZZZZZZ/cicd/builds" | the path where the runner's tasks will be executed. Note that it precedes the cicd directory - this is the directory where the entire CI/CD process will be configured. |
+| cache_dir = "/Users/CICDUser/YYYYYY/ZZZZZZZ/cicd/cache" | runner cache |
+
+### 5. Setting Appfile
+
+To complete this step, you first need to configure the [CI/CD SERVER]. Instructions on how to obtain and configure the Appfile will be provided later in the "Setting up [CI/CD SERVER]" section. Once the Appfile is configured, you need to place it in the Secure Files [PROJECT repo].
+
+## Setting [CI/CD SERVER]
+
+### 1. Setting Gitlab runners on the local host
+
+For setting up runners on a local machine, you can refer to the official GitLab documentation. Switch the command shell to bash, as GitLab does not guarantee correct operation on zsh. Check the current shell with the following command:
+
+```shell
+echo $SHELL
+```
+
+If the result is different from /bin/bash, then change it with the following command and restart the terminal.
+
+```shell
+chsh -s /bin/bash
+```
+
+If brew is not installed, then install it:
+
+```shell
+/bin/bash -c "$(curl "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh")"
+```
+
+Install rbenv following the steps described in the repository's description: instructions for setting up rbenv. Install rbenv to use it instead of the system ruby:
+
+```shell
+brew install rbenv gitlab-runner 
+brew services start gitlab-runner
+```
+
+Add rbenv to the profile:
+
+```shell
+echo 'if which rbenv > /dev/null; then eval "$(rbenv init -)"; fi' >> ~/.bash_profile
+source ~/.bash_profile
+```
+
+Checking versions of ruby:
+
+```shell
+rbenv install -l 
+```
+
+And install the latest version of Ruby, which is currently version 3.3.1:
+
+```shell
+rbenv install 3.3.1
+rbenv global 3.3.1 
+```
+
+Modify the .bashrc file by adding the following lines to it. Don't forget to replace XXXX with the actual user:
+
+```shell
+export PATH="/bin:/usr/bin:/usr/local/bin"
+export LANG=en_US.UTF-8
+export LANGUAGE=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+eval "$(rbenv init -)"
+ 
+PATH=$PATH:/Users/CICDUser/bin:/usr/local/homebrew
+PATH=$PATH:/Users/CICDUser/.rbenv/shims/
+export PATH
+```
+
+If Xcode is not installed, install it. For convenience in working with JSON files, install the jq utility (instructions for setting up jq).
+
+```shell
+brew install jq
+```
+
+Install GitLab Runner according to step 3 in Setting up [PROJECT repo].
+
+### 2. Fastlane
+
+Installing fastlane:
+
+```shell
+brew install fastlane
+```
+
+Now, navigate to the directory where all the CI/CD magic will happen - the location for the [CI/CD repo] repository. We already specified it in the runner settings - it is the parent directory for the cache and build of the runners: "/Users/XXXXXX/YYYYYY/ZZZZZZZ/cicd/". Here, clone the [CI/CD repo] repository and set up fastlane (instructions for installing fastlane).
+
+```shell
+cd /Users/CICDUser/YYYYYY/ZZZZZZZ/cicd/
+git clone https://gitlab.com/AAAAAA/BBBBBB.git
+...
+fastlane init
+...
+```
+
+Since there are no projects in this project yet, we will receive the following warning:
+
+```shell
+[✔] 🚀
+[✔] Looking for iOS and Android projects in current directory...
+[13:51:43]: Created new folder './fastlane'.
+[13:51:43]: No iOS or Android projects were found in directory '/Users/WWWW/XXXX/YYYY/ZZZZ'
+[13:51:43]: Make sure to `cd` into the directory containing your iOS or Android app
+[13:51:43]: Alternatively, would you like to manually setup a fastlane config in the current directory instead? (y/n){noformat}
+```
+
+Agree with everything. As a result, we get the following files:
+
+```shell
+MBP-Workstation:ZZZZ cicd$ ls -la
+total 24
+drwxr-xr-x@  5 CICDUser  staff   160 May 14 13:51 .
+drwxr-xr-x@ 17 CICDUser  staff   544 May 14 13:51 ..
+-rw-r--r--@  1 CICDUser  staff    46 May 14 13:51 Gemfile
+-rw-r--r--@  1 CICDUser  staff  5992 May 14 13:51 Gemfile.lock
+drwxr-xr-x@  4 CICDUser  staff   128 May 14 13:51 fastlane
+MBP-Workstation:ZZZZ cicd$ ls -la fastlane/
+total 16
+drwxr-xr-x@ 4 CICDUser  staff  128 May 14 13:51 .
+drwxr-xr-x@ 5 CICDUser  staff  160 May 14 13:51 ..
+-rw-r--r--@ 1 CICDUser  staff  242 May 14 13:51 Appfile
+-rw-r--r--@ 1 CICDUser  staff  598 May 14 13:51 Fastfile
+```
+
+### GEMFILE
+
+Install Ruby gems and along with it, dotenv (instructions for setting up dotenv). This will simplify the configuration and usage of fastlane. Open the Gemfile and add the following lines:
+
+```shell
+gem "dotenv"
+gem "fastlane"
+```
+
+You can use the following commands:
+
+```shell
+gem install bundler
+gem install dotenv
+```
+
+After that, execute:
+
+```shell
+bundle install
+Bundle complete! 3 Gemfile dependencies, 92 gems now installed.
+Use `bundle info [gemname]` to see where a bundled gem is installed.
+```
+
+To enable Fastlane to work with Firebase, execute the following command:
+
+```shell
+fastlane add_plugin firebase_app_distribution
+```
+
+Thus, a plugin allowing working with Firebase CLI will be installed. To pull the required project, simply download the Firebase CLI and log in to the appropriate account:
+
+```shell
+curl -sL https://firebase.tools | bash
+firebase login
+```
+
+### Appfile
+
+This file is specific to each project. Detailed instructions for filling out the Appfile can be found here: instructions for filling out the Appfile. For the local project, we will limit filling out only three fields: app_identifier, app_id, team_id, itc_team_id. After filling it out, attach this file as a Secure File in [PROJECT repo]: "SETTINGS" → "CI/CD" → "Secure Files" → "Expand" → "Upload File". As a result, the Appfile will be located in the GitLab project. In the future, this file will be downloaded and used by the CI/CD within the pipeline.
+
+### Fastfile
+
+The heart of our CI/CD is the Fastfile - this is where all the CI/CD logic will be implemented. Let's rewrite the default Fastfile located at fastlane/Fastfile with the following content:
+
+Fastfile content
+
+ Since the file is quite large, it can be obtained from the repository. Here it is provided for reference. 
+
+```plaintext
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+require 'fileutils'
+
+default_platform(:ios)
+xcode_select "/Applications/Xcode.app"
+
+platform :ios do
+  desc "Build step"
+  desc "### Example:"
+  desc "\`\`\`\n[bundler exec] fastlane build_before_tests [--env FASTLANE_ENVIRONMENT]\n\`\`\`"
+  lane :build_before_tests do |options|
+    # Checks if all ENV variables were defined in the .env.PROJECT_NAME file
+    verify_env_variables(['CICD_CLONE_PATH', 'BUILD_SCHEME', 'CICD_LOGS_HOME', 'CICD_DERIVED_DATA_PATH', 'DESTINATION', 'CICD_BUILD_RESULTS_PATH'])
+
+    # Perform linting
+    perform_linting()
+
+    # Define project location based on Xcode project or workspace
+    project_location = ENV['CICD_CLONE_PATH'] + (ENV['XCWORKSPACE'].empty? ? ENV['XCODEPROJ'] : ENV['XCWORKSPACE'])
+    puts "Project location:\t #{ project_location}"
+
+    # Prepare build with fastlane scan
+    scan(
+      project: ENV['XCWORKSPACE'].empty? ? project_location : nil,
+      workspace: ENV['XCWORKSPACE'].empty? ? nil : project_location,
+      scheme: ENV['BUILD_SCHEME'],
+      configuration: "Release",
+      buildlog_path: ENV['CICD_LOGS_HOME'],
+      derived_data_path: ENV['CICD_DERIVED_DATA_PATH'],
+      destination: ENV['DESTINATION'],
+      code_coverage: true,
+      output_directory: ENV['CICD_BUILD_RESULTS_PATH'],
+      skip_build: false,
+      build_for_testing: true,
+      clean: false
+    )
+  end
+
+  desc "Prepare tests for project"
+  desc "### Examples:"
+  desc "\`\`\`\n[bundler exec] fastlane run_unit_tests [--env FASTLANE_ENVIRONMENT]\n\`\`\`"
+  lane :run_unit_tests do |options|
+    # Checks if all ENV variables were defined in the .env.PROJECT_NAME file
+    verify_env_variables(['CICD_CLONE_PATH', 'TEST_SCHEME', 'CICD_LOGS_HOME', 'CICD_DERIVED_DATA_PATH', 'DESTINATION', 'CICD_TEST_RESULTS_PATH'])
+
+    # Define project location based on Xcode project or workspace
+    project_location = ENV['CICD_CLONE_PATH'] + (ENV['XCWORKSPACE'].empty? ? ENV['XCODEPROJ'] : ENV['XCWORKSPACE'])
+    puts "Project location:\t #{ project_location}"
+
+    # Perform test with fastlane scan
+    scan(
+      project: ENV['XCWORKSPACE'].empty? ? project_location : nil,
+      workspace: ENV['XCWORKSPACE'].empty? ? nil : project_location,
+      scheme: ENV['TEST_SCHEME'],
+      configuration: "Debug",
+      buildlog_path: ENV['CICD_LOGS_HOME'],
+      derived_data_path: ENV['CICD_DERIVED_DATA_PATH'],
+      destination: ENV['DESTINATION'], 
+      test_without_building: false,
+      output_directory: ENV['CICD_TEST_RESULTS_PATH'],
+      clean: false,
+      include_simulator_logs: false
+     )
+  end
+
+  desc "Prepare IPA archive"
+  desc "The lane to run by developers or CI/CD"
+  desc "### Examples:"
+  desc "\`\`\`\n[bundler exec] fastlane build_archive type:\"development\" export_method:\"development\" [--env FASTLANE_ENVIRONMENT]\n\`\`\`"
+  desc "\`\`\`\n[bundler exec] fastlane build_archive type:\"adhoc\" export_method:\"ad-hoc\" [--env FASTLANE_ENVIRONMENT]\n\`\`\`"
+  desc "### Options:"
+  desc " * **`type`**: must be: [\"appstore\", \"adhoc\", \"development\", \"enterprise\", \"developer_id\", \"mac_installer_distribution\", \"developer_id_installer\"]"
+  desc " * **`export_method`**: export_method must be: [\"app-store\", \"validation\", \"ad-hoc\", \"package\", \"enterprise\", \"development\", \"developer-id\", \"mac-application\"]"
+  lane :build_archive do |options|
+    # Checks if all ENV variables were defined in the .env.PROJECT_NAME file
+    verify_env_variables(['CICD_ARCHIVES_LOCATION', 'CICD_RELEASE_NOTES_FILE_PATH', 'CICD_CLONE_PATH', 'XCODEPROJ', 'BUILD_SCHEME', 'PROJECT_NAME', 'CICD_IPA_ARCHIVE_NAME', 'APP_BUNDLE_ID', 'APP_CERTIFICATES_STORE'])
+
+    # Prepare paths for archive and release notes
+    archive_location = ENV['CICD_ARCHIVES_LOCATION']
+    release_notes_path = ENV['CICD_RELEASE_NOTES_FILE_PATH']
+
+    if File.exist?(release_notes_path)
+      sh "cat /dev/null > #{release_notes_path}"
+    else
+      FileUtils.mkdir_p(archive_location)
+      FileUtils.touch(release_notes_path)
+    end 
+
+    # Sync code signing
+    sync_code_signing(
+          type: options[:type],
+          app_identifier: ENV['APP_BUNDLE_ID'],
+          readonly: true,
+          git_url: ENV['APP_CERTIFICATES_STORE']
+    )
+    
+    # Preparing release notes
+    current_branch_name = git_current_branch(ENV['CICD_CLONE_PATH'])
+    ticket_number = current_branch_name.match(/(?:\/)([A-Z]+-\d+)/)[1]
+    prepare_release_notes(
+      ticket_number: "#{ticket_number}"
+    )
+    parsed_version, parsed_build = parse_version_and_build("#{release_notes_path}")
+    new_build = parsed_build.to_i
+    new_version = parsed_version.to_i
+
+    # Incrementing build number for archive
+    increment_build_number(
+      xcodeproj: ENV['CICD_CLONE_PATH'] + ENV['XCODEPROJ'],
+      build_number: "#{new_build}"
+    )
+
+    # Define project location based on Xcode project or workspace
+    project_location = ENV['CICD_CLONE_PATH'] + (ENV['XCWORKSPACE'].empty? ? ENV['XCODEPROJ'] : ENV['XCWORKSPACE'])
+    puts "Project location:\t #{ project_location}"
+     
+    # Determine configuration
+    configuration = options[:type] == "appstore" ? "Release" : "Debug"
+ 
+    # Preparing ipa archive with fastlane gym
+    gym(
+      project: ENV['XCWORKSPACE'].empty? ? project_location : nil,
+      workspace: ENV['XCWORKSPACE'].empty? ? nil : project_location,
+      scheme: ENV['BUILD_SCHEME'],
+      configuration: configuration,
+      clean: true,
+      output_directory: archive_location,
+      output_name: ENV['CICD_IPA_ARCHIVE_NAME'],
+      export_method: options[:export_method],
+      skip_package_dependencies_resolution: true
+    )
+  end
+  
+
+  desc "Send IPA archive to Testflight"
+  desc "### Examples:"
+  desc "\`\`\`\n[bundler exec] fastlane deploy_tf skip_submission:true [--env FASTLANE_ENVIRONMENT]\n\`\`\`"
+  desc "### Options:"
+  desc " * **`skip_submission`**: skip the distributing action of pilot and only upload the ipa file true|false(by default)"
+  lane :deploy_tf do |options|
+    # Checks if all ENV variables were defined in the .env.PROJECT_NAME file
+    verify_env_variables(['CICD_ARCHIVES_LOCATION', 'PROJECT_NAME', 'CICD_IPA_FULL_PATH', 'APP_BUNDLE_ID', 'APP_CERTIFICATES_STORE'])
+
+    # Sync code signing
+    sync_code_signing(
+      type: "development",
+      app_identifier: ENV['APP_BUNDLE_ID'],
+      readonly: true,
+      git_url: ENV['APP_CERTIFICATES_STORE']
+    )
+    
+    # Get credentials for App Store Connect
+    apiKey = app_store_connect_api_key(
+      is_key_content_base64: true,
+      duration: 1200,
+      in_house: false # if it is enterprise or not
+    )
+    
+    # Send .ipa archive to the Testflight silently
+    testflight(
+      app_identifier: options[:appIdentifier],
+      skip_waiting_for_build_processing: options[:skip_submission],
+      skip_submission: options[:skip_submission],
+      ipa: ENV['CICD_IPA_FULL_PATH'],
+      api_key: apiKey,
+      changelog: ""
+    )
+  end
+
+  desc "Send Archive to Firebase" 
+  desc "### Examples:"
+  desc "\`\`\`\n[bundler exec] fastlane deploy_firebase [--env FASTLANE_ENVIRONMENT]\n\`\`\`"
+  desc "### Options:"
+  desc " * **`fb_groups`**: testers groups created in firebase concole app distribution tab"
+  desc " * **`fb_release_notes`**: release notes for the specified project archive"
+  lane :deploy_firebase do |options|
+    # Checks if all ENV variables were defined in the .env.PROJECT_NAME file
+    verify_env_variables(['FB_APP_KEY', 'FB_TEST_GROUPS', 'CICD_RELEASE_NOTES_FILE_PATH', 'CICD_IPA_FULL_PATH'])
+
+    # Push ipa archive with specified release notes to the Firebase App Distribution with notification to the specified test groups
+    release = firebase_app_distribution(
+      app: ENV['FB_APP_KEY'],
+      testers: ENV['FB_TEST_GROUPS'],
+      release_notes_file: ENV['CICD_RELEASE_NOTES_FILE_PATH'],
+      ipa_path: ENV['CICD_IPA_FULL_PATH']
+    )
+  end
+
+  desc "Get certificates for specified project"
+  desc "### Examples:"
+  desc "\`\`\`\n[bundler exec] fastlane certificates [--env FASTLANE_ENVIRONMENT]\n\`\`\`"
+  lane :certificates do |options|
+    # Checks if all ENV variables were defined in the .env.PROJECT_NAME file
+    verify_env_variables(['APP_BUNDLE_ID', 'APP_CERTIFICATES_STORE'])
+
+    sync_code_signing(
+      type: "development",
+      app_identifier: ENV['APP_BUNDLE_ID'],
+      force_for_new_devices: true,
+      git_url: ENV['APP_CERTIFICATES_STORE'],
+      readonly: true
+    )
+    sync_code_signing(
+      type: "adhoc",
+      app_identifier: ENV['APP_BUNDLE_ID'],
+      force_for_new_devices: true,
+      git_url: ENV['APP_CERTIFICATES_STORE'],
+      readonly: true
+    )
+    sync_code_signing(
+      type: "appstore",
+      app_identifier: ENV['APP_BUNDLE_ID'],
+      git_url: ENV['APP_CERTIFICATES_STORE'],
+      readonly: true
+    )
+  end
+
+  desc "Generate new certificates for specified project"
+  desc "### Examples:"
+  desc "\`\`\`\n[bundler exec] fastlane generate_new_certificates [--env FASTLANE_ENVIRONMENT]\n\`\`\`"
+  lane :generate_new_certificates do |options|
+    # Checks if all ENV variables were defined in the .env.PROJECT_NAME file
+    verify_env_variables(['APP_BUNDLE_ID', 'APP_CERTIFICATES_STORE'])
+
+    sync_code_signing(
+      type: "development",
+      app_identifier: ENV['APP_BUNDLE_ID'],
+      git_url: ENV['APP_CERTIFICATES_STORE'],
+      force_for_new_devices: true,
+      readonly: false
+    )
+    sync_code_signing(
+      type: "adhoc",
+      app_identifier: ENV['APP_BUNDLE_ID'],
+      git_url: ENV['APP_CERTIFICATES_STORE'],
+      force_for_new_devices: true,
+      readonly: false
+    )
+    sync_code_signing(
+      type: "appstore",
+      app_identifier: ENV['APP_BUNDLE_ID'],
+      git_url: ENV['APP_CERTIFICATES_STORE'],
+      force_for_new_devices: true,
+      readonly: false
+    )  
+  end
+
+  desc "Lint step"
+  desc "### Examples:"
+  desc "\`\`\`\n[bundler exec] fastlane perform_linting [--env FASTLANE_ENVIRONMENT]\n\`\`\`"
+  lane :perform_linting do |options|
+    # Checks if all ENV variables were defined in the .env.PROJECT_NAME file
+    verify_env_variables(['CICD_CLONE_PATH', 'CICD_LINTER_LOCK_FILE', 'CICD_LINTER_RESULTS_FILE'])
+  
+    # Frist three variables - just for readability
+    cicd_clone_path = ENV['CICD_CLONE_PATH']
+    linter_lock_file = ENV['CICD_LINTER_LOCK_FILE']
+    linter_result_file = ENV['CICD_LINTER_RESULTS_FILE']
+    previous_merge_commit = git_last_merge_commit(cicd_clone_path)
+    current_commit = git_current_commit(cicd_clone_path)
+    current_branch_name = git_current_branch(cicd_clone_path)
+
+    puts "Previous merge commit hash:\t #{previous_merge_commit}"
+    puts "Last commit hash:\t\t #{current_commit}"
+    puts "Swiftlint lock file:\t  #{linter_lock_file}"
+    
+    # Reading installed lock or prepareing linter internal files 
+    linter_commit = read_linter_commit(linter_lock_file)
+
+    if linter_commit == current_commit
+      puts "Linting was already performed for the current commit. Skipping lint steps."
+    else
+      files_to_lint = git_diff_swift_files(previous_merge_commit, current_commit, cicd_clone_path)
+      puts "Files to lint: #{files_to_lint}"
+
+      if files_to_lint.empty?
+        puts "No swift files changed. Skipping lint"
+      else 
+        lint_swift_files(files_to_lint, linter_result_file, cicd_clone_path, current_branch_name)
+      end
+
+      File.open(linter_lock_file, "w") { |file| file.write(current_commit) }
+    end
+  end
+  
+
+  desc "Send message to Gitlab"
+  desc "### Examples:"
+  desc "\`\`\`\n[bundler exec] fastlane send_message commit_ref:\"BRANCH_NAME\" file_to_comment:\"FILEPATH\" line_to_comment:\"\"  gitlab_message:\"MESSAGE_TO_POST\" [--env FASTLANE_ENVIRONMENT]\n\`\`\`"
+  desc "### Options:"
+  desc "* **`commit_ref`**: current brnach name. This will be used to detect opened MR"
+  desc "* **`gitlab_message`**: message to post in the new MR thread"
+  desc "* **`file_to_comment`**: file to add comment to. Note that all subpaths of the project should be included, providing just file name is not sufficient."
+  desc "* **`line_to_comment`**: line in the file that should be comented"
+  lane :send_message do |options|
+    # Checks if all ENV variables were defined in the .env.PROJECT_NAME file
+    verify_env_variables(['GIT_PROJECT_ID', 'CI_API_TOKEN'])
+
+    merge_request_iid = get_merge_request_iid(options[:commit_ref])
+    if merge_request_iid
+      json_data = prepare_json_data(options, merge_request_iid)
+      post_comment_to_merge_request(options, merge_request_iid, json_data)
+    else
+      UI.error("Failed to retrieve merge request IID")
+    end
+  end
+
+  desc "Get project information from JIRA"
+  desc "### Examples:"
+  desc "\`\`\`\n[bundler exec] fastlane get_jira_info ticket_number:\"TICKET_NUMBER\" [--env FASTLANE_ENVIRONMENT]\n\`\`\`"
+  desc "### Options:"
+  desc " * **`ticket_number`**: ticket number usually corresponds to branch_name in project"
+  lane :get_jira_info do |options|
+    # Checks if all ENV variables were defined in the .env.PROJECT_NAME file
+    verify_env_variables(['CICD_RELEASE_NOTES_FILE_PATH', 'JIRA_API_KEY','JIRA_HOST_NAME', 'JIRA_TICKET_URL'])
+
+    # Gather ticket related data
+    ticket_summary = execute_jira_api_get_request("/issue/#{options[:ticket_number]}/?fields=summary")
+    if ticket_summary.include?('errorMessages') || ticket_summary.include?('Not Found')
+      puts "Couldn't find relevant ticket information in JIRA. Skipping all steps."
+    else
+      ticket_link="#{ENV['JIRA_TICKET_URL']}/#{options[:ticket_number]}"
+      ticket_notes="Ticket:\t#{options[:ticket_number]}\t#{ticket_link}\n"
+
+      # Gather Epic related information
+      editmeta_response = execute_jira_api_get_request("/issue/#{options[:ticket_number]}/editmeta")
+      epic_custom_field_id = `echo '#{editmeta_response}' | jq -r '.fields | to_entries[] | select(.value.name == "Epic Link") | .value.fieldId' | tr -d '\n'`
+      epic_ticket_response = execute_jira_api_get_request("/issue/#{options[:ticket_number]}?fields=#{epic_custom_field_id}")
+      epic_ticket_number = `echo '#{epic_ticket_response}' | jq -r '.fields.#{epic_custom_field_id}' | tr -d '\n'`
+      if epic_ticket_number && !epic_ticket_number.strip.empty? && epic_ticket_number != "null"
+        epic_ticket_link="#{ENV['JIRA_TICKET_URL']}/#{epic_ticket_number}"
+        ticket_notes+="Epic:\t#{epic_ticket_number}\t#{epic_ticket_link}\n"
+      end
+        
+      # Write ticket information to release notes file
+      File.open(ENV['CICD_RELEASE_NOTES_FILE_PATH'], "a") { |file| file.puts ticket_notes }
+    end
+  end
+  
+  desc "Saves version and build info to the release notes"
+  desc "### Examples:"
+  desc "\`\`\`\n[bundler exec] fastlane prepare_release_notes ticket_number:\"TICKET_NUMBER\"  [--env FASTLANE_ENVIRONMENT]\n\`\`\`"
+  desc "### Options:"
+  desc " * **`ticket_number`**: ticket number usually corresponds to branch_name in project"
+  lane :prepare_release_notes do |options|
+    # Checks if all ENV variables were defined in the .env.PROJECT_NAME file
+    verify_env_variables(['CICD_CLONE_PATH', 'XCODEPROJ'])
+
+    # Gathering current version and build of the project
+    project_location = ENV['CICD_CLONE_PATH'] + ENV['XCODEPROJ']
+    version_number = get_version_number(xcodeproj: project_location)
+    build_number = latest_testflight_build_number()
+    puts "Local Version Number:\t\t#{version_number}"
+    puts "Current Testflight Build Number:\t#{build_number}"
+
+    # Adding ticket relevant information to the release notes
+    if options[:ticket_number]
+      ticket_number = options[:ticket_number]&.upcase
+      puts "Ticket number: #{ticket_number}"
+      get_jira_info(ticket_number: ticket_number)
+    end
+
+    # Adding version info to the release notes
+    build_number += 1
+    new_build_info = "Version and build: #{version_number}.#{build_number}"
+    File.open(ENV['CICD_RELEASE_NOTES_FILE_PATH'], "a") do |file|
+      file.puts "" if file.size > 0
+      file.puts new_build_info
+    end
+  end
+
+  # Methods
+
+  # "Method to get last merge commit"
+  def git_last_merge_commit(clone_path)
+    `cd #{clone_path} && git log --merges --oneline --format="%H" | head -n1 | tr -d '\n'`
+  end
+
+  # "Method to get current commit"
+  def git_current_commit(clone_path)
+    `cd #{clone_path} && git rev-parse HEAD | tr -d '\n'`
+  end
+
+  # "Method to get current branch"
+  def git_current_branch(clone_path)
+    `cd #{clone_path} && git branch --show-current | tr -d '\n'`
+  end
+
+  # "Method to get changed files"
+  def git_diff_swift_files(previous_commit, current_commit, clone_path)
+  `cd #{clone_path} && git diff #{previous_commit} #{current_commit} --name-only | grep .swift`.split("\n")
+  end
+
+  # "Method to read current lock or create linter lock and result files if no lock deteted"
+  desc "this prevents on running linter on already processed iteration of pipeline"
+  def read_linter_commit(lock_file)
+    if File.exist?(lock_file)
+      File.read(lock_file).strip
+    else
+      FileUtils.mkdir_p(File.dirname(lock_file))
+      FileUtils.touch(lock_file)
+      FileUtils.touch(ENV['CICD_LINTER_RESULTS_FILE'])
+      nil
+    end
+  end
+
+  # "Method to lint specified file"
+  def lint_swift_files(files_to_lint, result_file, clone_path, current_branch_name)
+    files_to_lint.each do |file|
+      swiftlint(
+        mode: :lint,
+        output_file: result_file,
+        config_file: "#{clone_path}.swiftlint.yml",
+        files: ["#{clone_path}#{file}"],
+        raise_if_swiftlint_error: false,
+        ignore_exit_status: true
+      )
+
+      parse_linter_results(ENV['CICD_LINTER_RESULTS_FILE'], file, current_branch_name)
+    end
+  end
+
+  # "Method to parse swiftlint result file"
+  def parse_linter_results(result_file, filename, current_branch_name)
+    File.open(result_file, "r") do |file|
+      file.each_line do |line|
+        parsed_data = parse_line(line.chomp)
+        if parsed_data
+          prepared_string = "**`#{filename}`**  \nSwiftlint #{parsed_data[:issue_level]} at line `#{parsed_data[:line_number]}`  \nlinter rule violated: `#{parsed_data[:rule_name]}`  \n#{parsed_data[:issue_long_description]}"
+          send_message(
+            commit_ref: "#{current_branch_name}",
+            gitlab_message: "#{prepared_string}",
+            file_to_comment: "#{filename}",
+            line_to_comment: parsed_data[:line_number]
+          )
+        else
+          puts "Failed to parse line."
+        end
+      end
+    end
+  end
+
+  # "Method to parse swiftlint result line"
+  def parse_line(line)
+    pattern = /^(.*\/)*(.+):(\d+):(\d+): (\w+): (.+): (.+) \((\w+)\)$/
+    match = line.match(pattern)
+
+    if match
+      full_filename = line["#{ENV['CICD_CLONE_PATH']}".length..-1].split(':')[0]
+      puts full_filename
+      filename = full_filename.sub(/^#{Regexp.escape("#{ENV['CICD_CLONE_PATH']}")}/, '')
+      line_number = match[3]
+      column_number = match[4]
+      issue_level = match[5]
+      issue_short_description = match[6]
+      issue_long_description = match[7]
+      rule_name = match[8]
+
+      return {
+        filename: filename,
+        line_number: line_number.to_i,
+        column_number: column_number.to_i,
+        issue_level: issue_level,
+        issue_short_description: issue_short_description,
+        issue_long_description: issue_long_description,
+        rule_name: rule_name
+      }
+    else
+      return nil
+    end
+  end
+
+  # "Method to parse release notes"
+  def parse_version_and_build(file_path)
+    version_line = File.readlines(file_path).find { |line| line.start_with?('Version and build:') }
+    if version_line
+      version_build = version_line.split(':').last.strip
+      version, build = version_build.split('.').first(2).join('.'), version_build.split('.').last
+      return version, build
+    else
+      put "Version line not found in file"
+    end
+  end
+
+  # "Method to get MR id related to the branch"
+  def get_merge_request_iid(commit_ref)
+    response = execute_gitlab_api_get_request("/merge_requests?scope=all&state=opened&source_branch=#{commit_ref}")
+    merge_request_iid = JSON.parse(response).first['iid'] if response && !response.empty?
+    merge_request_iid
+  end
+
+  #"Method to prepare data for MR comment in Gitlab"
+  def prepare_json_data(options, merge_request_iid)
+    merge_request_info = execute_gitlab_api_get_request("/projects/#{ENV['GIT_PROJECT_ID']}/merge_requests/#{merge_request_iid}")
+    json_data = JSON.parse(merge_request_info)
+    diff_refs = json_data['diff_refs']
+    base_sha = diff_refs['base_sha']
+    start_sha = diff_refs['start_sha']
+    head_sha = diff_refs['head_sha']
+
+    characters_to_escape = ['"', "'", '\\', '$', '(', ')', '\\\\']
+    escaped_gitlab_message = options[:gitlab_message].gsub(/(#{characters_to_escape.map { |c| Regexp.escape(c) }.join('|')})/, '\\\\\1').gsub("\n", "\\n")
+    escaped_gitlab_filepath = options[:file_to_comment].gsub(/(#{characters_to_escape.map { |c| Regexp.escape(c) }.join('|')})/, '\\\\\1')
+
+    "{\"body\": \"#{escaped_gitlab_message}\", \"position\": {\"base_sha\":\"#{base_sha}\", \"start_sha\":\"#{start_sha}\", \"head_sha\": \"#{head_sha}\", \"new_path\": \"#{escaped_gitlab_filepath}\", \"position_type\": \"text\", \"new_line\": #{options[:line_to_comment]}}}"
+  end
+
+  # "Method to send comment to Gitlab MR"
+  def post_comment_to_merge_request(options, merge_request_iid, json_data)
+    response = execute_gitlab_api_post_request("/projects/#{ENV['GIT_PROJECT_ID']}/merge_requests/#{merge_request_iid}/discussions?body=comment", json_data)
+    status_code = response.strip.to_i
+    if (200..299).include?(status_code)
+      UI.success("Diff comment posted successfully")
+    else
+      UI.error("Failed to apply comment to a code block. Status code: #{status_code}")
+      UI.message("Trying to send a simple note to...")
+      note_comment_response = execute_gitlab_api_post_request("/projects/#{ENV['GIT_PROJECT_ID']}/merge_requests/#{merge_request_iid}/notes", json_data)
+      note_comment_status_code = note_comment_response.strip.to_i
+      UI.error("Issue with sending messages to the MR request. Status code: #{note_comment_status_code}") unless (200..299).include?(note_comment_status_code)
+    end
+  end
+
+  # "Method to execute GET request with Gitlab API"
+  def execute_gitlab_api_get_request(endpoint)
+    url = "#{ENV['FASTLANE_GITLAB_API_URL']}#{endpoint}"
+    `curl -s --request GET --header 'PRIVATE-TOKEN: #{ENV['CI_API_TOKEN']}' '#{url}'`
+  end
+
+  # "Method to execute POST request with Gitlab API"
+  def execute_gitlab_api_post_request(endpoint, json_data)
+    url = "#{ENV['FASTLANE_GITLAB_API_URL']}#{endpoint}"
+    `curl -s -o /dev/null --request POST --header "PRIVATE-TOKEN: #{ENV['CI_API_TOKEN']}" --header "Content-Type: application/json" --data '#{json_data}' -w "%{http_code}\n" '#{url}'`
+  end
+ 
+  # "Method to execute GET request with JIRA API"
+  def execute_jira_api_get_request(endpoint)
+    url = "#{ENV['JIRA_HOST_NAME']}#{endpoint}"
+    `curl -s --header 'Authorization: Bearer #{ENV['JIRA_API_KEY']}' '#{url}'`
+  end
+
+  # "Method to check if ENV variable was defined"
+  def verify_env_variables(variables)
+    variables.each do |var|
+      unless ENV[var]
+        puts "Environment variable #{var} is not defined."
+        error_message = "Please make sure that #{var} was properly defined in your environment."
+        UI.user_error!(error_message)
+      end
+    end
+  end
+end
+```
+
+Copy to clipboard
+
+The Fastfile provides lanes for working with the pipeline, and it was decided to keep the related methods in the same file as well. Each lane is provided with a description of its work, how it is called, and the variables used. Additionally, you can find more information about them in the README.md file in the fastlane directory of the project. Variables ENV['XXXXX'] are defined in the env file located at fastlane/.env.YYYYYYYYY, where YYYYYYYYY = ['default', 'PROJECT_NAME']. PROJECT_NAME is taken from the CI/CD [PROJECT repo] variables, and default is the default env file. options[:file_to_comment] are variables passed to lanes from outside. All lanes should be called with the corresponding project env, for example:
+
+```shell
+bundler exec fastlane iOS build_before_tests --env YourProject # YourProject - the name of your project, for which a corresponding env is created .env.YourProject
+```
+
+Please note if you are not using linter, Jira or any other tools, you should comment out the associated method calls in the code. For example, if you are not using linter - comment the line 29:
+
+Or if you are not using Jira or if you are using some different task tracker - please comment or replace line 380:
+
+## Creating env for the project
+
+### fastlane/.env.default
+
+.env.default is the default environment file used by Fastlane if we execute commands without specifying the environment explicitly. Below is the attached .env.default file necessary for the proper functioning of our CI/CD.
+
+```shell
+MATCH_PASSWORD="XXXXXXXXXXXX"
+MATCH_KEYCHAIN_PASSWORD="YYYYYYYYYY"
+
+CICD_HOME_DIR="/Users/CICDUser/YYYYYY/ZZZZZZ/cicd/builds"
+
+DESTINATION="platform=iOS Simulator,name=iPhone 15,OS=17.2"
+
+APP_STORE_CONNECT_API_KEY_KEY_ID="XXXXXXXX"
+APP_STORE_CONNECT_API_KEY_ISSUER_ID="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+APP_STORE_CONNECT_API_KEY_KEY="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+
+# Fastlane env
+FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT=15
+FASTLANE_XCODEBUILD_SETTINGS_RETRIES=6
+FASTLANE_GITLAB_API_URL="https://gitlab.com/api/v4"
+```
+
+Below I will provide information on where you can obtain data for the parameters above:
+
+| Variable | Description |
+| --- | --- |
+| MATCH_PASSWORD | Password to extract the project related certificates |
+| MATCH_KEYCHAIN_PASSWORD | Password to the local keychain |
+| CICD_HOME_DIR | The path where runners work. In this case, there may be a slight collision. Why is the variable specified as CICD_HOME_DIR, while in fact, the path for runner builds is provided - all because although the heart of CI/CD is the Fastfile, its hands are the runners. All work is performed in this directory, we could specify another path, but it still should be related to the working directory of the runners. This directory can be changed. |
+| DESTINATION | iOS simulators on which builds will be compiled and tests will be executed. The specified simulator must be installed. |
+| APP_STORE_CONNECT_API_KEY_KEY_ID | API KEY ID. This value can be obtained from the App Store Connect section "Users and Access", tab "Integrations", sub-tab "App Store Connect API". |
+| APP_STORE_CONNECT_API_KEY_ISSUER_ID | API KEY ISSUER ID. This value can be obtained from the App Store Connect section "Users and Access", tab "Integrations", sub-tab "App Store Connect API". |
+| APP_STORE_CONNECT_API_KEY_KEY | API KEY. To obtain this value, execute the following command on the key downloaded from the App Store: `'openssl base64 < path/to/key.p8 |
+| FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT | Timeout for build execution attempts. |
+| FASTLANE_XCODEBUILD_SETTINGS_RETRIES | Limit on the number of build execution attempts. |
+| FASTLANE_GITLAB_API_URL | Gitlab API |
+
+### .env.PROJECT_NAME
+
+.env.PROJECT_NAME is the environment file for our project. It will provide all the necessary variables for CI/CD to work with this project.
+
+```shell
+# Certificate store
+APP_CERTIFICATES_STORE="https://gitlab.com/XXXXXX/YYYYYY.git"
+APP_BUNDLE_ID="XXXXXXXXXXXXXXXXXXXXXXXXX"
+
+# XCode Project specific variables
+XCODEPROJ="XXXXXXXXXX.xcodeproj"
+XCWORKSPACE="XXXXXXXXXX.xcworkspace"
+BUILD_SCHEME="YYYYYYYYYY"
+TEST_SCHEME="ZZZZZZZZZ"
+PROJECT_NAME="XXXXXXXXXX"
+
+# Firebase variables
+FB_APP_KEY="1:XXXXXXXXXXXX:ios:YYYYYYYYYYYY"
+FB_TEST_GROUPS="TEST_GROUP_NAME"
+
+# Runner folders
+CICD_ARTIFACTS_HOME="$CICD_HOME_DIR/$PROJECT_NAME/artifacts"
+CICD_CLONE_PATH="$CICD_HOME_DIR/clones/$PROJECT_NAME/"
+CICD_LINTER_HOME="$CICD_ARTIFACTS_HOME/swiftlint"
+CICD_LOGS_HOME="$CICD_ARTIFACTS_HOME/logs"
+CICD_ARCHIVES_LOCATION="$CICD_ARTIFACTS_HOME/archives/"
+CICD_RELEASE_NOTES_FILE_PATH="$CICD_ARCHIVES_LOCATION/release_notes"
+CICD_DERIVED_DATA_PATH="$CICD_ARTIFACTS_HOME/derived_data/"
+CICD_BUILD_RESULTS_PATH="$CICD_ARTIFACTS_HOME/build_results/$(date '+%Y-%m-%d_%H:%M:%S')/"
+CICD_TEST_RESULTS_PATH="$CICD_ARTIFACTS_HOME/test_results/$(date '+%Y-%m-%d_%H:%M:%S')/"
+CICD_LINTER_RESULTS_FILE="$CICD_LINTER_HOME/swiftlint_results"
+CICD_LINTER_LOCK_FILE="$CICD_LINTER_HOME/swiftlint.lock"
+CICD_IPA_ARCHIVE_NAME="$PROJECT_NAME.ipa"
+CICD_IPA_FULL_PATH="$CICD_ARCHIVES_LOCATION/$CICD_IPA_ARCHIVE_NAME"
+
+# Gitlab variables
+GIT_PROJECT_ID=XXXXXXXX
+# Message Agent for GitLab (Only for Premium or Ultimate Gitlab plans)
+CI_API_TOKEN="xxxxx-xxxxxxxxxxxxxxxxxxxx"
+
+# JIRA variables
+JIRA_URL="https://jira.YOUR_JIRA_PROJECT_NAME.com"
+JIRA_TICKET_URL="$JIRA_URL/browse"
+JIRA_HOST_NAME="$JIRA_URL/rest/api/latest"
+JIRA_SEARCH_URL="$JIRA_HOST_NAME/search"
+JIRA_API_KEY="yyyyyyyyyyyyyyyyyyyy"
+```
+
+Below I will provide information on where you can obtain data for the parameters above:
+
+| Variable | Description |
+| --- | --- |
+| APP_CERTIFICATES_STORE | Link to the repository where all certificates related to the project will be stored. The repository was created in the "Setup [CERTS repo]" step. |
+| APP_BUNDLE_ID | Bundle ID for the project [PROJECT repo] |
+| XCODEPROJ | The name of the Xcodeproj file with its extension. |
+| XCWORKSPACE | The name of the Xcworkspace file with its extension (If exists). |
+| BUILD_SCHEME | The name of the scheme under which the build will be performed. |
+| TEST_SCHEME | The name of the scheme under which unit testing will be conducted. |
+| PROJECT_NAME | The name of the project, which will be used for creating directories on the CI/CD server and for referencing the env file. |
+| FB_APP_KEY | The APP KEY of the project in Firebase. You can extract the value from the "Firebase Console" -> "Project overview" -> "Project Settings" -> "Your apps" section -> "App ID". |
+| FB_TEST_GROUPS | Testing groups created through the Firebase Console. You can extract them from the "Firebase Console" -> Project Shortcuts "App Distribution" -> "Testers & Groups" -> Tester groups. |
+| GIT_PROJECT_ID | The project ID in the Gitlab repository. You can extract the value from the project settings "Settings" -> "General", in the section "Naming, topics, avatar", the value "Project ID". |
+| CI_API_TOKEN | This token is only available to owners with a Premium or Ultimate Gitlab subscription. It can be created through the project settings "Settings" -> "Access Tokens" -> click "Add new token". Note that the token name will be displayed in Gitlab MR comments. |
+| JIRA_URL | URL of project in JIRA |
+| JIRA_API_KEY | The token of the user under which the JIRA API requests will be made. You can create it through the user profile → "Personal access tokens" → "Create token". |
+
+After configuring these two files, we can consider the CI/CD setup complete, with just the final touch left to add - integrating with Discord to set up notifications for build failures.
+
+## Discord integration
+
+We navigate to our Discord server, where all interested parties are expected to be. To set up a webhook, administrative access is required, which is only needed to create the webhook. Click on "Edit channel".
+
+Click on "New Webhook" and simply copy its URL into the field that appears.
+
+ 
+
+In the PROJECT repo, go to "Settings" -> "Integrations" -> "Discord Notifications". Fill in the following fields:
+
+After this, the project is fully prepared to run using GitLab CI/CD + Firebase + Fastlane + Jira with notifications sent to Discord.
+
+To sum up, assuming the CI/CD server is properly configured, the only steps required to apply this CI/CD process to a new project are:
+
+1. Create empty private repo for its certificates
+2. Add .gitlab-ci.yml with link to the .gitlab-ci-template.yml
+3. Add variables to the gitlab project
+4. Fill variables in .env.NewProject and associated Appfile All actions will take no more than an hour.
+
+I hope that this guide will provide you with the necessary steps to set up efficient CI/CD pipelines tailored for iOS development projects. Happy coding! Special thanks to the authors of the following links and my fellow colleagues

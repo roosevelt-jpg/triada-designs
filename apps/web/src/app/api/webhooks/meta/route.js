@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { ingestMetaWebhook } from "@/lib/meta/webhook-ingest";
 import { warmInboundRuntime } from "@/lib/meta/warm-inbound-runtime";
 import { runAfterResponse } from "@/lib/runtime/after-response";
+import { requireMetaHubSignature } from "@/lib/security/request-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,15 +18,7 @@ export const maxDuration = 60;
  */
 
 /**
- * Meta App Verify Token used in Production Subscribe.
- * Always accepted so a stale Vercel META_VERIFY_TOKEN (e.g. legacy
- * triada-local-verify) cannot block Meta Verify and Save.
- */
-const DEFAULT_META_VERIFY_TOKEN = "triada-meta-verify-2026";
-
-/**
- * Allowed hub.verify_token values: META_VERIFY_TOKEN, META_HUB_VERIFY_TOKEN,
- * plus the Production Meta App default (covers unset or stale Vercel env).
+ * Allowed hub.verify_token values from env only (no hardcoded fallback).
  * @returns {string[]}
  */
 function resolveAllowedVerifyTokens() {
@@ -35,7 +28,6 @@ function resolveAllowedVerifyTokens() {
   const hubAlias = process.env.META_HUB_VERIFY_TOKEN?.trim();
   if (primary) tokens.add(primary);
   if (hubAlias) tokens.add(hubAlias);
-  tokens.add(DEFAULT_META_VERIFY_TOKEN);
   return [...tokens];
 }
 
@@ -79,6 +71,13 @@ export async function GET(request) {
   const { mode, token, challenge } = readHubParams(searchParams);
   const allowed = resolveAllowedVerifyTokens();
 
+  if (!allowed.length) {
+    return NextResponse.json(
+      { message: "META_VERIFY_TOKEN is not configured." },
+      { status: 503 },
+    );
+  }
+
   if (
     mode === "subscribe" &&
     token &&
@@ -97,12 +96,23 @@ export async function GET(request) {
 }
 
 /**
- * POST — early 200, then background store → inbox → Support auto-reply (+ Graph).
+ * POST — verify X-Hub-Signature-256, then early 200 + background ingest.
  * WhatsApp Cloud + Instagram Messaging + Facebook Messenger → AI Support.
  * Never awaits outbound provider sends on the webhook critical path.
  */
 export async function POST(request) {
   const rawBody = await request.text();
+  const signature =
+    request.headers.get("x-hub-signature-256") ||
+    request.headers.get("X-Hub-Signature-256");
+  const sigGate = requireMetaHubSignature(rawBody, signature);
+  if (!sigGate.ok) {
+    return NextResponse.json(
+      { message: sigGate.error },
+      { status: sigGate.status },
+    );
+  }
+
   let payload = null;
   try {
     payload = rawBody ? JSON.parse(rawBody) : {};
@@ -116,7 +126,6 @@ export async function POST(request) {
     headers[key.toLowerCase()] = value;
   });
 
-  // Signature verification (X-Hub-Signature-256) lands with full control-plane port.
   // Always 200 after accept so Meta does not poison-retry on AI/Graph failures.
   runAfterResponse(async () => {
     await ingestMetaWebhook({

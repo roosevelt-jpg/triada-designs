@@ -9,19 +9,34 @@ import {
 
 /** Production-style admin used across seeders and dashboard login. */
 export const ADMIN_EMAIL = "info@triada-designs.com";
-export const ADMIN_PASSWORD = "triada-local";
 export const ADMIN_NAME = "Triada Admin";
+
+/**
+ * Seed admin password from env only — never a hardcoded default in the bundle.
+ * @returns {string}
+ */
+export function resolveSeedAdminPassword() {
+  return String(
+    process.env.TRIADA_SEED_ADMIN_PASSWORD ||
+      process.env.SEED_ADMIN_PASSWORD ||
+      "",
+  ).trim();
+}
+
+/** @deprecated Use resolveSeedAdminPassword() — kept empty so callers never get a baked-in secret. */
+export const ADMIN_PASSWORD = "";
 
 /** Bearer prefix for local dual-run when Supabase Auth env is unset. */
 export const LOCAL_SEED_TOKEN_PREFIX = "triada-local-seed.";
 
 /**
- * Local seed auth is for dual-run hosts without Supabase keys
- * (never enabled when anon credentials are present).
+ * Local seed auth is for dual-run hosts without Supabase keys.
+ * Requires an explicit seed password env; never enabled in production without it.
  */
 export function localSeedAuthEnabled() {
   if (hasSupabaseAnonCredentials()) return false;
   if (process.env.TRIADA_DISABLE_LOCAL_SEED_AUTH === "1") return false;
+  if (!resolveSeedAdminPassword()) return false;
   return (
     process.env.NODE_ENV !== "production" ||
     process.env.TRIADA_LOCAL_SEED_AUTH === "1"
@@ -189,17 +204,19 @@ export function readBearerToken(request) {
 
 /**
  * Ensure the seeded admin exists in Supabase Auth (service role).
- * Only creates/resets when `password` matches the known seed so failed
- * login attempts cannot overwrite the admin secret with a typo.
+ * Only creates/resets when `password` matches TRIADA_SEED_ADMIN_PASSWORD so
+ * failed login attempts cannot overwrite the admin secret with a typo.
  * @param {string} [email]
  * @param {string} [password]
  */
-export async function ensureAdminUser(
-  email = ADMIN_EMAIL,
-  password = ADMIN_PASSWORD,
-) {
+export async function ensureAdminUser(email = ADMIN_EMAIL, password = "") {
   if (!hasSupabaseAdminCredentials()) {
     return { ok: false, reason: "missing_service_role" };
+  }
+
+  const seedPassword = resolveSeedAdminPassword();
+  if (!seedPassword) {
+    return { ok: false, reason: "missing_seed_admin_password" };
   }
 
   const admin = createAdminSupabaseClient();
@@ -209,7 +226,7 @@ export async function ensureAdminUser(
   if (normalized !== ADMIN_EMAIL.toLowerCase()) {
     return { ok: false, reason: "not_seed_admin" };
   }
-  if (password !== ADMIN_PASSWORD) {
+  if (!password || password !== seedPassword) {
     return { ok: false, reason: "not_seed_password" };
   }
 
@@ -224,7 +241,7 @@ export async function ensureAdminUser(
 
   if (existing) {
     const updated = await admin.auth.admin.updateUserById(existing.id, {
-      password: ADMIN_PASSWORD,
+      password: seedPassword,
       email_confirm: true,
       user_metadata: {
         ...(existing.user_metadata || {}),
@@ -239,7 +256,7 @@ export async function ensureAdminUser(
 
   const created = await admin.auth.admin.createUser({
     email: normalized,
-    password: ADMIN_PASSWORD,
+    password: seedPassword,
     email_confirm: true,
     user_metadata: { name: ADMIN_NAME },
   });
@@ -267,7 +284,12 @@ export async function signInWithPassword(email, password) {
       };
     }
     const normalized = email.trim().toLowerCase();
-    if (normalized === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
+    const seedPassword = resolveSeedAdminPassword();
+    if (
+      seedPassword &&
+      normalized === ADMIN_EMAIL.toLowerCase() &&
+      password === seedPassword
+    ) {
       const user = localSeedUser();
       return {
         ok: true,
@@ -322,10 +344,12 @@ export async function signInWithPassword(email, password) {
       authError.message || "",
     );
 
+  const seedPassword = resolveSeedAdminPassword();
   if (
     missingUser &&
+    seedPassword &&
     normalized === ADMIN_EMAIL.toLowerCase() &&
-    password === ADMIN_PASSWORD &&
+    password === seedPassword &&
     hasSupabaseAdminCredentials()
   ) {
     const ensured = await ensureAdminUser(normalized, password);

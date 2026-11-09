@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sweepUnansweredSocialDms } from "@/lib/agents/social-media-manager";
 import { warmInboundRuntime } from "@/lib/meta/warm-inbound-runtime";
+import { requireCronSecret } from "@/lib/security/request-auth";
 
 /**
  * Vercel Cron: Social Media Manager unanswered DM sweep (Hobby-safe daily).
@@ -18,18 +19,17 @@ export async function POST(request) {
 }
 
 async function handle(request) {
-  const auth = request.headers.get("authorization") || "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  const alt = (request.headers.get("x-cron-secret") || "").trim();
-  const expected = (process.env.CRON_SECRET || "").trim();
+  const auth = requireCronSecret(request);
+  if (!auth.ok) {
+    return NextResponse.json(
+      { ok: false, error: auth.error },
+      { status: auth.status },
+    );
+  }
   const url = new URL(request.url);
   const dryRun = url.searchParams.get("dry_run") === "1";
   const limitRaw = url.searchParams.get("limit");
   const limit = limitRaw != null ? Number(limitRaw) : 20;
-
-  if (expected && bearer !== expected && alt !== expected) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
 
   try {
     const warm = await warmInboundRuntime().catch(() => null);

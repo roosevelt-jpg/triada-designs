@@ -43,7 +43,14 @@ export const INSTAGRAM_WEBHOOK_FIELDS = [
   "message_edit",
 ];
 
-const DEFAULT_VERIFY_TOKEN = "triada-meta-verify-2026";
+/** Resolve Meta verify token from env only (never a hardcoded default). */
+function resolveVerifyToken(override) {
+  const fromArg = String(override || "").trim();
+  if (fromArg) return fromArg;
+  return String(
+    process.env.META_VERIFY_TOKEN || process.env.META_HUB_VERIFY_TOKEN || "",
+  ).trim();
+}
 
 function graphUrl(resourcePath) {
   return `${GRAPH_BASE}/${GRAPH_VERSION}/${String(resourcePath).replace(/^\//, "")}`;
@@ -165,7 +172,7 @@ async function resolveAppCredentials() {
     fields.verify_token ||
       process.env.META_VERIFY_TOKEN ||
       process.env.META_HUB_VERIFY_TOKEN ||
-      DEFAULT_VERIFY_TOKEN,
+      resolveVerifyToken(),
   ).trim();
   return {
     appId,
@@ -336,7 +343,7 @@ export async function subscribeMetaMessagingWebhooks(opts = {}) {
     session_expired: false,
     has_app_secret: app.hasAppSecret,
     token_source: creds.tokenSource,
-    verify_token_hint: DEFAULT_VERIFY_TOKEN,
+    verify_token_hint: app.verifyToken ? "(configured)" : "(set META_VERIFY_TOKEN)",
     message: "",
     next_steps: /** @type {string[]} */ ([]),
   };
@@ -395,7 +402,7 @@ export async function subscribeMetaMessagingWebhooks(opts = {}) {
             callback_url: CALLBACK_URL,
             fields: INSTAGRAM_WEBHOOK_FIELDS.join(","),
             include_values: "true",
-            verify_token: app.verifyToken || DEFAULT_VERIFY_TOKEN,
+            verify_token: app.verifyToken || resolveVerifyToken(),
           },
           "POST",
         );
@@ -416,7 +423,7 @@ export async function subscribeMetaMessagingWebhooks(opts = {}) {
               callback_url: CALLBACK_URL,
               fields: PAGE_MESSAGING_SUBSCRIBED_FIELDS.join(","),
               include_values: "true",
-              verify_token: app.verifyToken || DEFAULT_VERIFY_TOKEN,
+              verify_token: app.verifyToken || resolveVerifyToken(),
             },
             "POST",
           );
@@ -462,7 +469,7 @@ export async function subscribeMetaMessagingWebhooks(opts = {}) {
           "App secret not available — Page subscribed_apps updated, but Instagram object webhooks must be set in Meta Developer Console (Instagram → Webhooks → messages) or by saving App Secret.",
       };
       result.next_steps.push(
-        "Meta Developer App → Instagram → Webhooks: callback https://dashboard.triada-designs.com/api/webhooks/meta, verify token triada-meta-verify-2026, subscribe field messages (and messaging_postbacks).",
+        "Meta Developer App → Instagram → Webhooks: callback https://dashboard.triada-designs.com/api/webhooks/meta, use your META_VERIFY_TOKEN, subscribe field messages (and messaging_postbacks).",
       );
       result.next_steps.push(
         "Optional: save Meta App Secret on Integrations so Triada can subscribe Instagram object webhooks via Graph.",

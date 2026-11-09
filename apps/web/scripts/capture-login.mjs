@@ -8,8 +8,13 @@ await page.goto("http://127.0.0.1:43127/login", { waitUntil: "networkidle", time
 await page.waitForTimeout(4000);
 await page.screenshot({ path: `${outDir}/triada-login-brand.png`, fullPage: false });
 
+const password = process.env.E2E_PASSWORD || process.env.TRIADA_SEED_ADMIN_PASSWORD || "";
+if (!password) {
+  console.error("Set E2E_PASSWORD or TRIADA_SEED_ADMIN_PASSWORD before running.");
+  process.exit(1);
+}
 await page.fill('input[name="email"]', "info@triada-designs.com");
-await page.fill('input[name="password"]', "triada-local");
+await page.fill('input[name="password"]', password);
 await Promise.all([
   page.waitForURL("**/overview", { timeout: 25000 }),
   page.click('button[type="submit"]'),

@@ -3,6 +3,7 @@ import { normalizeEmailInbound } from "@/lib/channels/normalize-inbound";
 import { handleInboundSupportChannel } from "@/lib/agents/support-channel";
 import { runAfterResponse } from "@/lib/runtime/after-response";
 import { mapParallel } from "@/lib/runtime/parallel-map";
+import { requireWebhookSecret } from "@/lib/security/request-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,16 +19,12 @@ export const maxDuration = 60;
  * @param {Request} request
  */
 function secretOk(request) {
-  const expected = String(
-    process.env.EMAIL_WEBHOOK_SECRET || process.env.EMAIL_CHANNEL_WEBHOOK_SECRET || "",
-  ).trim();
-  if (!expected) return true;
-  const provided = String(
-    request.headers.get("x-email-webhook-secret") ||
-      request.headers.get("x-channel-webhook-secret") ||
-      "",
-  ).trim();
-  return provided === expected;
+  const gate = requireWebhookSecret(request, {
+    envKeys: ["EMAIL_WEBHOOK_SECRET", "EMAIL_CHANNEL_WEBHOOK_SECRET"],
+    headerKeys: ["x-email-webhook-secret", "x-channel-webhook-secret"],
+    label: "Email webhook",
+  });
+  return gate.ok;
 }
 
 /**

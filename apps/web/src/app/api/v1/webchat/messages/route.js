@@ -3,6 +3,7 @@ import { normalizeWebchatInbound } from "@/lib/channels/normalize-inbound";
 import { handleInboundSupportChannel } from "@/lib/agents/support-channel";
 import { captureVisitorAsLead } from "@/lib/crm/visitor-leads";
 import { extractEmail } from "@/lib/crm/extract-contact-fields";
+import { requireWidgetToken } from "@/lib/security/request-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,8 +29,12 @@ export async function POST(request) {
     body && typeof body === "object" && body.token
       ? String(body.token).trim()
       : "";
-  if (!token) {
-    return NextResponse.json({ message: "Widget token is required." }, { status: 401 });
+  const tokenGate = requireWidgetToken(token);
+  if (!tokenGate.ok) {
+    return NextResponse.json(
+      { message: tokenGate.error },
+      { status: tokenGate.status },
+    );
   }
 
   const inboundBody =

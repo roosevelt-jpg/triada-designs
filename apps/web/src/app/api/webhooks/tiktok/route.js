@@ -3,6 +3,7 @@ import { normalizeTikTokInbound } from "@/lib/channels/normalize-inbound";
 import { handleInboundSupportChannel } from "@/lib/agents/support-channel";
 import { runAfterResponse } from "@/lib/runtime/after-response";
 import { mapParallel } from "@/lib/runtime/parallel-map";
+import { requireWebhookSecret } from "@/lib/security/request-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,17 +20,16 @@ export const maxDuration = 60;
  * @param {Request} request
  */
 function secretOk(request) {
-  const expected = String(
-    process.env.TIKTOK_WEBHOOK_SECRET || process.env.TIKTOK_CHANNEL_WEBHOOK_SECRET || "",
-  ).trim();
-  if (!expected) return true;
-  const provided = String(
-    request.headers.get("x-tiktok-webhook-secret") ||
-      request.headers.get("x-tt-signature") ||
-      request.headers.get("x-channel-webhook-secret") ||
-      "",
-  ).trim();
-  return provided === expected;
+  const gate = requireWebhookSecret(request, {
+    envKeys: ["TIKTOK_WEBHOOK_SECRET", "TIKTOK_CHANNEL_WEBHOOK_SECRET"],
+    headerKeys: [
+      "x-tiktok-webhook-secret",
+      "x-tt-signature",
+      "x-channel-webhook-secret",
+    ],
+    label: "TikTok webhook",
+  });
+  return gate.ok;
 }
 
 /**

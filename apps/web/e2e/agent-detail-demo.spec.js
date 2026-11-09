@@ -3,7 +3,7 @@ const path = require("path");
 
 const BASE = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:43127";
 const EMAIL = process.env.E2E_EMAIL || "info@triada-designs.com";
-const PASSWORD = process.env.E2E_PASSWORD || "triada-local";
+const PASSWORD = process.env.E2E_PASSWORD || "";
 const SHOTS = process.env.DEMO_SCREENSHOT_DIR || "/opt/cursor/artifacts/screenshots";
 
 test.use({
